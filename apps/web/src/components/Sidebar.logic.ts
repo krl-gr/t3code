@@ -300,30 +300,30 @@ export function resolveThreadRowClassName(input: {
   isSelected: boolean;
 }): string {
   const baseClassName =
-    "h-7 w-full translate-x-0 cursor-pointer justify-start px-2 text-left select-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring";
+    "h-9 w-full translate-x-0 cursor-pointer justify-start px-2 text-left text-foreground/72 select-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring dark:text-foreground/82";
 
   if (input.isSelected && input.isActive) {
     return cn(
       baseClassName,
-      "bg-primary/22 text-foreground font-medium hover:bg-primary/26 hover:text-foreground dark:bg-primary/30 dark:hover:bg-primary/36",
+      "bg-primary/22 text-foreground hover:bg-primary/26 dark:bg-primary/30 dark:text-foreground dark:hover:bg-primary/36",
     );
   }
 
   if (input.isSelected) {
     return cn(
       baseClassName,
-      "bg-primary/15 text-foreground hover:bg-primary/19 hover:text-foreground dark:bg-primary/22 dark:hover:bg-primary/28",
+      "bg-primary/15 text-foreground hover:bg-primary/19 dark:bg-primary/22 dark:text-foreground dark:hover:bg-primary/28",
     );
   }
 
   if (input.isActive) {
     return cn(
       baseClassName,
-      "bg-accent/85 text-foreground font-medium hover:bg-accent hover:text-foreground dark:bg-accent/55 dark:hover:bg-accent/70",
+      "bg-accent/85 text-foreground hover:bg-accent dark:bg-accent/90 dark:text-foreground dark:hover:bg-accent/90",
     );
   }
 
-  return cn(baseClassName, "text-muted-foreground hover:bg-accent hover:text-foreground");
+  return cn(baseClassName, "hover:bg-accent hover:text-foreground");
 }
 
 export function resolveThreadStatusPill(input: {

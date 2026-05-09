@@ -1,0 +1,11 @@
+{
+  "format_on_save": "off",
+  "languages": {
+    "TypeScript": {
+      "format_on_save": "off"
+    },
+    "TSX": {
+      "format_on_save": "off"
+    }
+  }
+}

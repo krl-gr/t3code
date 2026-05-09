@@ -5,6 +5,7 @@
 - Run verification proportional to the change.
 - For TypeScript/runtime logic changes, `bun fmt`, `bun lint`, and `bun typecheck` should pass before considering tasks completed.
 - For docs, CSS-only, HTML-only, copy, or trivial config changes, run `bun fmt` and only run `bun lint`/`bun typecheck` when the user requests it or the change can affect typed/runtime behavior.
+- If formatting creates unrelated broad rewrites, restore the unrelated formatting noise and keep the task diff focused.
 - NEVER run `bun test`. Always use `bun run test` (runs Vitest).
 
 ## Project Snapshot
