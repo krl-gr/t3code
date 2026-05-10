@@ -2132,7 +2132,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
           <SidebarMenuButton
             ref={isManualProjectSorting ? dragHandleProps?.setActivatorNodeRef : undefined}
             size="sm"
-            className={`h-9 gap-2 px-2 pr-8 text-left hover:bg-accent group-hover/project-header:bg-accent group-hover/project-header:text-sidebar-accent-foreground max-sm:pr-14 ${
+            className={`h-8 gap-2 px-2 pr-8 text-left hover:bg-accent group-hover/project-header:bg-accent group-hover/project-header:text-sidebar-accent-foreground max-sm:pr-14 ${
               isManualProjectSorting ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"
             }`}
             {...(isManualProjectSorting && dragHandleProps ? dragHandleProps.attributes : {})}
@@ -2427,7 +2427,7 @@ function SidebarViewModeButton({
   return (
     <SidebarMenuButton
       size="sm"
-      className="h-9 w-full justify-start gap-2 px-2 text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-1 focus-visible:ring-inset"
+      className="h-8 w-full justify-start gap-2 px-2 text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-1 focus-visible:ring-inset"
       onClick={() => onViewModeChange(nextViewMode)}
     >
       <ArrowRightIcon className="size-4" />
@@ -2535,7 +2535,7 @@ const SidebarChromeFooter = memo(function SidebarChromeFooter() {
         <SidebarMenuItem>
           <SidebarMenuButton
             size="sm"
-            className="h-9 w-full justify-start gap-2 px-2 text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-1 focus-visible:ring-inset"
+            className="h-8 w-full justify-start gap-2 px-2 text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-1 focus-visible:ring-inset"
             onClick={handleSettingsClick}
           >
             <SettingsIcon className="size-4" />
@@ -2591,7 +2591,7 @@ function FocusedProjectCard({
       <SidebarMenuButton
         size="sm"
         isActive={selected}
-        className="h-9 gap-2 px-2 text-left hover:bg-accent data-[active=true]:bg-accent data-[active=true]:text-sidebar-accent-foreground"
+        className="h-8 gap-2 px-2 text-left hover:bg-accent data-[active=true]:bg-accent data-[active=true]:text-sidebar-accent-foreground"
         onClick={() => onSelect(project.projectKey)}
       >
         <ProjectFavicon
@@ -2895,7 +2895,7 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
               render={
                 <SidebarMenuButton
                   size="sm"
-                  className="h-9 w-full justify-start gap-2 px-2 text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-1 focus-visible:ring-inset"
+                  className="h-8 w-full justify-start gap-2 px-2 text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-1 focus-visible:ring-inset"
                   data-testid="command-palette-trigger"
                 />
               }
@@ -2914,7 +2914,7 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
           <SidebarMenuItem>
             <SidebarMenuButton
               size="sm"
-              className="h-9 w-full justify-start gap-2 px-2 text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-1 focus-visible:ring-inset"
+              className="h-8 w-full justify-start gap-2 px-2 text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-1 focus-visible:ring-inset"
               data-testid="sidebar-add-project-trigger"
               onClick={openAddProject}
             >

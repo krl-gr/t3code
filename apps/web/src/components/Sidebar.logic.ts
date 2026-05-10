@@ -300,7 +300,7 @@ export function resolveThreadRowClassName(input: {
   isSelected: boolean;
 }): string {
   const baseClassName =
-    "h-9 w-full translate-x-0 cursor-pointer justify-start px-2 text-left text-foreground/72 select-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring dark:text-foreground/82";
+    "h-8 w-full translate-x-0 cursor-pointer justify-start px-2 text-left text-foreground/72 select-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring dark:text-foreground/82";
 
   if (input.isSelected && input.isActive) {
     return cn(
