@@ -10,6 +10,7 @@ import {
   TerminalIcon,
   TriangleAlertIcon,
 } from "lucide-react";
+import { createPortal } from "react-dom";
 import {
   ChangeRequestStatusIcon,
   prStatusIndicator,
@@ -186,6 +187,93 @@ const SIDEBAR_LIST_ANIMATION_OPTIONS = {
   duration: 180,
   easing: "ease-out",
 } as const;
+const THREAD_CONTEXT_MENU_VIEWPORT_PADDING = 8;
+const THREAD_CONTEXT_MENU_FALLBACK_WIDTH = 192;
+const THREAD_CONTEXT_MENU_FALLBACK_HEIGHT = 168;
+
+type ThreadContextMenuAction = "rename" | "mark-unread" | "copy-path" | "copy-thread-id" | "delete";
+
+interface ThreadContextMenuState {
+  threadRef: ScopedThreadRef;
+  threadKey: string;
+  threadId: ThreadId;
+  title: string;
+  latestTurnCompletedAt: string | null | undefined;
+  workspacePath: string | null;
+  position: { x: number; y: number };
+}
+
+function clampViewportPosition(
+  position: { x: number; y: number },
+  size: { width: number; height: number },
+): { x: number; y: number } {
+  if (typeof window === "undefined") {
+    return position;
+  }
+
+  return {
+    x: Math.max(
+      THREAD_CONTEXT_MENU_VIEWPORT_PADDING,
+      Math.min(position.x, window.innerWidth - size.width - THREAD_CONTEXT_MENU_VIEWPORT_PADDING),
+    ),
+    y: Math.max(
+      THREAD_CONTEXT_MENU_VIEWPORT_PADDING,
+      Math.min(position.y, window.innerHeight - size.height - THREAD_CONTEXT_MENU_VIEWPORT_PADDING),
+    ),
+  };
+}
+
+function SidebarThreadContextMenu(props: {
+  menu: ThreadContextMenuState;
+  menuRef: React.RefObject<HTMLDivElement | null>;
+  onAction: (action: ThreadContextMenuAction) => void;
+}) {
+  const menuItems: Array<{
+    id: ThreadContextMenuAction;
+    label: string;
+    destructive?: boolean;
+  }> = [
+    { id: "rename", label: "Rename thread" },
+    { id: "mark-unread", label: "Mark unread" },
+    { id: "copy-path", label: "Copy Path" },
+    { id: "copy-thread-id", label: "Copy Thread ID" },
+    { id: "delete", label: "Delete", destructive: true },
+  ];
+
+  if (typeof document === "undefined") {
+    return null;
+  }
+
+  return createPortal(
+    <div
+      ref={props.menuRef}
+      role="menu"
+      aria-label="Thread actions"
+      className="fixed z-50 min-w-48 rounded-xl border border-sidebar-border bg-popover p-1 text-popover-foreground shadow-lg outline-none dark:bg-popover"
+      style={{ left: props.menu.position.x, top: props.menu.position.y }}
+      onContextMenu={(event) => event.preventDefault()}
+    >
+      <div className="flex w-full min-w-0 flex-col gap-1">
+        {menuItems.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            role="menuitem"
+            className={cn(
+              "flex h-8 w-full cursor-pointer items-center gap-2 rounded-lg p-2 text-left text-sm outline-hidden ring-ring transition-[background-color,color] hover:bg-accent hover:text-foreground focus-visible:ring-2 active:bg-accent active:text-foreground",
+              item.destructive &&
+                "text-destructive hover:text-destructive focus-visible:text-destructive",
+            )}
+            onClick={() => props.onAction(item.id)}
+          >
+            <span className="truncate">{item.label}</span>
+          </button>
+        ))}
+      </div>
+    </div>,
+    document.body,
+  );
+}
 const EMPTY_THREAD_JUMP_LABELS = new Map<string, string>();
 const FOCUSED_PROJECT_TAB_COUNT = 3;
 const PROJECT_GROUPING_MODE_LABELS: Record<SidebarProjectGroupingMode, string> = {
@@ -1041,6 +1129,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
   const [renamingThreadKey, setRenamingThreadKey] = useState<string | null>(null);
   const [renamingTitle, setRenamingTitle] = useState("");
   const [confirmingArchiveThreadKey, setConfirmingArchiveThreadKey] = useState<string | null>(null);
+  const [threadContextMenu, setThreadContextMenu] = useState<ThreadContextMenuState | null>(null);
   const [projectRenameTarget, setProjectRenameTarget] = useState<SidebarProjectGroupMember | null>(
     null,
   );
@@ -1053,6 +1142,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
   const renamingCommittedRef = useRef(false);
   const renamingInputRef = useRef<HTMLInputElement | null>(null);
   const confirmArchiveButtonRefs = useRef(new Map<string, HTMLButtonElement>());
+  const threadContextMenuRef = useRef<HTMLDivElement | null>(null);
   const memberProjectByScopedKey = useMemo(
     () =>
       new Map(
@@ -1882,41 +1972,30 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
     updateSettings,
   ]);
 
-  const handleThreadContextMenu = useCallback(
-    async (threadRef: ScopedThreadRef, position: { x: number; y: number }) => {
-      const api = readLocalApi();
-      if (!api) return;
-      const threadKey = scopedThreadKey(threadRef);
-      const thread = sidebarThreadByKeyRef.current.get(threadKey) ?? null;
-      if (!thread) return;
-      const threadProject = memberProjectByScopedKey.get(
-        scopedProjectKey(scopeProjectRef(thread.environmentId, thread.projectId)),
-      );
-      const threadWorkspacePath = thread.worktreePath ?? threadProject?.cwd ?? project.cwd ?? null;
-      const clicked = await api.contextMenu.show(
-        [
-          { id: "rename", label: "Rename thread" },
-          { id: "mark-unread", label: "Mark unread" },
-          { id: "copy-path", label: "Copy Path" },
-          { id: "copy-thread-id", label: "Copy Thread ID" },
-          { id: "delete", label: "Delete", destructive: true },
-        ],
-        position,
-      );
+  const closeThreadContextMenu = useCallback(() => {
+    setThreadContextMenu(null);
+  }, []);
 
-      if (clicked === "rename") {
-        setRenamingThreadKey(threadKey);
-        setRenamingTitle(thread.title);
+  const runThreadContextMenuAction = useCallback(
+    (action: ThreadContextMenuAction) => {
+      const menu = threadContextMenu;
+      if (!menu) return;
+      closeThreadContextMenu();
+
+      if (action === "rename") {
+        setRenamingThreadKey(menu.threadKey);
+        setRenamingTitle(menu.title);
         renamingCommittedRef.current = false;
         return;
       }
 
-      if (clicked === "mark-unread") {
-        markThreadUnread(threadKey, thread.latestTurn?.completedAt);
+      if (action === "mark-unread") {
+        markThreadUnread(menu.threadKey, menu.latestTurnCompletedAt);
         return;
       }
-      if (clicked === "copy-path") {
-        if (!threadWorkspacePath) {
+
+      if (action === "copy-path") {
+        if (!menu.workspacePath) {
           toastManager.add(
             stackedThreadToast({
               type: "error",
@@ -1926,40 +2005,129 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
           );
           return;
         }
-        copyPathToClipboard(threadWorkspacePath, { path: threadWorkspacePath });
+        copyPathToClipboard(menu.workspacePath, { path: menu.workspacePath });
         return;
       }
-      if (clicked === "copy-thread-id") {
-        copyThreadIdToClipboard(thread.id, { threadId: thread.id });
+
+      if (action === "copy-thread-id") {
+        copyThreadIdToClipboard(menu.threadId, { threadId: menu.threadId });
         return;
       }
-      if (clicked !== "delete") return;
-      if (appSettingsConfirmThreadDelete) {
-        const confirmed = await api.dialogs.confirm(
-          [
-            `Delete thread "${thread.title}"?`,
-            "This permanently clears conversation history for this thread.",
-          ].join("\n"),
-        );
-        if (!confirmed) {
-          return;
+
+      void (async () => {
+        if (appSettingsConfirmThreadDelete) {
+          const api = readLocalApi();
+          if (!api) return;
+          const confirmed = await api.dialogs.confirm(
+            [
+              `Delete thread "${menu.title}"?`,
+              "This permanently clears conversation history for this thread.",
+            ].join("\n"),
+          );
+          if (!confirmed) {
+            return;
+          }
         }
-      }
-      await deleteThread(threadRef);
+        await deleteThread(menu.threadRef);
+      })();
     },
     [
       appSettingsConfirmThreadDelete,
+      closeThreadContextMenu,
       copyPathToClipboard,
       copyThreadIdToClipboard,
       deleteThread,
       markThreadUnread,
-      memberProjectByScopedKey,
-      project.cwd,
+      threadContextMenu,
     ],
+  );
+
+  useEffect(() => {
+    if (!threadContextMenu) return;
+    const menuElement = threadContextMenuRef.current;
+    if (!menuElement) return;
+
+    const animationFrame = requestAnimationFrame(() => {
+      const rect = menuElement.getBoundingClientRect();
+      const nextPosition = clampViewportPosition(threadContextMenu.position, {
+        width: rect.width || THREAD_CONTEXT_MENU_FALLBACK_WIDTH,
+        height: rect.height || THREAD_CONTEXT_MENU_FALLBACK_HEIGHT,
+      });
+      if (
+        nextPosition.x !== threadContextMenu.position.x ||
+        nextPosition.y !== threadContextMenu.position.y
+      ) {
+        setThreadContextMenu((current) =>
+          current === threadContextMenu ? { ...current, position: nextPosition } : current,
+        );
+      }
+
+      menuElement.querySelector<HTMLButtonElement>("button")?.focus();
+    });
+
+    return () => cancelAnimationFrame(animationFrame);
+  }, [threadContextMenu]);
+
+  useEffect(() => {
+    if (!threadContextMenu) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target instanceof Node ? event.target : null;
+      if (target && threadContextMenuRef.current?.contains(target)) {
+        return;
+      }
+      closeThreadContextMenu();
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeThreadContextMenu();
+      }
+    };
+
+    window.addEventListener("pointerdown", handlePointerDown, true);
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown, true);
+      window.removeEventListener("keydown", handleKeyDown, true);
+    };
+  }, [closeThreadContextMenu, threadContextMenu]);
+
+  const handleThreadContextMenu = useCallback(
+    async (threadRef: ScopedThreadRef, position: { x: number; y: number }) => {
+      const threadKey = scopedThreadKey(threadRef);
+      const thread = sidebarThreadByKeyRef.current.get(threadKey) ?? null;
+      if (!thread) return;
+      const threadProject = memberProjectByScopedKey.get(
+        scopedProjectKey(scopeProjectRef(thread.environmentId, thread.projectId)),
+      );
+      const threadWorkspacePath = thread.worktreePath ?? threadProject?.cwd ?? project.cwd ?? null;
+      setThreadContextMenu({
+        threadRef,
+        threadKey,
+        threadId: thread.id,
+        title: thread.title,
+        latestTurnCompletedAt: thread.latestTurn?.completedAt,
+        workspacePath: threadWorkspacePath,
+        position: clampViewportPosition(position, {
+          width: THREAD_CONTEXT_MENU_FALLBACK_WIDTH,
+          height: THREAD_CONTEXT_MENU_FALLBACK_HEIGHT,
+        }),
+      });
+    },
+    [memberProjectByScopedKey, project.cwd],
   );
 
   return (
     <>
+      {threadContextMenu ? (
+        <SidebarThreadContextMenu
+          menu={threadContextMenu}
+          menuRef={threadContextMenuRef}
+          onAction={runThreadContextMenuAction}
+        />
+      ) : null}
+
       {!hideProjectHeader ? (
         <div className="group/project-header relative">
           <SidebarMenuButton
