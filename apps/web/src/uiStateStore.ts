@@ -21,6 +21,7 @@ export interface PersistedUiState {
   projectOrderCwds?: string[];
   defaultAdvertisedEndpointKey?: string | null;
   threadChangedFilesExpandedById?: Record<string, Record<string, boolean>>;
+  lastActiveThreadKeyByProjectKey?: Record<string, string>;
 }
 
 export interface UiProjectState {
@@ -31,6 +32,7 @@ export interface UiProjectState {
 export interface UiThreadState {
   threadLastVisitedAtById: Record<string, string>;
   threadChangedFilesExpandedById: Record<string, Record<string, boolean>>;
+  lastActiveThreadKeyByProjectKey: Record<string, string>;
 }
 
 export interface UiEndpointState {
@@ -57,6 +59,7 @@ const initialState: UiState = {
   projectOrder: [],
   threadLastVisitedAtById: {},
   threadChangedFilesExpandedById: {},
+  lastActiveThreadKeyByProjectKey: {},
   defaultAdvertisedEndpointKey: null,
 };
 
@@ -102,10 +105,27 @@ function readPersistedState(): UiState {
       threadChangedFilesExpandedById: sanitizePersistedThreadChangedFilesExpanded(
         parsed.threadChangedFilesExpandedById,
       ),
+      lastActiveThreadKeyByProjectKey: sanitizePersistedStringRecord(
+        parsed.lastActiveThreadKeyByProjectKey,
+      ),
     };
   } catch {
     return initialState;
   }
+}
+
+function sanitizePersistedStringRecord(value: unknown): Record<string, string> {
+  if (!value || typeof value !== "object") {
+    return {};
+  }
+
+  const nextState: Record<string, string> = {};
+  for (const [key, recordValue] of Object.entries(value)) {
+    if (key.length > 0 && typeof recordValue === "string" && recordValue.length > 0) {
+      nextState[key] = recordValue;
+    }
+  }
+  return nextState;
 }
 
 function sanitizePersistedThreadChangedFilesExpanded(
@@ -192,6 +212,7 @@ export function persistState(state: UiState): void {
         projectOrderCwds,
         defaultAdvertisedEndpointKey: state.defaultAdvertisedEndpointKey,
         threadChangedFilesExpandedById,
+        lastActiveThreadKeyByProjectKey: state.lastActiveThreadKeyByProjectKey,
       } satisfies PersistedUiState),
     );
     if (!legacyKeysCleanedUp) {
@@ -379,10 +400,32 @@ export function syncProjects(state: UiState, projects: readonly SyncProjectInput
             return left.incomingIndex - right.incomingIndex;
           })
           .map((project) => project.id);
+  const nextProjectKeys = new Set(projects.map((project) => project.logicalKey));
+  const nextLastActiveThreadKeyByProjectKey: Record<string, string> = {};
+  for (const projectKey of nextProjectKeys) {
+    const currentThreadKey = state.lastActiveThreadKeyByProjectKey[projectKey];
+    if (currentThreadKey) {
+      nextLastActiveThreadKeyByProjectKey[projectKey] = currentThreadKey;
+      continue;
+    }
+
+    const previousKeys = previousLogicalKeysByNewLogicalKey.get(projectKey);
+    if (!previousKeys) {
+      continue;
+    }
+    for (const previousKey of previousKeys) {
+      const previousThreadKey = state.lastActiveThreadKeyByProjectKey[previousKey];
+      if (previousThreadKey) {
+        nextLastActiveThreadKeyByProjectKey[projectKey] = previousThreadKey;
+        break;
+      }
+    }
+  }
 
   if (
     recordsEqual(state.projectExpandedById, nextExpandedById) &&
     projectOrdersEqual(state.projectOrder, nextProjectOrder) &&
+    recordsEqual(state.lastActiveThreadKeyByProjectKey, nextLastActiveThreadKeyByProjectKey) &&
     !cwdMappingChanged
   ) {
     return state;
@@ -392,6 +435,7 @@ export function syncProjects(state: UiState, projects: readonly SyncProjectInput
     ...state,
     projectExpandedById: nextExpandedById,
     projectOrder: nextProjectOrder,
+    lastActiveThreadKeyByProjectKey: nextLastActiveThreadKeyByProjectKey,
   };
 }
 
@@ -416,12 +460,18 @@ export function syncThreads(state: UiState, threads: readonly SyncThreadInput[])
       retainedThreadIds.has(threadId),
     ),
   );
+  const nextLastActiveThreadKeyByProjectKey = Object.fromEntries(
+    Object.entries(state.lastActiveThreadKeyByProjectKey).filter(([, threadId]) =>
+      retainedThreadIds.has(threadId),
+    ),
+  );
   if (
     recordsEqual(state.threadLastVisitedAtById, nextThreadLastVisitedAtById) &&
     nestedBooleanRecordsEqual(
       state.threadChangedFilesExpandedById,
       nextThreadChangedFilesExpandedById,
-    )
+    ) &&
+    recordsEqual(state.lastActiveThreadKeyByProjectKey, nextLastActiveThreadKeyByProjectKey)
   ) {
     return state;
   }
@@ -429,6 +479,29 @@ export function syncThreads(state: UiState, threads: readonly SyncThreadInput[])
     ...state,
     threadLastVisitedAtById: nextThreadLastVisitedAtById,
     threadChangedFilesExpandedById: nextThreadChangedFilesExpandedById,
+    lastActiveThreadKeyByProjectKey: nextLastActiveThreadKeyByProjectKey,
+  };
+}
+
+export function setLastActiveThreadForProject(
+  state: UiState,
+  projectKey: string,
+  threadKey: string,
+): UiState {
+  if (
+    projectKey.length === 0 ||
+    threadKey.length === 0 ||
+    state.lastActiveThreadKeyByProjectKey[projectKey] === threadKey
+  ) {
+    return state;
+  }
+
+  return {
+    ...state,
+    lastActiveThreadKeyByProjectKey: {
+      ...state.lastActiveThreadKeyByProjectKey,
+      [projectKey]: threadKey,
+    },
   };
 }
 
@@ -481,7 +554,16 @@ export function markThreadUnread(
 export function clearThreadUi(state: UiState, threadId: string): UiState {
   const hasVisitedState = threadId in state.threadLastVisitedAtById;
   const hasChangedFilesState = threadId in state.threadChangedFilesExpandedById;
-  if (!hasVisitedState && !hasChangedFilesState) {
+  const nextLastActiveThreadKeyByProjectKey = Object.fromEntries(
+    Object.entries(state.lastActiveThreadKeyByProjectKey).filter(
+      ([, activeThreadId]) => activeThreadId !== threadId,
+    ),
+  );
+  const hasLastActiveState = !recordsEqual(
+    state.lastActiveThreadKeyByProjectKey,
+    nextLastActiveThreadKeyByProjectKey,
+  );
+  if (!hasVisitedState && !hasChangedFilesState && !hasLastActiveState) {
     return state;
   }
   const nextThreadLastVisitedAtById = { ...state.threadLastVisitedAtById };
@@ -492,6 +574,7 @@ export function clearThreadUi(state: UiState, threadId: string): UiState {
     ...state,
     threadLastVisitedAtById: nextThreadLastVisitedAtById,
     threadChangedFilesExpandedById: nextThreadChangedFilesExpandedById,
+    lastActiveThreadKeyByProjectKey: nextLastActiveThreadKeyByProjectKey,
   };
 }
 
@@ -627,6 +710,7 @@ interface UiStateStore extends UiState {
   syncThreads: (threads: readonly SyncThreadInput[]) => void;
   markThreadVisited: (threadId: string, visitedAt?: string) => void;
   markThreadUnread: (threadId: string, latestTurnCompletedAt: string | null | undefined) => void;
+  setLastActiveThreadForProject: (projectKey: string, threadKey: string) => void;
   clearThreadUi: (threadId: string) => void;
   setThreadChangedFilesExpanded: (threadId: string, turnId: string, expanded: boolean) => void;
   setDefaultAdvertisedEndpointKey: (key: string | null) => void;
@@ -646,6 +730,8 @@ export const useUiStateStore = create<UiStateStore>((set) => ({
     set((state) => markThreadVisited(state, threadId, visitedAt)),
   markThreadUnread: (threadId, latestTurnCompletedAt) =>
     set((state) => markThreadUnread(state, threadId, latestTurnCompletedAt)),
+  setLastActiveThreadForProject: (projectKey, threadKey) =>
+    set((state) => setLastActiveThreadForProject(state, projectKey, threadKey)),
   clearThreadUi: (threadId) => set((state) => clearThreadUi(state, threadId)),
   setThreadChangedFilesExpanded: (threadId, turnId, expanded) =>
     set((state) => setThreadChangedFilesExpanded(state, threadId, turnId, expanded)),

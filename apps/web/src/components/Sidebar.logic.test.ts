@@ -13,6 +13,7 @@ import {
   isContextMenuPointerDown,
   orderItemsByPreferredIds,
   resolveProjectStatusIndicator,
+  resolveFocusedProjectThreadTarget,
   resolveSidebarNewThreadSeedContext,
   resolveSidebarNewThreadEnvMode,
   resolveThreadRowClassName,
@@ -36,6 +37,10 @@ import {
 } from "../types";
 
 const localEnvironmentId = EnvironmentId.make("environment-local");
+
+function getTestThreadKey(thread: { environmentId: string; id: string }): string {
+  return `${thread.environmentId}:${thread.id}`;
+}
 
 function makeLatestTurn(overrides?: {
   completedAt?: string | null;
@@ -437,6 +442,73 @@ describe("getVisibleSidebarThreadIds", () => {
         },
       ]),
     ).toEqual([ThreadId.make("thread-12"), ThreadId.make("thread-11")]);
+  });
+});
+
+describe("resolveFocusedProjectThreadTarget", () => {
+  const makeThread = (overrides: {
+    id: string;
+    createdAt: string;
+    updatedAt?: string | undefined;
+    latestUserMessageAt?: string | null | undefined;
+    archivedAt?: string | null | undefined;
+  }) => ({
+    id: ThreadId.make(overrides.id),
+    environmentId: localEnvironmentId,
+    archivedAt: overrides.archivedAt ?? null,
+    createdAt: overrides.createdAt,
+    updatedAt: overrides.updatedAt,
+    latestUserMessageAt: overrides.latestUserMessageAt ?? null,
+  });
+
+  it("prefers the saved active thread when it still belongs to the project", () => {
+    const older = makeThread({ id: "thread-older", createdAt: "2026-03-09T10:00:00.000Z" });
+    const newer = makeThread({ id: "thread-newer", createdAt: "2026-03-09T11:00:00.000Z" });
+
+    expect(
+      resolveFocusedProjectThreadTarget({
+        threads: [older, newer],
+        savedThreadKey: getTestThreadKey(older),
+        sortOrder: "created_at",
+        getThreadKey: getTestThreadKey,
+      }),
+    ).toBe(older);
+  });
+
+  it("falls back to the sorted latest thread when the saved thread is unavailable", () => {
+    const archived = makeThread({
+      id: "thread-archived",
+      archivedAt: "2026-03-09T12:00:00.000Z",
+      createdAt: "2026-03-09T12:00:00.000Z",
+    });
+    const older = makeThread({ id: "thread-older", createdAt: "2026-03-09T10:00:00.000Z" });
+    const newer = makeThread({ id: "thread-newer", createdAt: "2026-03-09T11:00:00.000Z" });
+
+    expect(
+      resolveFocusedProjectThreadTarget({
+        threads: [archived, older, newer],
+        savedThreadKey: getTestThreadKey(archived),
+        sortOrder: "created_at",
+        getThreadKey: getTestThreadKey,
+      }),
+    ).toBe(newer);
+  });
+
+  it("returns null when the project has no visible threads", () => {
+    const archived = makeThread({
+      id: "thread-archived",
+      archivedAt: "2026-03-09T12:00:00.000Z",
+      createdAt: "2026-03-09T12:00:00.000Z",
+    });
+
+    expect(
+      resolveFocusedProjectThreadTarget({
+        threads: [archived],
+        savedThreadKey: getTestThreadKey(archived),
+        sortOrder: "created_at",
+        getThreadKey: getTestThreadKey,
+      }),
+    ).toBeNull();
   });
 });
 

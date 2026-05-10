@@ -485,6 +485,32 @@ export function getFallbackThreadIdAfterDelete<
     )[0]?.id ?? null
   );
 }
+
+export function resolveFocusedProjectThreadTarget<
+  T extends Pick<SidebarThreadSummary, "id" | "environmentId" | "archivedAt"> & ThreadSortInput,
+>(input: {
+  threads: readonly T[];
+  savedThreadKey: string | null | undefined;
+  sortOrder: SidebarThreadSortOrder;
+  getThreadKey: (thread: T) => string;
+}): T | null {
+  const visibleThreads = input.threads.filter((thread) => thread.archivedAt === null);
+  if (visibleThreads.length === 0) {
+    return null;
+  }
+
+  if (input.savedThreadKey) {
+    const savedThread = visibleThreads.find(
+      (thread) => input.getThreadKey(thread) === input.savedThreadKey,
+    );
+    if (savedThread) {
+      return savedThread;
+    }
+  }
+
+  return sortThreads(visibleThreads, input.sortOrder)[0] ?? null;
+}
+
 export function getProjectSortTimestamp(
   project: SidebarProject,
   projectThreads: readonly ThreadSortInput[],

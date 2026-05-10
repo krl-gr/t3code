@@ -147,6 +147,7 @@ import {
   resolveAdjacentThreadId,
   isContextMenuPointerDown,
   resolveProjectStatusIndicator,
+  resolveFocusedProjectThreadTarget,
   resolveSidebarNewThreadSeedContext,
   resolveSidebarNewThreadEnvMode,
   resolveThreadRowClassName,
@@ -2853,8 +2854,14 @@ export default function Sidebar() {
   const projects = useStore(useShallow(selectProjectsAcrossEnvironments));
   const sidebarThreads = useStore(useShallow(selectSidebarThreadsAcrossEnvironments));
   const projectExpandedById = useUiStateStore((store) => store.projectExpandedById);
+  const lastActiveThreadKeyByProjectKey = useUiStateStore(
+    (store) => store.lastActiveThreadKeyByProjectKey,
+  );
   const projectOrder = useUiStateStore((store) => store.projectOrder);
   const reorderProjects = useUiStateStore((store) => store.reorderProjects);
+  const setLastActiveThreadForProject = useUiStateStore(
+    (store) => store.setLastActiveThreadForProject,
+  );
   const navigate = useNavigate();
   const pathname = useLocation({ select: (loc) => loc.pathname });
   const isOnSettings = pathname.startsWith("/settings");
@@ -3033,6 +3040,56 @@ export default function Sidebar() {
     },
     [clearSelection, isMobile, navigate, setOpenMobile, setSelectionAnchor],
   );
+
+  const handleFocusedProjectChange = useCallback(
+    (projectKey: string) => {
+      setFocusedProjectKey(projectKey);
+
+      const project = sidebarProjectByKey.get(projectKey);
+      if (!project) {
+        return;
+      }
+
+      const targetThread = resolveFocusedProjectThreadTarget({
+        threads: threadsByProjectKey.get(projectKey) ?? [],
+        savedThreadKey: lastActiveThreadKeyByProjectKey[projectKey],
+        sortOrder: sidebarThreadSortOrder,
+        getThreadKey: (thread) => scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
+      });
+
+      if (targetThread) {
+        navigateToThread(scopeThreadRef(targetThread.environmentId, targetThread.id));
+        return;
+      }
+
+      const targetMember = project.memberProjects[0];
+      if (!targetMember) {
+        return;
+      }
+
+      if (isMobile) {
+        setOpenMobile(false);
+      }
+      void handleNewThread(scopeProjectRef(targetMember.environmentId, targetMember.id));
+    },
+    [
+      handleNewThread,
+      isMobile,
+      lastActiveThreadKeyByProjectKey,
+      navigateToThread,
+      setOpenMobile,
+      sidebarProjectByKey,
+      sidebarThreadSortOrder,
+      threadsByProjectKey,
+    ],
+  );
+
+  useEffect(() => {
+    if (!activeRouteProjectKey || !routeThreadKey) {
+      return;
+    }
+    setLastActiveThreadForProject(activeRouteProjectKey, routeThreadKey);
+  }, [activeRouteProjectKey, routeThreadKey, setLastActiveThreadForProject]);
 
   const projectDnDSensors = useSensors(
     useSensor(PointerSensor, {
@@ -3546,7 +3603,7 @@ export default function Sidebar() {
             sidebarViewMode={sidebarViewMode}
             focusedProjectKey={selectedFocusedProject?.projectKey ?? focusedProjectKey}
             onSidebarViewModeChange={handleSidebarViewModeChange}
-            onFocusedProjectChange={setFocusedProjectKey}
+            onFocusedProjectChange={handleFocusedProjectChange}
             openAddProject={openAddProjectCommandPalette}
             isManualProjectSorting={isManualProjectSorting}
             projectDnDSensors={projectDnDSensors}
