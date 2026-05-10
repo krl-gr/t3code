@@ -55,6 +55,9 @@
     "dist:desktop:win": "node scripts/build-desktop-artifact.ts --platform win --target nsis",
     "dist:desktop:win:arm64": "node scripts/build-desktop-artifact.ts --platform win --target nsis --arch arm64",
     "dist:desktop:win:x64": "node scripts/build-desktop-artifact.ts --platform win --target nsis --arch x64",
+    "dist:desktop:win:local": "node scripts/build-desktop-artifact.ts --platform win --target nsis --variant local",
+    "dist:desktop:win:local:arm64": "node scripts/build-desktop-artifact.ts --platform win --target nsis --arch arm64 --variant local",
+    "dist:desktop:win:local:x64": "node scripts/build-desktop-artifact.ts --platform win --target nsis --arch x64 --variant local",
     "release:smoke": "node scripts/release-smoke.ts",
     "clean": "rm -rf node_modules apps/*/node_modules packages/*/node_modules apps/*/dist apps/*/dist-electron packages/*/dist .turbo apps/*/.turbo packages/*/.turbo",
     "sync:vscode-icons": "node scripts/sync-vscode-icons.mjs"

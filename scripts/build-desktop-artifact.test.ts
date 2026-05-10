@@ -4,6 +4,9 @@ import { ConfigProvider, Effect, Option } from "effect";
 
 import {
   resolveBuildOptions,
+  resolveDesktopAppId,
+  resolveDesktopArtifactName,
+  resolveDesktopBuildVersion,
   resolveDesktopBuildIconAssets,
   resolveDesktopProductName,
   resolveDesktopUpdateChannel,
@@ -20,7 +23,20 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
 
   it("switches desktop packaging product names to nightly for nightly builds", () => {
     assert.equal(resolveDesktopProductName("0.0.17"), "T3 Code (Alpha)");
+    assert.equal(resolveDesktopProductName("0.0.17-local"), "T3 Code (Local)");
     assert.equal(resolveDesktopProductName("0.0.17-nightly.20260413.42"), "T3 Code (Nightly)");
+  });
+
+  it("separates local desktop package identity from release builds", () => {
+    assert.equal(resolveDesktopBuildVersion("0.0.17", "release"), "0.0.17");
+    assert.equal(resolveDesktopBuildVersion("0.0.17", "local"), "0.0.17-local");
+    assert.equal(resolveDesktopAppId("0.0.17"), "com.t3tools.t3code");
+    assert.equal(resolveDesktopAppId("0.0.17-local"), "com.t3tools.t3code.local");
+    assert.equal(resolveDesktopArtifactName("0.0.17"), "T3-Code-${version}-${arch}.${ext}");
+    assert.equal(
+      resolveDesktopArtifactName("0.0.17-local"),
+      "T3-Code-Local-${version}-${arch}.${ext}",
+    );
   });
 
   it("switches desktop packaging icons to the nightly artwork for nightly versions", () => {
@@ -34,6 +50,12 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
       macIconPng: BRAND_ASSET_PATHS.nightlyMacIconPng,
       linuxIconPng: BRAND_ASSET_PATHS.nightlyLinuxIconPng,
       windowsIconIco: BRAND_ASSET_PATHS.nightlyWindowsIconIco,
+    });
+
+    assert.deepStrictEqual(resolveDesktopBuildIconAssets("0.0.17-local"), {
+      macIconPng: BRAND_ASSET_PATHS.developmentDesktopIconPng,
+      linuxIconPng: BRAND_ASSET_PATHS.developmentDesktopIconPng,
+      windowsIconIco: BRAND_ASSET_PATHS.developmentWindowsIconIco,
     });
   });
 
@@ -67,6 +89,7 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
         platform: Option.some("mac"),
         target: Option.none(),
         arch: Option.some("arm64"),
+        variant: Option.none(),
         buildVersion: Option.none(),
         outputDir: Option.some("release-test"),
         skipBuild: Option.some(false),

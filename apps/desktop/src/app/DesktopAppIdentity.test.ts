@@ -89,6 +89,8 @@ const makeEnvironmentLayer = (overrides: TestEnvironmentInput = {}) => {
   );
 };
 
+const normalizePath = (value: string) => value.replaceAll("\\", "/");
+
 const withIdentity = <A, E, R>(
   effect: Effect.Effect<
     A,
@@ -138,7 +140,10 @@ describe("DesktopAppIdentity", () => {
         const identity = yield* DesktopAppIdentity.DesktopAppIdentity;
         const userDataPath = yield* identity.resolveUserDataPath;
 
-        assert.equal(userDataPath, "/Users/alice/Library/Application Support/T3 Code (Alpha)");
+        assert.equal(
+          normalizePath(userDataPath),
+          "/Users/alice/Library/Application Support/T3 Code (Alpha)",
+        );
       }),
       { legacyPathExists: true },
     ),

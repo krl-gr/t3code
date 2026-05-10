@@ -36,6 +36,10 @@ const makeEnvironment = (
     return yield* DesktopEnvironment.DesktopEnvironment;
   }).pipe(Effect.provide(makeEnvironmentLayer(overrides, env)));
 
+const normalizePath = (value: string) =>
+  value.replaceAll("\\", "/").replace(/^[A-Za-z]:(?=\/)/, "");
+const normalizePathOption = (value: Option.Option<string>) => Option.map(value, normalizePath);
+
 describe("DesktopEnvironment", () => {
   it.effect("derives state paths and development identity inside Effect", () =>
     Effect.gen(function* () {
@@ -53,25 +57,40 @@ describe("DesktopEnvironment", () => {
       );
 
       assert.equal(environment.isDevelopment, true);
-      assert.equal(environment.appDataDirectory, "/Users/alice/Library/Application Support");
-      assert.equal(environment.baseDir, "/tmp/t3");
-      assert.equal(environment.stateDir, "/tmp/t3/dev");
-      assert.equal(environment.desktopSettingsPath, "/tmp/t3/dev/desktop-settings.json");
-      assert.equal(environment.clientSettingsPath, "/tmp/t3/dev/client-settings.json");
-      assert.equal(environment.savedEnvironmentRegistryPath, "/tmp/t3/dev/saved-environments.json");
-      assert.equal(environment.serverSettingsPath, "/tmp/t3/dev/settings.json");
-      assert.equal(environment.logDir, "/tmp/t3/dev/logs");
-      assert.equal(environment.rootDir, "/repo");
-      assert.equal(environment.appRoot, "/repo");
-      assert.equal(environment.backendEntryPath, "/repo/apps/server/dist/bin.mjs");
-      assert.equal(environment.backendCwd, "/repo");
+      assert.equal(
+        normalizePath(environment.appDataDirectory),
+        "/Users/alice/Library/Application Support",
+      );
+      assert.equal(normalizePath(environment.baseDir), "/tmp/t3");
+      assert.equal(normalizePath(environment.stateDir), "/tmp/t3/dev");
+      assert.equal(
+        normalizePath(environment.desktopSettingsPath),
+        "/tmp/t3/dev/desktop-settings.json",
+      );
+      assert.equal(
+        normalizePath(environment.clientSettingsPath),
+        "/tmp/t3/dev/client-settings.json",
+      );
+      assert.equal(
+        normalizePath(environment.savedEnvironmentRegistryPath),
+        "/tmp/t3/dev/saved-environments.json",
+      );
+      assert.equal(normalizePath(environment.serverSettingsPath), "/tmp/t3/dev/settings.json");
+      assert.equal(normalizePath(environment.logDir), "/tmp/t3/dev/logs");
+      assert.equal(normalizePath(environment.rootDir), "/repo");
+      assert.equal(normalizePath(environment.appRoot), "/repo");
+      assert.equal(normalizePath(environment.backendEntryPath), "/repo/apps/server/dist/bin.mjs");
+      assert.equal(normalizePath(environment.backendCwd), "/repo");
       assert.equal(environment.appUserModelId, "com.t3tools.t3code.dev");
       assert.equal(environment.linuxWmClass, "t3code-dev");
       assert.deepEqual(
         Option.map(environment.devServerUrl, (url) => url.href),
         Option.some("http://localhost:5173/"),
       );
-      assert.deepEqual(environment.devRemoteT3ServerEntryPath, Option.some("/remote/server.mjs"));
+      assert.deepEqual(
+        normalizePathOption(environment.devRemoteT3ServerEntryPath),
+        Option.some("/remote/server.mjs"),
+      );
       assert.deepEqual(environment.configuredBackendPort, Option.some(4949));
       assert.deepEqual(environment.commitHashOverride, Option.some("0123456789abcdef"));
       assert.deepEqual(environment.otlpTracesUrl, Option.some("http://127.0.0.1:4318/v1/traces"));
@@ -89,9 +108,29 @@ describe("DesktopEnvironment", () => {
       );
 
       assert.equal(environment.isDevelopment, false);
-      assert.equal(environment.stateDir, "/tmp/t3/userdata");
-      assert.equal(environment.logDir, "/tmp/t3/userdata/logs");
-      assert.equal(environment.serverSettingsPath, "/tmp/t3/userdata/settings.json");
+      assert.equal(normalizePath(environment.stateDir), "/tmp/t3/userdata");
+      assert.equal(normalizePath(environment.logDir), "/tmp/t3/userdata/logs");
+      assert.equal(normalizePath(environment.serverSettingsPath), "/tmp/t3/userdata/settings.json");
+    }),
+  );
+
+  it.effect("derives local desktop identity separately from production", () =>
+    Effect.gen(function* () {
+      const environment = yield* makeEnvironment(
+        { appVersion: "0.0.22-local" },
+        {
+          T3CODE_HOME: "/tmp/t3",
+        },
+      );
+
+      assert.equal(environment.displayName, "T3 Code (Local)");
+      assert.equal(environment.branding.stageLabel, "Local");
+      assert.equal(normalizePath(environment.stateDir), "/tmp/t3/local");
+      assert.equal(environment.userDataDirName, "t3code-local");
+      assert.equal(environment.legacyUserDataDirName, "T3 Code (Local)");
+      assert.equal(environment.appUserModelId, "com.t3tools.t3code.local");
+      assert.equal(environment.linuxDesktopEntryName, "t3code-local.desktop");
+      assert.equal(environment.linuxWmClass, "t3code-local");
     }),
   );
 
@@ -105,11 +144,11 @@ describe("DesktopEnvironment", () => {
         Option.none(),
       );
       assert.deepEqual(
-        environment.resolvePickFolderDefaultPath({ initialPath: "~" }),
+        normalizePathOption(environment.resolvePickFolderDefaultPath({ initialPath: "~" })),
         Option.some("/Users/alice"),
       );
       assert.deepEqual(
-        environment.resolvePickFolderDefaultPath({ initialPath: "~/project" }),
+        normalizePathOption(environment.resolvePickFolderDefaultPath({ initialPath: "~/project" })),
         Option.some("/Users/alice/project"),
       );
     }),

@@ -27,6 +27,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
 const BuildPlatform = Schema.Literals(["mac", "linux", "win"]);
 const BuildArch = Schema.Literals(["arm64", "x64", "universal"]);
+const BuildVariant = Schema.Literals(["release", "local"]);
 
 const RepoRoot = Effect.service(Path.Path).pipe(
   Effect.flatMap((path) => path.fromFileUrl(new URL("..", import.meta.url))),
@@ -67,6 +68,7 @@ interface BuildCliInput {
   readonly platform: Option.Option<typeof BuildPlatform.Type>;
   readonly target: Option.Option<string>;
   readonly arch: Option.Option<typeof BuildArch.Type>;
+  readonly variant: Option.Option<typeof BuildVariant.Type>;
   readonly buildVersion: Option.Option<string>;
   readonly outputDir: Option.Option<string>;
   readonly skipBuild: Option.Option<boolean>;
@@ -198,6 +200,7 @@ interface ResolvedBuildOptions {
   readonly platform: typeof BuildPlatform.Type;
   readonly target: string;
   readonly arch: typeof BuildArch.Type;
+  readonly variant: typeof BuildVariant.Type;
   readonly version: string | undefined;
   readonly outputDir: string;
   readonly skipBuild: boolean;
@@ -243,6 +246,7 @@ const BuildEnvConfig = Config.all({
   platform: Config.schema(BuildPlatform, "T3CODE_DESKTOP_PLATFORM").pipe(Config.option),
   target: Config.string("T3CODE_DESKTOP_TARGET").pipe(Config.option),
   arch: Config.schema(BuildArch, "T3CODE_DESKTOP_ARCH").pipe(Config.option),
+  variant: Config.schema(BuildVariant, "T3CODE_DESKTOP_VARIANT").pipe(Config.option),
   version: Config.string("T3CODE_DESKTOP_VERSION").pipe(Config.option),
   outputDir: Config.string("T3CODE_DESKTOP_OUTPUT_DIR").pipe(Config.option),
   skipBuild: Config.boolean("T3CODE_DESKTOP_SKIP_BUILD").pipe(Config.withDefault(false)),
@@ -296,10 +300,13 @@ export const resolveBuildOptions = Effect.fn("resolveBuildOptions")(function* (
 
   const target = mergeOptions(input.target, env.target, PLATFORM_CONFIG[platform].defaultTarget);
   const arch = mergeOptions(input.arch, env.arch, getDefaultArch(platform));
+  const variant = mergeOptions(input.variant, env.variant, "release");
   const version = mergeOptions(input.buildVersion, env.version, undefined);
   const releaseDir = resolveBooleanFlag(input.mockUpdates, env.mockUpdates)
     ? "release-mock"
-    : "release";
+    : variant === "local"
+      ? "release-local"
+      : "release";
   const outputDir = path.resolve(
     repoRoot,
     mergeOptions(input.outputDir, env.outputDir, releaseDir),
@@ -327,6 +334,7 @@ export const resolveBuildOptions = Effect.fn("resolveBuildOptions")(function* (
     platform,
     target,
     arch,
+    variant,
     version,
     outputDir,
     skipBuild,
@@ -528,11 +536,36 @@ function resolveGitHubPublishConfig(updateChannel: "latest" | "nightly"):
   };
 }
 
+const LOCAL_VERSION_PATTERN = /-local(?:\.|$)/;
+
+export function isLocalDesktopVersion(version: string): boolean {
+  return LOCAL_VERSION_PATTERN.test(version);
+}
+
+export function resolveDesktopBuildVersion(
+  baseVersion: string,
+  variant: typeof BuildVariant.Type,
+): string {
+  if (variant !== "local" || isLocalDesktopVersion(baseVersion)) {
+    return baseVersion;
+  }
+
+  return `${baseVersion}-local`;
+}
+
 export function resolveDesktopUpdateChannel(version: string): "latest" | "nightly" {
   return /-nightly\.\d{8}\.\d+$/.test(version) ? "nightly" : "latest";
 }
 
 export function resolveDesktopBuildIconAssets(version: string): DesktopBuildIconAssets {
+  if (isLocalDesktopVersion(version)) {
+    return {
+      macIconPng: BRAND_ASSET_PATHS.developmentDesktopIconPng,
+      linuxIconPng: BRAND_ASSET_PATHS.developmentDesktopIconPng,
+      windowsIconIco: BRAND_ASSET_PATHS.developmentWindowsIconIco,
+    };
+  }
+
   if (resolveDesktopUpdateChannel(version) === "nightly") {
     return {
       macIconPng: BRAND_ASSET_PATHS.nightlyMacIconPng,
@@ -553,9 +586,23 @@ export function resolveMockUpdateServerUrl(mockUpdateServerPort: number | undefi
 }
 
 export function resolveDesktopProductName(version: string): string {
+  if (isLocalDesktopVersion(version)) {
+    return "T3 Code (Local)";
+  }
+
   return resolveDesktopUpdateChannel(version) === "nightly"
     ? "T3 Code (Nightly)"
     : (desktopPackageJson.productName ?? "T3 Code");
+}
+
+export function resolveDesktopAppId(version: string): string {
+  return isLocalDesktopVersion(version) ? "com.t3tools.t3code.local" : "com.t3tools.t3code";
+}
+
+export function resolveDesktopArtifactName(version: string): string {
+  return isLocalDesktopVersion(version)
+    ? "T3-Code-Local-${version}-${arch}.${ext}"
+    : "T3-Code-${version}-${arch}.${ext}";
 }
 
 const createBuildConfig = Effect.fn("createBuildConfig")(function* (
@@ -567,16 +614,18 @@ const createBuildConfig = Effect.fn("createBuildConfig")(function* (
   mockUpdateServerPort: number | undefined,
 ) {
   const buildConfig: Record<string, unknown> = {
-    appId: "com.t3tools.t3code",
+    appId: resolveDesktopAppId(version),
     productName: resolveDesktopProductName(version),
-    artifactName: "T3-Code-${version}-${arch}.${ext}",
+    artifactName: resolveDesktopArtifactName(version),
     directories: {
       buildResources: "apps/desktop/resources",
     },
   };
   const updateChannel = resolveDesktopUpdateChannel(version);
   const publishConfig = resolveGitHubPublishConfig(updateChannel);
-  if (publishConfig) {
+  if (isLocalDesktopVersion(version)) {
+    buildConfig.generateUpdatesFilesForAllChannels = false;
+  } else if (publishConfig) {
     buildConfig.publish = [publishConfig];
   } else if (mockUpdates) {
     buildConfig.publish = [
@@ -710,7 +759,10 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
       }),
   });
 
-  const appVersion = options.version ?? serverPackageJson.version;
+  const appVersion = resolveDesktopBuildVersion(
+    options.version ?? serverPackageJson.version,
+    options.variant,
+  );
   const iconAssets = resolveDesktopBuildIconAssets(appVersion);
   const commitHash = yield* resolveGitCommitHash(repoRoot);
   const mkdir = options.keepStage ? fs.makeTempDirectory : fs.makeTempDirectoryScoped;
@@ -902,6 +954,10 @@ const buildDesktopArtifactCli = Command.make("build-desktop-artifact", {
   ),
   arch: Flag.choice("arch", BuildArch.literals).pipe(
     Flag.withDescription("Build arch, for example arm64/x64/universal (env: T3CODE_DESKTOP_ARCH)."),
+    Flag.optional,
+  ),
+  variant: Flag.choice("variant", BuildVariant.literals).pipe(
+    Flag.withDescription("Build identity variant: release or local (env: T3CODE_DESKTOP_VARIANT)."),
     Flag.optional,
   ),
   buildVersion: Flag.string("build-version").pipe(
