@@ -112,6 +112,18 @@
   --success-foreground: var(--color-emerald-700);
   --warning: var(--color-amber-500);
   --warning-foreground: var(--color-amber-700);
+  --project-avatar-background-pink: #feeef8;
+  --project-avatar-background-mint: #e1fbf4;
+  --project-avatar-background-orange: #fff1e7;
+  --project-avatar-background-purple: #f9f1fe;
+  --project-avatar-background-cyan: #e7f9fb;
+  --project-avatar-background-lime: #eefadc;
+  --project-avatar-text-pink: #cd1d8d;
+  --project-avatar-text-mint: #147d6f;
+  --project-avatar-text-orange: #ed5f00;
+  --project-avatar-text-purple: #8445bc;
+  --project-avatar-text-cyan: #0894b3;
+  --project-avatar-text-lime: #5d770d;
 
   @variant dark {
     color-scheme: dark;
@@ -141,6 +153,18 @@
     --success-foreground: var(--color-emerald-400);
     --warning: var(--color-amber-500);
     --warning-foreground: var(--color-amber-400);
+    --project-avatar-background-pink: #501b3f;
+    --project-avatar-background-mint: #033a34;
+    --project-avatar-background-orange: #5f2a06;
+    --project-avatar-background-purple: #432155;
+    --project-avatar-background-cyan: #0f3058;
+    --project-avatar-background-lime: #2b3711;
+    --project-avatar-text-pink: #e34ba9;
+    --project-avatar-text-mint: #95f3d9;
+    --project-avatar-text-orange: #ff802b;
+    --project-avatar-text-purple: #9d5bd2;
+    --project-avatar-text-cyan: #369eff;
+    --project-avatar-text-lime: #c4f042;
   }
 }
 

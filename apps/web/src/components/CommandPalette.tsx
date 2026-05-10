@@ -648,6 +648,8 @@ function OpenCommandPaletteDialog() {
           <ProjectFavicon
             environmentId={project.environmentId}
             cwd={project.cwd}
+            label={project.name}
+            projectKey={project.id}
             className={ITEM_ICON_CLASS}
           />
         ),
@@ -665,6 +667,8 @@ function OpenCommandPaletteDialog() {
           <ProjectFavicon
             environmentId={project.environmentId}
             cwd={project.cwd}
+            label={project.name}
+            projectKey={project.id}
             className={ITEM_ICON_CLASS}
           />
         ),

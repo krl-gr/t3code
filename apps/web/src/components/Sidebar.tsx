@@ -3,6 +3,7 @@ import {
   ArrowRightIcon,
   ChevronRightIcon,
   CloudIcon,
+  MoreHorizontalIcon,
   PlusIcon,
   SearchIcon,
   SettingsIcon,
@@ -2144,6 +2145,8 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
             <ProjectFavicon
               environmentId={project.environmentId}
               cwd={project.cwd}
+              label={project.displayName}
+              projectKey={project.projectKey}
               className="size-4"
             />
             <span className="flex min-w-0 flex-1 items-center gap-2">
@@ -2561,13 +2564,14 @@ function SidebarSectionHeader({
         <SidebarGroupLabel className="group/sidebar-section-header h-8 cursor-pointer justify-start gap-2 px-2 text-sm font-medium text-muted-foreground" />
       }
     >
+      <span className="min-w-0 truncate">{title}</span>
       <ChevronRightIcon
         className={cn(
           "size-4 shrink-0 text-muted-foreground transition-transform duration-150",
           open && "rotate-90",
         )}
       />
-      <span className="min-w-0 flex-1 truncate">{title}</span>
+      <span className="min-w-0 flex-1" />
       {action}
     </CollapsibleTrigger>
   );
@@ -2593,6 +2597,8 @@ function FocusedProjectCard({
         <ProjectFavicon
           environmentId={project.environmentId}
           cwd={project.cwd}
+          label={project.displayName}
+          projectKey={project.projectKey}
           className="size-4"
         />
         <span className="flex min-w-0 flex-1 items-center gap-2">
@@ -2698,11 +2704,12 @@ const FocusedSidebarProjectView = memo(function FocusedSidebarProjectView(
                 render={
                   <button
                     type="button"
-                    className="mt-2 h-7 w-full rounded-lg border border-dashed border-border/80 px-2 text-xs text-muted-foreground/80 transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
+                    className="mt-1 flex h-8 w-full items-center gap-2 rounded-lg px-2 text-sm font-medium text-foreground/72 transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring dark:text-foreground/82"
                   />
                 }
               >
-                More
+                <MoreHorizontalIcon className="size-4 shrink-0" />
+                <span className="truncate">More</span>
               </MenuTrigger>
               <MenuPopup align="start" side="bottom" className="min-w-56">
                 <MenuGroup>
@@ -2715,6 +2722,8 @@ const FocusedSidebarProjectView = memo(function FocusedSidebarProjectView(
                       <ProjectFavicon
                         environmentId={project.environmentId}
                         cwd={project.cwd}
+                        label={project.displayName}
+                        projectKey={project.projectKey}
                         className="size-4"
                       />
                       <span className="truncate">{project.displayName}</span>
