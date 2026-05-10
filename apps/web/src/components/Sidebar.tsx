@@ -956,7 +956,6 @@ interface SidebarProjectItemProps {
   projectExpandedOverride?: boolean | undefined;
   hideProjectHeader?: boolean | undefined;
   threadContentClassName?: string | undefined;
-  showFocusedNewThreadButton?: boolean | undefined;
   newThreadShortcutLabel: string | null;
   handleNewThread: ReturnType<typeof useNewThreadHandler>["handleNewThread"];
   archiveThread: ReturnType<typeof useThreadActions>["archiveThread"];
@@ -980,7 +979,6 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
     projectExpandedOverride,
     hideProjectHeader = false,
     threadContentClassName,
-    showFocusedNewThreadButton = false,
     newThreadShortcutLabel,
     handleNewThread,
     archiveThread,
@@ -2228,20 +2226,6 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         </div>
       ) : null}
 
-      {showFocusedNewThreadButton ? (
-        <SidebarMenuButton
-          size="sm"
-          className="h-9 gap-2 px-2 text-left text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-1 focus-visible:ring-inset"
-          data-testid="focused-new-thread-button"
-          onClick={handleCreateThreadClick}
-        >
-          <SquarePenIcon className="size-4" />
-          <span className="flex-1 truncate text-left text-sm font-medium leading-5 -translate-y-[2px] text-foreground/72 dark:text-foreground/82">
-            New thread
-          </span>
-        </SidebarMenuButton>
-      ) : null}
-
       <SidebarProjectThreadList
         projectKey={project.projectKey}
         projectExpanded={projectExpanded}
@@ -2562,11 +2546,19 @@ const SidebarChromeFooter = memo(function SidebarChromeFooter() {
   );
 });
 
-function SidebarSectionHeader({ title, open }: { title: string; open: boolean }) {
+function SidebarSectionHeader({
+  title,
+  open,
+  action,
+}: {
+  title: string;
+  open: boolean;
+  action?: React.ReactNode;
+}) {
   return (
     <CollapsibleTrigger
       render={
-        <SidebarGroupLabel className="h-8 cursor-pointer justify-start gap-2 px-2 text-sm font-medium text-muted-foreground" />
+        <SidebarGroupLabel className="group/sidebar-section-header h-8 cursor-pointer justify-start gap-2 px-2 text-sm font-medium text-muted-foreground" />
       }
     >
       <ChevronRightIcon
@@ -2575,7 +2567,8 @@ function SidebarSectionHeader({ title, open }: { title: string; open: boolean })
           open && "rotate-90",
         )}
       />
-      <span className="truncate">{title}</span>
+      <span className="min-w-0 flex-1 truncate">{title}</span>
+      {action}
     </CollapsibleTrigger>
   );
 }
@@ -2663,8 +2656,26 @@ const FocusedSidebarProjectView = memo(function FocusedSidebarProjectView(
   } = props;
   const [projectsOpen, setProjectsOpen] = useState(true);
   const [threadsOpen, setThreadsOpen] = useState(true);
+  const { isMobile, setOpenMobile } = useSidebar();
   const visibleProjectCards = projects.slice(0, FOCUSED_PROJECT_TAB_COUNT);
   const hasMoreProjects = projects.length > FOCUSED_PROJECT_TAB_COUNT;
+  const handleFocusedNewThreadClick = useCallback(
+    (event: React.MouseEvent<HTMLButtonElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+
+      const targetMember = selectedProject?.memberProjects[0];
+      if (!targetMember) {
+        return;
+      }
+
+      if (isMobile) {
+        setOpenMobile(false);
+      }
+      void handleNewThread(scopeProjectRef(targetMember.environmentId, targetMember.id));
+    },
+    [handleNewThread, isMobile, selectedProject?.memberProjects, setOpenMobile],
+  );
 
   return (
     <div className="flex min-w-0 flex-col gap-3">
@@ -2720,6 +2731,29 @@ const FocusedSidebarProjectView = memo(function FocusedSidebarProjectView(
         <SidebarSectionHeader
           title={selectedProject ? `${selectedProject.displayName}'s threads` : "Threads"}
           open={threadsOpen}
+          action={
+            selectedProject ? (
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <button
+                      type="button"
+                      aria-label={`Create new thread in ${selectedProject.displayName}`}
+                      data-testid="focused-new-thread-button"
+                      className="inline-flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 opacity-0 transition-opacity hover:bg-secondary hover:text-foreground focus-visible:opacity-100 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring group-hover/sidebar-section-header:opacity-100 group-focus-within/sidebar-section-header:opacity-100"
+                      onPointerDown={(event) => event.stopPropagation()}
+                      onClick={handleFocusedNewThreadClick}
+                    >
+                      <SquarePenIcon className="size-4" />
+                    </button>
+                  }
+                />
+                <TooltipPopup side="top">
+                  {newThreadShortcutLabel ? `New thread (${newThreadShortcutLabel})` : "New thread"}
+                </TooltipPopup>
+              </Tooltip>
+            ) : null
+          }
         />
         <CollapsiblePanel>
           {selectedProject ? (
@@ -2733,7 +2767,6 @@ const FocusedSidebarProjectView = memo(function FocusedSidebarProjectView(
                 projectExpandedOverride={threadsOpen}
                 hideProjectHeader
                 threadContentClassName="ml-0"
-                showFocusedNewThreadButton
                 newThreadShortcutLabel={newThreadShortcutLabel}
                 handleNewThread={handleNewThread}
                 archiveThread={archiveThread}
