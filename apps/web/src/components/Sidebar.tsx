@@ -592,7 +592,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
             </span>
           )}
           <div
-            className={`flex min-w-12 justify-end ${
+            className={`flex min-w-fit justify-end ${
               isRemoteThread ? "max-sm:min-w-24" : "max-sm:min-w-20"
             }`}
           >
@@ -867,6 +867,7 @@ interface SidebarProjectItemProps {
   projectExpandedOverride?: boolean | undefined;
   hideProjectHeader?: boolean | undefined;
   threadContentClassName?: string | undefined;
+  showFocusedNewThreadButton?: boolean | undefined;
   newThreadShortcutLabel: string | null;
   handleNewThread: ReturnType<typeof useNewThreadHandler>["handleNewThread"];
   archiveThread: ReturnType<typeof useThreadActions>["archiveThread"];
@@ -890,6 +891,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
     projectExpandedOverride,
     hideProjectHeader = false,
     threadContentClassName,
+    showFocusedNewThreadButton = false,
     newThreadShortcutLabel,
     handleNewThread,
     archiveThread,
@@ -2057,6 +2059,20 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         </div>
       ) : null}
 
+      {showFocusedNewThreadButton ? (
+        <SidebarMenuButton
+          size="sm"
+          className="h-9 gap-2 px-2 text-left text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-1 focus-visible:ring-inset"
+          data-testid="focused-new-thread-button"
+          onClick={handleCreateThreadClick}
+        >
+          <SquarePenIcon className="size-4" />
+          <span className="flex-1 truncate text-left text-sm font-medium leading-5 -translate-y-[2px] text-foreground/72 dark:text-foreground/82">
+            New thread
+          </span>
+        </SidebarMenuButton>
+      ) : null}
+
       <SidebarProjectThreadList
         projectKey={project.projectKey}
         projectExpanded={projectExpanded}
@@ -2381,12 +2397,12 @@ function SidebarSectionHeader({ title, open }: { title: string; open: boolean })
   return (
     <CollapsibleTrigger
       render={
-        <SidebarGroupLabel className="h-8 cursor-pointer justify-start gap-2 px-2 text-[11px] uppercase tracking-[0.14em] text-muted-foreground/70" />
+        <SidebarGroupLabel className="h-8 cursor-pointer justify-start gap-2 px-2 text-sm font-medium text-muted-foreground" />
       }
     >
       <ChevronRightIcon
         className={cn(
-          "size-4 shrink-0 text-muted-foreground/70 transition-transform duration-150",
+          "size-4 shrink-0 text-muted-foreground transition-transform duration-150",
           open && "rotate-90",
         )}
       />
@@ -2548,6 +2564,7 @@ const FocusedSidebarProjectView = memo(function FocusedSidebarProjectView(
                 projectExpandedOverride={threadsOpen}
                 hideProjectHeader
                 threadContentClassName="ml-0"
+                showFocusedNewThreadButton
                 newThreadShortcutLabel={newThreadShortcutLabel}
                 handleNewThread={handleNewThread}
                 archiveThread={archiveThread}

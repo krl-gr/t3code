@@ -4,6 +4,7 @@ import { useState } from "react";
 import { resolveEnvironmentHttpUrl } from "../environments/runtime";
 
 const loadedProjectFaviconSrcs = new Set<string>();
+const PROJECT_FAVICON_CLIENT_FALLBACK_VERSION = "2";
 
 export function ProjectFavicon(input: {
   environmentId: EnvironmentId;
@@ -15,7 +16,7 @@ export function ProjectFavicon(input: {
       return resolveEnvironmentHttpUrl({
         environmentId: input.environmentId,
         pathname: "/api/project-favicon",
-        searchParams: { cwd: input.cwd },
+        searchParams: { cwd: input.cwd, fallback: PROJECT_FAVICON_CLIENT_FALLBACK_VERSION },
       });
     } catch {
       return null;

@@ -954,7 +954,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
-  it.effect("serves the fallback project favicon when no icon exists", () =>
+  it.effect("returns no project favicon when no icon exists", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const projectDir = yield* fileSystem.makeTempDirectoryScoped({
@@ -974,8 +974,8 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
         },
       );
 
-      assert.equal(response.status, 200);
-      assert.include(yield* response.text, 'data-fallback="project-favicon"');
+      assert.equal(response.status, 204);
+      assert.equal(response.headers["cache-control"], "no-store");
     }).pipe(Effect.provide(NodeHttpServer.layerTest)),
   );
 
