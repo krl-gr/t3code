@@ -261,7 +261,7 @@ function SidebarThreadContextMenu(props: {
             type="button"
             role="menuitem"
             className={cn(
-              "flex h-8 w-full cursor-pointer items-center gap-2 rounded-lg p-2 text-left text-sm outline-hidden ring-ring transition-[background-color,color] hover:bg-accent hover:text-foreground focus-visible:ring-2 active:bg-accent active:text-foreground",
+              "flex h-8 w-full cursor-pointer items-center gap-2 rounded-md p-2 text-left text-sm outline-hidden ring-ring transition-[background-color,color] hover:bg-accent hover:text-foreground focus-visible:ring-2 active:bg-accent active:text-foreground",
               item.destructive &&
                 "text-destructive hover:text-destructive focus-visible:text-destructive",
             )}
@@ -657,7 +657,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
               <TooltipTrigger
                 render={
                   <span
-                    className="min-w-0 flex-1 truncate text-sm leading-5 -translate-y-[2px]"
+                    className="min-w-0 flex-1 truncate text-sm leading-5"
                     data-testid={`thread-title-${thread.id}`}
                   >
                     {thread.title}
@@ -693,7 +693,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                 data-thread-selection-safe
                 data-testid={`thread-archive-confirm-${thread.id}`}
                 aria-label={`Confirm archive ${thread.title}`}
-                className="absolute top-1/2 right-2 inline-flex h-5 -translate-y-1/2 cursor-pointer items-center rounded-full bg-destructive/12 px-2 text-[10px] font-medium text-destructive transition-colors hover:bg-destructive/18 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-destructive/40"
+                className="absolute inset-y-0 right-2 my-auto flex h-5 cursor-pointer items-center rounded-full bg-destructive/12 px-2 text-[10px] font-medium text-destructive transition-colors hover:bg-destructive/18 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-destructive/40"
                 onPointerDown={stopPropagationOnPointerDown}
                 onClick={handleConfirmArchiveClick}
               >
@@ -701,34 +701,34 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
               </button>
             ) : !isThreadRunning ? (
               appSettingsConfirmThreadArchive ? (
-                <div className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 opacity-0 transition-opacity duration-150 max-sm:pointer-events-auto max-sm:opacity-100 group-hover/menu-sub-item:pointer-events-auto group-hover/menu-sub-item:opacity-100 group-focus-within/menu-sub-item:pointer-events-auto group-focus-within/menu-sub-item:opacity-100">
+                <div className="pointer-events-none absolute inset-y-0 right-2 my-auto flex size-5 items-center justify-center opacity-0 transition-opacity duration-150 max-sm:pointer-events-auto max-sm:opacity-100 group-hover/menu-sub-item:pointer-events-auto group-hover/menu-sub-item:opacity-100 group-focus-within/menu-sub-item:pointer-events-auto group-focus-within/menu-sub-item:opacity-100">
                   <button
                     type="button"
                     data-thread-selection-safe
                     data-testid={`thread-archive-${thread.id}`}
                     aria-label={`Archive ${thread.title}`}
-                    className="inline-flex size-5 cursor-pointer items-center justify-center text-muted-foreground/60 transition-colors hover:text-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
+                    className="flex size-5 cursor-pointer items-center justify-center text-muted-foreground/60 transition-colors hover:text-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
                     onPointerDown={stopPropagationOnPointerDown}
                     onClick={handleStartArchiveConfirmation}
                   >
-                    <ArchiveIcon className="size-4" />
+                    <ArchiveIcon className="block size-4" />
                   </button>
                 </div>
               ) : (
                 <Tooltip>
                   <TooltipTrigger
                     render={
-                      <div className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 opacity-0 transition-opacity duration-150 max-sm:pointer-events-auto max-sm:opacity-100 group-hover/menu-sub-item:pointer-events-auto group-hover/menu-sub-item:opacity-100 group-focus-within/menu-sub-item:pointer-events-auto group-focus-within/menu-sub-item:opacity-100">
+                      <div className="pointer-events-none absolute inset-y-0 right-2 my-auto flex size-5 items-center justify-center opacity-0 transition-opacity duration-150 max-sm:pointer-events-auto max-sm:opacity-100 group-hover/menu-sub-item:pointer-events-auto group-hover/menu-sub-item:opacity-100 group-focus-within/menu-sub-item:pointer-events-auto group-focus-within/menu-sub-item:opacity-100">
                         <button
                           type="button"
                           data-thread-selection-safe
                           data-testid={`thread-archive-${thread.id}`}
                           aria-label={`Archive ${thread.title}`}
-                          className="inline-flex size-5 cursor-pointer items-center justify-center text-muted-foreground/60 transition-colors hover:text-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
+                          className="flex size-5 cursor-pointer items-center justify-center text-muted-foreground/60 transition-colors hover:text-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
                           onPointerDown={stopPropagationOnPointerDown}
                           onClick={handleArchiveImmediateClick}
                         >
-                          <ArchiveIcon className="size-4" />
+                          <ArchiveIcon className="block size-4" />
                         </button>
                       </div>
                     }
@@ -762,7 +762,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                     {jumpLabel}
                   </span>
                 ) : (
-                  <span className="text-sm leading-5 -translate-y-[2px] text-muted-foreground">
+                  <span className="text-sm leading-5 text-muted-foreground">
                     {formatRelativeTimeLabel(
                       thread.latestUserMessageAt ?? thread.updatedAt ?? thread.createdAt,
                     ).replace(/ ago$/, "")}
@@ -2150,7 +2150,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
               className="size-4"
             />
             <span className="flex min-w-0 flex-1 items-center gap-2">
-              <span className="truncate text-sm font-medium leading-5 -translate-y-[2px] text-foreground/72 dark:text-foreground/82">
+              <span className="truncate text-sm font-medium leading-5 text-foreground/72 dark:text-foreground/82">
                 {project.displayName}
               </span>
               {!projectExpanded && projectStatus ? (
@@ -2195,7 +2195,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
                         ? "Remote project"
                         : "Available in multiple environments"
                     }
-                    className="pointer-events-none absolute top-1/2 right-2 inline-flex size-5 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground/60 transition-opacity duration-150 max-sm:right-8 group-hover/project-header:opacity-0 group-focus-within/project-header:opacity-0 max-sm:group-hover/project-header:opacity-100 max-sm:group-focus-within/project-header:opacity-100"
+                    className="pointer-events-none absolute inset-y-0 right-2 my-auto flex size-5 items-center justify-center rounded-md text-muted-foreground/60 transition-opacity duration-150 max-sm:right-8 group-hover/project-header:opacity-0 group-focus-within/project-header:opacity-0 max-sm:group-hover/project-header:opacity-100 max-sm:group-focus-within/project-header:opacity-100"
                   />
                 }
               >
@@ -2209,15 +2209,15 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
           <Tooltip>
             <TooltipTrigger
               render={
-                <div className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 opacity-0 transition-opacity duration-150 max-sm:pointer-events-auto max-sm:opacity-100 group-hover/project-header:pointer-events-auto group-hover/project-header:opacity-100 group-focus-within/project-header:pointer-events-auto group-focus-within/project-header:opacity-100">
+                <div className="pointer-events-none absolute inset-y-0 right-2 my-auto flex size-5 items-center justify-center opacity-0 transition-opacity duration-150 max-sm:pointer-events-auto max-sm:opacity-100 group-hover/project-header:pointer-events-auto group-hover/project-header:opacity-100 group-focus-within/project-header:pointer-events-auto group-focus-within/project-header:opacity-100">
                   <button
                     type="button"
                     aria-label={`Create new thread in ${project.displayName}`}
                     data-testid="new-thread-button"
-                    className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 hover:bg-secondary hover:text-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
+                    className="flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 hover:bg-secondary hover:text-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
                     onClick={handleCreateThreadClick}
                   >
-                    <SquarePenIcon className="size-4" />
+                    <SquarePenIcon className="block size-4" />
                   </button>
                 </div>
               }
@@ -2431,7 +2431,7 @@ function SidebarViewModeButton({
       onClick={() => onViewModeChange(nextViewMode)}
     >
       <ArrowRightIcon className="size-4" />
-      <span className="flex-1 truncate text-left text-sm leading-5 -translate-y-[2px] text-foreground/72 dark:text-foreground/82">
+      <span className="flex-1 truncate text-left text-sm leading-5 text-foreground/72 dark:text-foreground/82">
         {viewMode === "nested" ? "Switch to Focus view" : "Switch to Classic view"}
       </span>
     </SidebarMenuButton>
@@ -2539,7 +2539,7 @@ const SidebarChromeFooter = memo(function SidebarChromeFooter() {
             onClick={handleSettingsClick}
           >
             <SettingsIcon className="size-4" />
-            <span className="text-sm leading-5 -translate-y-[2px] text-foreground/72 dark:text-foreground/82">
+            <span className="text-sm leading-5 text-foreground/72 dark:text-foreground/82">
               Settings
             </span>
           </SidebarMenuButton>
@@ -2602,7 +2602,7 @@ function FocusedProjectCard({
           className="size-4"
         />
         <span className="flex min-w-0 flex-1 items-center gap-2">
-          <span className="truncate text-sm font-medium leading-5 -translate-y-[2px] text-foreground/72 dark:text-foreground/82">
+          <span className="truncate text-sm font-medium leading-5 text-foreground/72 dark:text-foreground/82">
             {project.displayName}
           </span>
           {project.groupedProjectCount > 1 ? (
@@ -2704,7 +2704,7 @@ const FocusedSidebarProjectView = memo(function FocusedSidebarProjectView(
                 render={
                   <button
                     type="button"
-                    className="mt-1 flex h-8 w-full items-center gap-2 rounded-lg px-2 text-sm font-medium text-foreground/72 transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring dark:text-foreground/82"
+                    className="mt-1 flex h-8 w-full items-center gap-2 rounded-md px-2 text-sm font-medium text-foreground/72 transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring dark:text-foreground/82"
                   />
                 }
               >
@@ -2753,7 +2753,7 @@ const FocusedSidebarProjectView = memo(function FocusedSidebarProjectView(
                       onPointerDown={(event) => event.stopPropagation()}
                       onClick={handleFocusedNewThreadClick}
                     >
-                      <SquarePenIcon className="size-4" />
+                      <SquarePenIcon className="block size-4" />
                     </button>
                   }
                 />
@@ -2901,7 +2901,7 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
               }
             >
               <SearchIcon className="size-4" />
-              <span className="flex-1 truncate text-left text-sm leading-5 -translate-y-[2px] text-foreground/72 dark:text-foreground/82">
+              <span className="flex-1 truncate text-left text-sm leading-5 text-foreground/72 dark:text-foreground/82">
                 Search
               </span>
               {commandPaletteShortcutLabel ? (
@@ -2919,7 +2919,7 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
               onClick={openAddProject}
             >
               <PlusIcon className="size-4" />
-              <span className="flex-1 truncate text-left text-sm leading-5 -translate-y-[2px] text-foreground/72 dark:text-foreground/82">
+              <span className="flex-1 truncate text-left text-sm leading-5 text-foreground/72 dark:text-foreground/82">
                 Project
               </span>
             </SidebarMenuButton>
