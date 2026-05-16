@@ -12,6 +12,7 @@ packages/*/dist
 build/
 .logs/
 release/
+release-local/
 release-mock/
 .t3
 .idea/
