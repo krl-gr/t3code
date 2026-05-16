@@ -63,6 +63,9 @@ import {
 import { usePrimaryEnvironmentId } from "../environments/primary";
 import { isElectron } from "../env";
 import { APP_STAGE_LABEL, APP_VERSION } from "../branding";
+import { productConfig } from "../productConfig";
+import { productCopy } from "../productCopy";
+import { productFeatures } from "../productFeatures";
 import { isTerminalFocused } from "../lib/terminalFocus";
 import { cn, isMacPlatform, newCommandId } from "../lib/utils";
 import {
@@ -235,11 +238,11 @@ function SidebarThreadContextMenu(props: {
     label: string;
     destructive?: boolean;
   }> = [
-    { id: "rename", label: "Rename thread" },
-    { id: "mark-unread", label: "Mark unread" },
-    { id: "copy-path", label: "Copy Path" },
-    { id: "copy-thread-id", label: "Copy Thread ID" },
-    { id: "delete", label: "Delete", destructive: true },
+    { id: "rename", label: productCopy.sidebar.threadContextMenu.rename },
+    { id: "mark-unread", label: productCopy.sidebar.threadContextMenu.markUnread },
+    { id: "copy-path", label: productCopy.sidebar.threadContextMenu.copyPath },
+    { id: "copy-thread-id", label: productCopy.sidebar.threadContextMenu.copyThreadId },
+    { id: "delete", label: productCopy.sidebar.threadContextMenu.delete, destructive: true },
   ];
 
   if (typeof document === "undefined") {
@@ -250,7 +253,7 @@ function SidebarThreadContextMenu(props: {
     <div
       ref={props.menuRef}
       role="menu"
-      aria-label="Thread actions"
+      aria-label={productCopy.sidebar.threadContextMenu.ariaLabel}
       className="fixed z-50 min-w-48 rounded-xl border border-sidebar-border bg-popover p-1 text-popover-foreground shadow-lg outline-none dark:bg-popover"
       style={{ left: props.menu.position.x, top: props.menu.position.y }}
       onContextMenu={(event) => event.preventDefault()}
@@ -277,7 +280,6 @@ function SidebarThreadContextMenu(props: {
   );
 }
 const EMPTY_THREAD_JUMP_LABELS = new Map<string, string>();
-const FOCUSED_PROJECT_TAB_COUNT = 3;
 const PROJECT_GROUPING_MODE_LABELS: Record<SidebarProjectGroupingMode, string> = {
   repository: "Group by repository",
   repository_path: "Group by repository path",
@@ -2092,6 +2094,10 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
 
   const handleThreadContextMenu = useCallback(
     async (threadRef: ScopedThreadRef, position: { x: number; y: number }) => {
+      if (!productFeatures.sidebarThreadContextMenuEnabled) {
+        return;
+      }
+
       const threadKey = scopedThreadKey(threadRef);
       const thread = sidebarThreadByKeyRef.current.get(threadKey) ?? null;
       if (!thread) return;
@@ -2117,7 +2123,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
 
   return (
     <>
-      {threadContextMenu ? (
+      {productFeatures.sidebarThreadContextMenuEnabled && threadContextMenu ? (
         <SidebarThreadContextMenu
           menu={threadContextMenu}
           menuRef={threadContextMenuRef}
@@ -2430,7 +2436,9 @@ function SidebarViewModeButton({
     >
       <ArrowRightIcon className="size-4" />
       <span className="flex-1 truncate text-left text-sm leading-5 text-foreground/72 dark:text-foreground/82">
-        {viewMode === "nested" ? "Switch to Focus view" : "Switch to Classic view"}
+        {viewMode === "nested"
+          ? productCopy.sidebar.viewMode.switchToFocused
+          : productCopy.sidebar.viewMode.switchToNested}
       </span>
     </SidebarMenuButton>
   );
@@ -2661,8 +2669,8 @@ const FocusedSidebarProjectView = memo(function FocusedSidebarProjectView(
   const [projectsOpen, setProjectsOpen] = useState(true);
   const [threadsOpen, setThreadsOpen] = useState(true);
   const { isMobile, setOpenMobile } = useSidebar();
-  const visibleProjectCards = projects.slice(0, FOCUSED_PROJECT_TAB_COUNT);
-  const hasMoreProjects = projects.length > FOCUSED_PROJECT_TAB_COUNT;
+  const visibleProjectCards = projects.slice(0, productConfig.sidebar.focusedProjectPreviewCount);
+  const hasMoreProjects = projects.length > productConfig.sidebar.focusedProjectPreviewCount;
   const handleFocusedNewThreadClick = useCallback(
     (event: React.MouseEvent<HTMLButtonElement>) => {
       event.preventDefault();
@@ -2922,12 +2930,14 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
               </span>
             </SidebarMenuButton>
           </SidebarMenuItem>
-          <SidebarMenuItem>
-            <SidebarViewModeButton
-              viewMode={sidebarViewMode}
-              onViewModeChange={onSidebarViewModeChange}
-            />
-          </SidebarMenuItem>
+          {productFeatures.focusedSidebarEnabled ? (
+            <SidebarMenuItem>
+              <SidebarViewModeButton
+                viewMode={sidebarViewMode}
+                onViewModeChange={onSidebarViewModeChange}
+              />
+            </SidebarMenuItem>
+          ) : null}
         </SidebarMenu>
       </SidebarGroup>
       {showArm64IntelBuildWarning && arm64IntelBuildWarningDescription ? (
@@ -2954,7 +2964,7 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
         </SidebarGroup>
       ) : null}
       <SidebarGroup className="px-2 py-2">
-        {sidebarViewMode === "focused" ? (
+        {productFeatures.focusedSidebarEnabled && sidebarViewMode === "focused" ? (
           <FocusedSidebarProjectView
             projects={sortedProjects}
             selectedProject={selectedFocusedProject}
@@ -3075,7 +3085,10 @@ export default function Sidebar() {
   const isOnSettings = pathname.startsWith("/settings");
   const sidebarThreadSortOrder = useSettings((s) => s.sidebarThreadSortOrder);
   const sidebarProjectSortOrder = useSettings((s) => s.sidebarProjectSortOrder);
-  const sidebarViewMode = useSettings((s) => s.sidebarViewMode);
+  const configuredSidebarViewMode = useSettings((s) => s.sidebarViewMode);
+  const sidebarViewMode = productFeatures.focusedSidebarEnabled
+    ? configuredSidebarViewMode
+    : productConfig.sidebar.defaultViewMode;
   const projectGroupingSettings = useSettings(selectProjectGroupingSettings);
   const sidebarThreadPreviewCount = useSettings((s) => s.sidebarThreadPreviewCount);
   const { updateSettings } = useUpdateSettings();
@@ -3786,6 +3799,10 @@ export default function Sidebar() {
 
   const handleSidebarViewModeChange = useCallback(
     (viewMode: SidebarViewMode) => {
+      if (!productFeatures.focusedSidebarEnabled) {
+        return;
+      }
+
       updateSettings({ sidebarViewMode: viewMode });
     },
     [updateSettings],

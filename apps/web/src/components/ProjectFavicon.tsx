@@ -3,6 +3,7 @@ import type { CSSProperties } from "react";
 import { useState } from "react";
 import { resolveEnvironmentHttpUrl } from "../environments/runtime";
 import { cn } from "../lib/utils";
+import { productFeatures } from "../productFeatures";
 
 const loadedProjectFaviconSrcs = new Set<string>();
 const PROJECT_FAVICON_CLIENT_FALLBACK_VERSION = "2";
@@ -111,12 +112,16 @@ export function ProjectFavicon(input: {
   );
 
   if (!src) {
-    return <ProjectAvatarFallback {...input} />;
+    return productFeatures.localProjectAvatarFallbackEnabled ? (
+      <ProjectAvatarFallback {...input} />
+    ) : null;
   }
 
   return (
     <>
-      {status !== "loaded" ? <ProjectAvatarFallback {...input} /> : null}
+      {productFeatures.localProjectAvatarFallbackEnabled && status !== "loaded" ? (
+        <ProjectAvatarFallback {...input} />
+      ) : null}
       <img
         src={src}
         alt=""
