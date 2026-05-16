@@ -13,10 +13,12 @@ import {
   ProviderDriverKind,
   ProviderInstanceId,
   type ServerConfig,
+  type ServerProcessResourceHistoryResult,
   type ServerProvider,
   type SourceControlDiscoveryResult,
 } from "@t3tools/contracts";
-import { DateTime, Option } from "effect";
+import * as DateTime from "effect/DateTime";
+import * as Option from "effect/Option";
 import { page } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
@@ -235,7 +237,10 @@ function createBaseServerConfig(): ServerConfig {
   };
 }
 
-function createOutdatedProvider(driver: string): ServerProvider {
+function createOutdatedProvider(
+  driver: string,
+  updateCommand = "npm install -g openai/codex@latest",
+): ServerProvider {
   return {
     instanceId: ProviderInstanceId.make(driver),
     driver: ProviderDriverKind.make(driver),
@@ -254,14 +259,28 @@ function createOutdatedProvider(driver: string): ServerProvider {
       latestVersion: "1.1.0",
       message: "Update available.",
       checkedAt: "2026-05-04T10:00:00.000Z",
-      updateCommand: "npm install -g openai/codex@latest",
+      updateCommand,
       canUpdate: true,
     },
   };
 }
 
 function makeUtc(value: string) {
-  return DateTime.makeUnsafe(Date.parse(value));
+  return DateTime.makeUnsafe(value);
+}
+
+function createEmptyProcessResourceHistoryResult(): ServerProcessResourceHistoryResult {
+  return {
+    readAt: makeUtc("2036-04-07T00:00:00.000Z"),
+    windowMs: 15 * 60_000,
+    bucketMs: 60_000,
+    sampleIntervalMs: 5_000,
+    retainedSampleCount: 0,
+    totalCpuSecondsApprox: 0,
+    buckets: [],
+    topProcesses: [],
+    error: Option.none(),
+  };
 }
 
 function makePairingLink(input: {
@@ -1061,6 +1080,9 @@ describe("GeneralSettingsPanel observability", () => {
           processes: [],
           error: Option.none(),
         }),
+        getProcessResourceHistory: vi
+          .fn()
+          .mockResolvedValue(createEmptyProcessResourceHistoryResult()),
         getTraceDiagnostics: vi.fn().mockResolvedValue({
           traceFilePath: "/repo/project/.t3/traces.jsonl",
           scannedFilePaths: ["/repo/project/.t3/traces.jsonl"],
@@ -1152,6 +1174,47 @@ describe("GeneralSettingsPanel observability", () => {
     expect(updateProvider).toHaveBeenCalledWith({
       provider: ProviderDriverKind.make("codex"),
       instanceId: ProviderInstanceId.make("codex"),
+    });
+  });
+
+  it("keeps long provider update commands inside the fixed-width popover", async () => {
+    const longUpdateCommand =
+      "npm install -g @anthropic-ai/claude-code@latest --registry=https://registry.npmjs.org --cache=/tmp/t3code-provider-update-cache";
+
+    setServerConfigSnapshot({
+      ...createBaseServerConfig(),
+      providers: [createOutdatedProvider("codex", longUpdateCommand)],
+    });
+
+    mounted = await render(
+      <AppAtomRegistryProvider>
+        <ProviderSettingsPanel />
+      </AppAtomRegistryProvider>,
+    );
+
+    await page.getByRole("button", { name: "Update available — view details" }).click();
+    await expect.element(page.getByText(longUpdateCommand)).toBeInTheDocument();
+
+    await vi.waitFor(() => {
+      const popup = document.querySelector<HTMLElement>('[data-slot="popover-popup"]');
+      const commandCode = Array.from(document.querySelectorAll<HTMLElement>("code")).find(
+        (element) => element.textContent === longUpdateCommand,
+      );
+      const scrollViewport = commandCode?.closest<HTMLElement>(
+        '[data-slot="scroll-area-viewport"]',
+      );
+
+      expect(popup).toBeTruthy();
+      expect(commandCode).toBeTruthy();
+      expect(scrollViewport).toBeTruthy();
+
+      const popupRect = popup!.getBoundingClientRect();
+      const viewportRect = scrollViewport!.getBoundingClientRect();
+
+      expect(popupRect.width).toBeGreaterThan(300);
+      expect(popupRect.width).toBeLessThanOrEqual(337);
+      expect(viewportRect.right).toBeLessThanOrEqual(popupRect.right + 0.5);
+      expect(scrollViewport!.scrollWidth).toBeGreaterThan(scrollViewport!.clientWidth);
     });
   });
 });
@@ -1255,8 +1318,45 @@ describe("SourceControlSettingsPanel discovery states", () => {
       </AppAtomRegistryProvider>,
     );
 
-    await expect.element(page.getByRole("heading", { name: "Git" })).toBeInTheDocument();
+    await expect.element(page.getByRole("switch", { name: "Git availability" })).toBeDisabled();
     await expect.element(page.getByText("Nothing detected yet")).not.toBeInTheDocument();
+  });
+
+  it("shows Git fetch interval settings inside the Git details dropdown", async () => {
+    setSourceControlDiscoveryStub(async () => ({
+      versionControlSystems: [
+        {
+          kind: "git",
+          label: "Git",
+          executable: "git",
+          implemented: true,
+          status: "available",
+          version: Option.some("git version 2.50.0"),
+          installHint: "Install Git.",
+          detail: Option.none(),
+        },
+      ],
+      sourceControlProviders: [],
+    }));
+
+    mounted = await render(
+      <AppAtomRegistryProvider>
+        <SourceControlSettingsPanel />
+      </AppAtomRegistryProvider>,
+    );
+
+    const toggle = page.getByRole("button", { name: "Toggle Git details" });
+    await expect.element(toggle).toHaveAttribute("aria-expanded", "false");
+
+    await toggle.click();
+
+    await expect.element(toggle).toHaveAttribute("aria-expanded", "true");
+    await expect
+      .element(page.getByLabelText("Automatic Git fetch interval in seconds"))
+      .toBeVisible();
+    await expect
+      .element(page.getByText("Automatic Git fetches run every 30 seconds"))
+      .not.toBeInTheDocument();
   });
 
   it("does not rescan on remount while the discovery atom is fresh", async () => {
@@ -1286,7 +1386,7 @@ describe("SourceControlSettingsPanel discovery states", () => {
       </AppAtomRegistryProvider>,
     );
 
-    await expect.element(page.getByRole("heading", { name: "Git" })).toBeInTheDocument();
+    await expect.element(page.getByRole("switch", { name: "Git availability" })).toBeDisabled();
     expect(calls).toBe(1);
 
     const teardown = mounted.cleanup ?? mounted.unmount;
@@ -1300,7 +1400,7 @@ describe("SourceControlSettingsPanel discovery states", () => {
       </AppAtomRegistryProvider>,
     );
 
-    await expect.element(page.getByRole("heading", { name: "Git" })).toBeInTheDocument();
+    await expect.element(page.getByRole("switch", { name: "Git availability" })).toBeDisabled();
     expect(calls).toBe(1);
   });
 });

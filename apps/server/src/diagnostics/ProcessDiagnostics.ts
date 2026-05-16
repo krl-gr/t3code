@@ -15,7 +15,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
 import { collectUint8StreamText } from "../stream/collectUint8StreamText.ts";
 
-interface ProcessRow {
+export interface ProcessRow {
   readonly pid: number;
   readonly ppid: number;
   readonly pgid: number | null;
@@ -50,6 +50,7 @@ class ProcessDiagnosticsError extends Schema.TaggedErrorClass<ProcessDiagnostics
     cause: Schema.optional(Schema.Defect),
   },
 ) {}
+const isProcessDiagnosticsError = Schema.is(ProcessDiagnosticsError);
 
 function toProcessDiagnosticsError(message: string, cause?: unknown): ProcessDiagnosticsError {
   return new ProcessDiagnosticsError({
@@ -185,7 +186,7 @@ function parseWindowsProcessRows(output: string): ReadonlyArray<ProcessRow> {
   }
 }
 
-function buildDescendantEntries(
+export function buildDescendantEntries(
   rows: ReadonlyArray<ProcessRow>,
   serverPid: number,
 ): ReadonlyArray<ServerProcessDiagnosticsEntry> {
@@ -229,7 +230,7 @@ function buildDescendantEntries(
   return entries;
 }
 
-function isDiagnosticsQueryProcess(row: ProcessRow, serverPid: number): boolean {
+export function isDiagnosticsQueryProcess(row: ProcessRow, serverPid: number): boolean {
   if (row.ppid !== serverPid) return false;
 
   const command = row.command.trim();
@@ -316,7 +317,7 @@ const runProcess = Effect.fn("runProcess")(
         }),
       ),
       Effect.mapError((cause) =>
-        Schema.is(ProcessDiagnosticsError)(cause)
+        isProcessDiagnosticsError(cause)
           ? cause
           : toProcessDiagnosticsError(input.errorMessage, cause),
       ),
@@ -369,7 +370,7 @@ function readWindowsProcessRows(): Effect.Effect<
   );
 }
 
-const readProcessRows = (platform = process.platform) =>
+export const readProcessRows = (platform = process.platform) =>
   platform === "win32" ? readWindowsProcessRows() : readPosixProcessRows();
 
 export function aggregateProcessDiagnostics(input: {
