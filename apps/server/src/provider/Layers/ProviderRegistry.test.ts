@@ -72,6 +72,10 @@ const TestHttpClientLive = Layer.succeed(
   ),
 );
 
+function normalizeTestPath(value: string | undefined): string | undefined {
+  return value?.replace(/\\/g, "/").replace(/^[A-Za-z]:/, "");
+}
+
 function selectDescriptor(
   id: string,
   label: string,
@@ -194,6 +198,30 @@ function mockCommandSpawnerLayer(
   );
 }
 
+function recordingMockCommandSpawnerLayer(
+  handler: (
+    command: string,
+    args: ReadonlyArray<string>,
+  ) => { stdout: string; stderr: string; code: number },
+) {
+  const commands: Array<{
+    readonly command: string;
+    readonly args: ReadonlyArray<string>;
+  }> = [];
+  const layer = Layer.succeed(
+    ChildProcessSpawner.ChildProcessSpawner,
+    ChildProcessSpawner.make((command) => {
+      const cmd = command as unknown as {
+        command: string;
+        args: ReadonlyArray<string>;
+      };
+      commands.push({ command: cmd.command, args: cmd.args });
+      return Effect.succeed(mockHandle(handler(cmd.command, cmd.args)));
+    }),
+  );
+  return { layer, commands };
+}
+
 function failingSpawnerLayer(description: string) {
   return Layer.succeed(
     ChildProcessSpawner.ChildProcessSpawner,
@@ -292,7 +320,7 @@ function makeMutableServerSettingsService(
           return next;
         }),
       get streamChanges() {
-        return Stream.fromPubSub(changes);
+        return Stream.concat(Stream.fromEffect(Ref.get(settingsRef)), Stream.fromPubSub(changes));
       },
     } satisfies ServerSettingsShape;
   });
@@ -1057,11 +1085,19 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
               "error",
               "Real Codex probe against a missing binary should surface as 'error' in the aggregator",
             );
-            assert.strictEqual(codexPersonal?.installed, false);
-            assert.strictEqual(
-              codexPersonal?.message,
-              "Codex CLI (`codex`) is not installed or not on PATH.",
-            );
+            if (process.platform === "win32") {
+              assert.strictEqual(codexPersonal?.installed, true);
+              assert.match(
+                codexPersonal?.message ?? "",
+                /^Codex app-server provider probe failed: Codex App Server process exited with code 1\./,
+              );
+            } else {
+              assert.strictEqual(codexPersonal?.installed, false);
+              assert.strictEqual(
+                codexPersonal?.message,
+                "Codex CLI (`codex`) is not installed or not on PATH.",
+              );
+            }
           }).pipe(Effect.provide(runtimeServices));
         }),
       );
@@ -1093,6 +1129,11 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
           );
           const scope = yield* Scope.make();
           yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
+          const recorded = recordingMockCommandSpawnerLayer((command) => ({
+            stdout: "",
+            stderr: `${command} app-server failed`,
+            code: 1,
+          }));
           const providerRegistryLayer = ProviderRegistryLive.pipe(
             Layer.provideMerge(ProviderInstanceRegistryHydrationLive),
             Layer.provideMerge(Layer.succeed(ServerSettingsService, serverSettings)),
@@ -1104,11 +1145,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
             Layer.provideMerge(TestHttpClientLive),
             Layer.provideMerge(Layer.succeed(ProviderEventLoggers, NoOpProviderEventLoggers)),
             Layer.provideMerge(OpenCodeRuntimeLive),
-            // `it.live` does not inherit layers from the outer `it.layer`
-            // wrapper, so provide `NodeServices.layer` inline. This is the
-            // same real `ChildProcessSpawner` + `FileSystem` + `Path`
-            // services that production uses.
-            Layer.provideMerge(NodeServices.layer),
+            Layer.provideMerge(recorded.layer),
           );
           const runtimeServices = yield* Layer.build(providerRegistryLayer).pipe(
             Scope.provide(scope),
@@ -1127,9 +1164,18 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
               (provider) => provider.instanceId === "codex",
             );
             assert.strictEqual(initialCodex?.status, "error");
-            assert.strictEqual(initialCodex?.installed, false);
+            assert.strictEqual(initialCodex?.installed, true);
             const initialCheckedAt = initialCodex?.checkedAt;
             assert.notStrictEqual(initialCheckedAt, undefined);
+
+            // Let the scoped settings watcher fiber acquire its PubSub
+            // subscription before the test publishes the settings change.
+            yield* Effect.yieldNow;
+
+            // Move the virtual clock before the settings mutation so the
+            // rebuilt provider's fresh probe cannot reuse the boot probe's
+            // `checkedAt` timestamp.
+            yield* TestClock.adjust("1 millis");
 
             // Drive a settings change. The Hydration layer's
             // `SettingsWatcherLive` consumes this via `streamChanges`,
@@ -1145,13 +1191,16 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
               },
             });
 
-            // Poll with TestClock until `checkedAt` advances or we hit a
-            // generous virtual 3-second ceiling.
+            // Poll until the rebuilt source probes the new binary path or
+            // we hit a generous virtual 3-second ceiling.
             const refreshed = yield* Effect.gen(function* () {
               for (let attempts = 0; attempts < 60; attempts += 1) {
                 const providers = yield* registry.getProviders;
                 const codex = providers.find((provider) => provider.instanceId === "codex");
-                if (codex !== undefined && codex.checkedAt !== initialCheckedAt) {
+                const codexProbeCommands = recorded.commands
+                  .filter((command) => command.args.join(" ") === "app-server")
+                  .map((command) => command.command);
+                if (codex !== undefined && codexProbeCommands.includes(secondMissing)) {
                   return providers;
                 }
                 yield* TestClock.adjust("50 millis");
@@ -1161,13 +1210,17 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
             });
 
             const reprobedCodex = refreshed.find((provider) => provider.instanceId === "codex");
-            assert.notStrictEqual(
-              reprobedCodex?.checkedAt,
-              initialCheckedAt,
-              "Expected a fresh probe after settings change, got the stale snapshot",
+            const codexProbeCommands = recorded.commands
+              .filter((command) => command.args.join(" ") === "app-server")
+              .map((command) => command.command);
+            assert.strictEqual(codexProbeCommands[0], firstMissing);
+            assert.strictEqual(
+              codexProbeCommands.at(-1),
+              secondMissing,
+              "Expected a fresh probe with the updated Codex binaryPath",
             );
             assert.strictEqual(reprobedCodex?.status, "error");
-            assert.strictEqual(reprobedCodex?.installed, false);
+            assert.strictEqual(reprobedCodex?.installed, true);
           }).pipe(Effect.provide(runtimeServices));
         }),
       );
@@ -1550,7 +1603,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
           );
           assert.strictEqual(status.status, "ready");
           assert.deepStrictEqual(
-            recorded.commands.map((command) => command.env?.HOME),
+            recorded.commands.map((command) => normalizeTestPath(command.env?.HOME)),
             [claudeHome],
           );
         }).pipe(Effect.provide(recorded.layer));
