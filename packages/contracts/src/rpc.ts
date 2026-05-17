@@ -4,6 +4,7 @@ import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 
 import { ExternalLauncherError, LaunchEditorInput } from "./editor.ts";
 import { AuthAccessStreamEvent } from "./auth.ts";
+import { BrowserOpenLoginWindowInput, BrowserProfileSnapshot } from "./browser.ts";
 import {
   FilesystemBrowseInput,
   FilesystemBrowseResult,
@@ -150,6 +151,12 @@ export const WS_METHODS = {
   serverGetProcessResourceHistory: "server.getProcessResourceHistory",
   serverSignalProcess: "server.signalProcess",
 
+  // Browser profile methods
+  browserProfileSnapshot: "browser.profile.snapshot",
+  browserProfileOpenLoginWindow: "browser.profile.openLoginWindow",
+  browserProfileClose: "browser.profile.close",
+  browserProfileClear: "browser.profile.clear",
+
   // Source control methods
   sourceControlLookupRepository: "sourceControl.lookupRepository",
   sourceControlCloneRepository: "sourceControl.cloneRepository",
@@ -238,6 +245,29 @@ export const WsServerGetProcessResourceHistoryRpc = Rpc.make(
 export const WsServerSignalProcessRpc = Rpc.make(WS_METHODS.serverSignalProcess, {
   payload: ServerSignalProcessInput,
   success: ServerSignalProcessResult,
+});
+
+export const WsBrowserProfileSnapshotRpc = Rpc.make(WS_METHODS.browserProfileSnapshot, {
+  payload: Schema.Struct({}),
+  success: BrowserProfileSnapshot,
+});
+
+export const WsBrowserProfileOpenLoginWindowRpc = Rpc.make(
+  WS_METHODS.browserProfileOpenLoginWindow,
+  {
+    payload: BrowserOpenLoginWindowInput,
+    success: BrowserProfileSnapshot,
+  },
+);
+
+export const WsBrowserProfileCloseRpc = Rpc.make(WS_METHODS.browserProfileClose, {
+  payload: Schema.Struct({}),
+  success: BrowserProfileSnapshot,
+});
+
+export const WsBrowserProfileClearRpc = Rpc.make(WS_METHODS.browserProfileClear, {
+  payload: Schema.Struct({}),
+  success: BrowserProfileSnapshot,
 });
 
 export const WsSourceControlLookupRepositoryRpc = Rpc.make(
@@ -485,6 +515,10 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerGetProcessDiagnosticsRpc,
   WsServerGetProcessResourceHistoryRpc,
   WsServerSignalProcessRpc,
+  WsBrowserProfileSnapshotRpc,
+  WsBrowserProfileOpenLoginWindowRpc,
+  WsBrowserProfileCloseRpc,
+  WsBrowserProfileClearRpc,
   WsSourceControlLookupRepositoryRpc,
   WsSourceControlCloneRepositoryRpc,
   WsSourceControlPublishRepositoryRpc,

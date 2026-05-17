@@ -19,6 +19,7 @@ import type {
   VcsCreateRefResult,
 } from "./git.ts";
 import type { FilesystemBrowseInput, FilesystemBrowseResult } from "./filesystem.ts";
+import type { BrowserOpenLoginWindowInput, BrowserProfileSnapshot } from "./browser.ts";
 import type {
   ProjectSearchEntriesInput,
   ProjectSearchEntriesResult,
@@ -481,6 +482,12 @@ export interface LocalApi {
       input: ServerProcessResourceHistoryInput,
     ) => Promise<ServerProcessResourceHistoryResult>;
     signalProcess: (input: ServerSignalProcessInput) => Promise<ServerSignalProcessResult>;
+    getBrowserProfileSnapshot?: () => Promise<BrowserProfileSnapshot>;
+    openBrowserLoginWindow?: (
+      input?: BrowserOpenLoginWindowInput,
+    ) => Promise<BrowserProfileSnapshot>;
+    closeBrowserProfile?: () => Promise<BrowserProfileSnapshot>;
+    clearBrowserProfile?: () => Promise<BrowserProfileSnapshot>;
   };
 }
 

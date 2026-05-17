@@ -17,9 +17,34 @@ import {
 
 export const PI_PROVIDER = "pi" as const;
 
-export const PI_FULL_TOOL_NAMES = ["read", "bash", "edit", "write", "grep", "find", "ls"] as const;
+export const PI_BROWSER_TOOL_NAMES = [
+  "browser_navigate",
+  "browser_search",
+  "browser_click",
+  "browser_scroll",
+  "browser_extract_text",
+  "browser_screenshot",
+] as const;
 
-export const PI_PLAN_TOOL_NAMES = ["read", "bash", "grep", "find", "ls"] as const;
+export const PI_FULL_TOOL_NAMES = [
+  "read",
+  "bash",
+  "edit",
+  "write",
+  "grep",
+  "find",
+  "ls",
+  ...PI_BROWSER_TOOL_NAMES,
+] as const;
+
+export const PI_PLAN_TOOL_NAMES = [
+  "read",
+  "bash",
+  "grep",
+  "find",
+  "ls",
+  ...PI_BROWSER_TOOL_NAMES,
+] as const;
 
 export const PI_PROVIDER_SETUP_MESSAGE =
   "T3 Code embeds Pi through the Pi Node SDK. Authenticate Pi outside T3 Code through the Pi CLI (`pi` or `bunx pi`) and `/login`, or populate ~/.pi/agent/auth.json / provider env vars. T3 Code intentionally disables Pi packages, extensions, prompt templates, skills, themes, AGENTS, and custom system-prompt discovery so T3 Code remains the only source of workspace instructions here.";
@@ -192,6 +217,10 @@ export async function createLockedPiResourceLoader(input: {
 }
 
 export function mapPiToolNameToItemType(toolName: string): CanonicalItemType {
+  if ((PI_BROWSER_TOOL_NAMES as readonly string[]).includes(toolName)) {
+    return "dynamic_tool_call";
+  }
+
   switch (toolName) {
     case "bash":
       return "command_execution";
@@ -204,6 +233,10 @@ export function mapPiToolNameToItemType(toolName: string): CanonicalItemType {
 }
 
 export function mapPiToolNameToRequestType(toolName: string): CanonicalRequestType {
+  if ((PI_BROWSER_TOOL_NAMES as readonly string[]).includes(toolName)) {
+    return "dynamic_tool_call";
+  }
+
   switch (toolName) {
     case "bash":
       return "command_execution_approval";
@@ -216,6 +249,17 @@ export function mapPiToolNameToRequestType(toolName: string): CanonicalRequestTy
 }
 
 export function summarizePiToolArgs(toolName: string, args: Record<string, unknown>): string {
+  if (toolName.startsWith("browser_")) {
+    const url = normalizeString(typeof args.url === "string" ? args.url : undefined);
+    const query = normalizeString(typeof args.query === "string" ? args.query : undefined);
+    const selector = normalizeString(typeof args.selector === "string" ? args.selector : undefined);
+    const text = normalizeString(typeof args.text === "string" ? args.text : undefined);
+    const direction = normalizeString(
+      typeof args.direction === "string" ? args.direction : undefined,
+    );
+    return url ?? query ?? selector ?? text ?? direction ?? toolName;
+  }
+
   const command = normalizeString(typeof args.command === "string" ? args.command : undefined);
   if (toolName === "bash" && command) {
     return command;
@@ -258,6 +302,18 @@ export function getPiToolTitle(toolName: string): string {
       return "Searched files";
     case "ls":
       return "Listed files";
+    case "browser_navigate":
+      return "Opened browser page";
+    case "browser_search":
+      return "Searched browser";
+    case "browser_click":
+      return "Clicked browser page";
+    case "browser_scroll":
+      return "Scrolled browser page";
+    case "browser_extract_text":
+      return "Read browser page";
+    case "browser_screenshot":
+      return "Captured screenshot";
     default:
       return toolName;
   }

@@ -42,6 +42,8 @@ import {
 } from "@t3tools/contracts";
 
 import { resolveAttachmentPath } from "./attachmentStore.ts";
+import { createPiBrowserTools } from "./browser/PiBrowserTools.ts";
+import type { BrowserAutomationServiceShape } from "./browser/BrowserAutomationService.ts";
 import type {
   ProviderThreadSnapshot,
   ProviderThreadTurnSnapshot,
@@ -144,6 +146,7 @@ interface PiCreatedSession {
 
 export interface PiSdkManagerOptions {
   readonly stateDir: string;
+  readonly browserAutomation?: BrowserAutomationServiceShape;
   readonly agentDir?: string;
   readonly sessionDir?: string;
   readonly createSession?: (input: PiSessionFactoryInput) => Promise<PiCreatedSession>;
@@ -388,6 +391,7 @@ export class PiSdkManager extends EventEmitter<PiSdkManagerEvents> {
   private readonly stateDir: string;
   private readonly agentDir: string;
   private readonly sessionDir: string;
+  private readonly browserAutomation: BrowserAutomationServiceShape | undefined;
   private readonly createSessionFactory: (
     input: PiSessionFactoryInput,
   ) => Promise<PiCreatedSession>;
@@ -400,6 +404,7 @@ export class PiSdkManager extends EventEmitter<PiSdkManagerEvents> {
     this.sessionDir =
       normalizeString(options.sessionDir) ??
       path.join(options.stateDir, "provider", "pi", "sessions");
+    this.browserAutomation = options.browserAutomation;
     this.createSessionFactory = options.createSession ?? createPiSessionWithSdk;
   }
 
@@ -656,6 +661,7 @@ export class PiSdkManager extends EventEmitter<PiSdkManagerEvents> {
       createGrepTool(input.cwd),
       createFindTool(input.cwd),
       createLsTool(input.cwd),
+      ...(this.browserAutomation ? createPiBrowserTools(this.browserAutomation) : []),
     ];
 
     return baseTools.map((tool) => {

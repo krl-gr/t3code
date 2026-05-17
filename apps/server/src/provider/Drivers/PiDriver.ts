@@ -19,6 +19,7 @@ import * as Stream from "effect/Stream";
 
 import { createModelCapabilities } from "@t3tools/shared/model";
 import { ServerConfig } from "../../config.ts";
+import { getBrowserAutomationService } from "../../browser/BrowserAutomationService.ts";
 import { PiSdkManager } from "../../piSdkManager.ts";
 import { PI_PROVIDER_SETUP_MESSAGE, createPiHarnessCatalogSnapshot } from "../../piHarness.ts";
 import {
@@ -337,6 +338,7 @@ export const PiDriver: ProviderDriver<PiSettings, PiDriverEnv> = {
   create: ({ instanceId, displayName, accentColor, enabled, config }) =>
     Effect.gen(function* () {
       const serverConfig = yield* ServerConfig;
+      const browserAutomation = getBrowserAutomationService(serverConfig);
       const continuationIdentity = defaultProviderContinuationIdentity({
         driverKind: DRIVER_KIND,
         instanceId,
@@ -348,7 +350,10 @@ export const PiDriver: ProviderDriver<PiSettings, PiDriverEnv> = {
         continuationGroupKey: continuationIdentity.continuationKey,
       });
       const effectiveConfig = { ...config, enabled } satisfies PiSettings;
-      const manager = new PiSdkManager({ stateDir: serverConfig.stateDir });
+      const manager = new PiSdkManager({
+        stateDir: serverConfig.stateDir,
+        browserAutomation,
+      });
       const events = yield* PubSub.unbounded<ProviderRuntimeEvent>();
       const adapter = makePiAdapter(manager, events);
       yield* Effect.addFinalizer(() =>

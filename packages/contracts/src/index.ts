@@ -1,5 +1,6 @@
 export * from "./baseSchemas.ts";
 export * from "./auth.ts";
+export * from "./browser.ts";
 export * from "./environment.ts";
 export * from "./desktopBootstrap.ts";
 export * from "./remoteAccess.ts";

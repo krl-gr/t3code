@@ -4,6 +4,7 @@ import {
   ArrowLeftIcon,
   BotIcon,
   GitBranchIcon,
+  Globe2Icon,
   KeyboardIcon,
   Link2Icon,
   Settings2Icon,
@@ -23,6 +24,7 @@ import {
 
 export type SettingsSectionPath =
   | "/settings/general"
+  | "/settings/browser"
   | "/settings/keybindings"
   | "/settings/providers"
   | "/settings/source-control"
@@ -35,6 +37,7 @@ export const SETTINGS_NAV_ITEMS: ReadonlyArray<{
   icon: ComponentType<{ className?: string }>;
 }> = [
   { label: "General", to: "/settings/general", icon: Settings2Icon },
+  { label: "Browser", to: "/settings/browser", icon: Globe2Icon },
   { label: "Keybindings", to: "/settings/keybindings", icon: KeyboardIcon },
   { label: "Providers", to: "/settings/providers", icon: BotIcon },
   { label: "Source Control", to: "/settings/source-control", icon: GitBranchIcon },

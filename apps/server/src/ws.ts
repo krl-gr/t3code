@@ -88,6 +88,7 @@ import {
   type SessionCredentialChange,
 } from "./auth/Services/SessionCredentialService.ts";
 import { respondToAuthError } from "./auth/http.ts";
+import { getBrowserAutomationService } from "./browser/BrowserAutomationService.ts";
 const isOrchestrationDispatchCommandError = Schema.is(OrchestrationDispatchCommandError);
 const isWorkspacePathOutsideRootError = Schema.is(WorkspacePathOutsideRootError);
 
@@ -174,6 +175,7 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
       const config = yield* ServerConfig;
       const lifecycleEvents = yield* ServerLifecycleEvents;
       const serverSettings = yield* ServerSettingsService;
+      const browserAutomation = getBrowserAutomationService(config);
       const startup = yield* ServerRuntimeStartup;
       const workspaceEntries = yield* WorkspaceEntries;
       const workspaceFileSystem = yield* WorkspaceFileSystem;
@@ -886,6 +888,40 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
             serverSettings.updateSettings(patch).pipe(Effect.map(redactServerSettingsForClient)),
             {
               "rpc.aggregate": "server",
+            },
+          ),
+        [WS_METHODS.browserProfileSnapshot]: (_input) =>
+          observeRpcEffect(
+            WS_METHODS.browserProfileSnapshot,
+            Effect.promise(() => browserAutomation.snapshot()),
+            {
+              "rpc.aggregate": "browser",
+            },
+          ),
+        [WS_METHODS.browserProfileOpenLoginWindow]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.browserProfileOpenLoginWindow,
+            Effect.promise(() =>
+              browserAutomation.openLoginWindow(input.url ? { url: input.url } : {}),
+            ),
+            {
+              "rpc.aggregate": "browser",
+            },
+          ),
+        [WS_METHODS.browserProfileClose]: (_input) =>
+          observeRpcEffect(
+            WS_METHODS.browserProfileClose,
+            Effect.promise(() => browserAutomation.closeBrowser()),
+            {
+              "rpc.aggregate": "browser",
+            },
+          ),
+        [WS_METHODS.browserProfileClear]: (_input) =>
+          observeRpcEffect(
+            WS_METHODS.browserProfileClear,
+            Effect.promise(() => browserAutomation.clearProfileData()),
+            {
+              "rpc.aggregate": "browser",
             },
           ),
         [WS_METHODS.serverDiscoverSourceControl]: (_input) =>

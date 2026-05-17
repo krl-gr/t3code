@@ -139,6 +139,14 @@ export interface WsRpcClient {
       typeof WS_METHODS.serverGetProcessResourceHistory
     >;
     readonly signalProcess: RpcUnaryMethod<typeof WS_METHODS.serverSignalProcess>;
+    readonly getBrowserProfileSnapshot: RpcUnaryNoArgMethod<
+      typeof WS_METHODS.browserProfileSnapshot
+    >;
+    readonly openBrowserLoginWindow: RpcUnaryMethod<
+      typeof WS_METHODS.browserProfileOpenLoginWindow
+    >;
+    readonly closeBrowserProfile: RpcUnaryNoArgMethod<typeof WS_METHODS.browserProfileClose>;
+    readonly clearBrowserProfile: RpcUnaryNoArgMethod<typeof WS_METHODS.browserProfileClear>;
     readonly subscribeConfig: RpcStreamMethod<typeof WS_METHODS.subscribeServerConfig>;
     readonly subscribeLifecycle: RpcStreamMethod<typeof WS_METHODS.subscribeServerLifecycle>;
     readonly subscribeAuthAccess: RpcStreamMethod<typeof WS_METHODS.subscribeAuthAccess>;
@@ -279,6 +287,14 @@ export function createWsRpcClient(transport: WsTransport): WsRpcClient {
         transport.request((client) =>
           client[WS_METHODS.serverSignalProcess](input).pipe(Effect.withTracerEnabled(false)),
         ),
+      getBrowserProfileSnapshot: () =>
+        transport.request((client) => client[WS_METHODS.browserProfileSnapshot]({})),
+      openBrowserLoginWindow: (input) =>
+        transport.request((client) => client[WS_METHODS.browserProfileOpenLoginWindow](input)),
+      closeBrowserProfile: () =>
+        transport.request((client) => client[WS_METHODS.browserProfileClose]({})),
+      clearBrowserProfile: () =>
+        transport.request((client) => client[WS_METHODS.browserProfileClear]({})),
       subscribeConfig: (listener, options) =>
         transport.subscribe((client) => client[WS_METHODS.subscribeServerConfig]({}), listener, {
           ...options,
