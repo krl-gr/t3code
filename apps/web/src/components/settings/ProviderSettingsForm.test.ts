@@ -36,6 +36,14 @@ describe("ProviderSettingsForm helpers", () => {
     });
   });
 
+  it("includes Pi metadata while hiding Pi's generic settings fields", () => {
+    const pi = DRIVER_OPTION_BY_VALUE[ProviderDriverKind.make("pi")];
+
+    expect(pi).toBeDefined();
+    expect(pi?.label).toBe("Pi");
+    expect(deriveProviderSettingsFields(pi!).map((field) => field.key)).toEqual([]);
+  });
+
   it("preserves unknown config keys while omitting empty configurable fields", () => {
     const opencode = DRIVER_OPTION_BY_VALUE[ProviderDriverKind.make("opencode")];
     expect(opencode).toBeDefined();

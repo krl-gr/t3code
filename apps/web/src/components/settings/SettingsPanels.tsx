@@ -38,6 +38,7 @@ import {
 import {
   getCustomModelOptionsByInstance,
   resolveAppModelSelectionState,
+  supportsGitTextGenerationEntry,
 } from "../../modelSelection";
 import {
   deriveProviderInstanceEntries,
@@ -496,7 +497,7 @@ export function GeneralSettingsPanel() {
   const textGenModel = textGenerationModelSelection.model;
   const textGenModelOptions = textGenerationModelSelection.options;
   const gitModelInstanceEntries = sortProviderInstanceEntries(
-    deriveProviderInstanceEntries(serverProviders),
+    deriveProviderInstanceEntries(serverProviders).filter(supportsGitTextGenerationEntry),
   );
   const textGenInstanceEntry = gitModelInstanceEntries.find(
     (entry) => entry.instanceId === textGenInstanceId,

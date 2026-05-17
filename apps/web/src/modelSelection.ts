@@ -26,6 +26,19 @@ import { sortModelsForProviderInstance } from "./modelOrdering";
 const MAX_CUSTOM_MODEL_COUNT = 32;
 export const MAX_CUSTOM_MODEL_LENGTH = 256;
 const DEFAULT_TEXT_GENERATION_INSTANCE_ID = ProviderInstanceId.make("codex");
+const GIT_TEXT_GENERATION_UNSUPPORTED_DRIVERS = new Set<ProviderDriverKind>([
+  ProviderDriverKind.make("pi"),
+]);
+
+export function supportsGitTextGenerationProvider(driverKind: ProviderDriverKind): boolean {
+  return !GIT_TEXT_GENERATION_UNSUPPORTED_DRIVERS.has(driverKind);
+}
+
+export function supportsGitTextGenerationEntry(
+  entry: Pick<ProviderInstanceEntry, "driverKind">,
+): boolean {
+  return supportsGitTextGenerationProvider(entry.driverKind);
+}
 
 /**
  * Resolve the custom-model list for a given instance, preferring the
@@ -277,7 +290,7 @@ export function resolveAppModelSelectionState(
     instanceId: DEFAULT_TEXT_GENERATION_INSTANCE_ID,
     model: DEFAULT_GIT_TEXT_GENERATION_MODEL,
   };
-  const entries = deriveProviderInstanceEntries(providers);
+  const entries = deriveProviderInstanceEntries(providers).filter(supportsGitTextGenerationEntry);
   const selectedEntry = entries.find(
     (entry) => entry.instanceId === selection.instanceId && entry.enabled && entry.isAvailable,
   );
@@ -306,17 +319,25 @@ export function resolveAppModelSelectionState(
     return createModelSelection(entry.instanceId, model, modelOptionsForDispatch);
   }
 
-  const provider = resolveSelectableProvider(providers, null);
+  const gitTextGenerationProviders = providers.filter((provider) =>
+    supportsGitTextGenerationProvider(provider.driver),
+  );
+  const provider = resolveSelectableProvider(gitTextGenerationProviders, null);
   const keptSelectedProvider = false;
 
   // When the provider changed due to fallback (e.g. selected provider was disabled),
   // don't carry over the old provider's model — use the fallback provider's default.
   const selectedModel = keptSelectedProvider ? selection.model : null;
-  const model = resolveAppModelSelection(provider, settings, providers, selectedModel);
+  const model = resolveAppModelSelection(
+    provider,
+    settings,
+    gitTextGenerationProviders,
+    selectedModel,
+  );
   const { modelOptionsForDispatch } = getComposerProviderState({
     provider,
     model,
-    models: getProviderModels(providers, provider),
+    models: getProviderModels(gitTextGenerationProviders, provider),
     prompt: "",
     modelOptions: keptSelectedProvider ? selection.options : undefined,
   });
