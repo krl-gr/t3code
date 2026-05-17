@@ -1,7 +1,7 @@
 import { ProviderDriverKind, ThreadId, type ProviderSession } from "@t3tools/contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { PiSdkManager } from "./piSdkManager.ts";
+import { PiSdkManager, type PiSdkManagerOptions } from "./piSdkManager.ts";
 import type { BrowserAutomationServiceShape } from "./browser/BrowserAutomationService.ts";
 import { PI_BROWSER_TOOL_NAMES, PI_FULL_TOOL_NAMES, PI_PLAN_TOOL_NAMES } from "./piHarness.ts";
 
@@ -40,6 +40,59 @@ function makeBrowserStub(): BrowserAutomationServiceShape {
   };
 }
 
+function createPiSessionFactory(input?: {
+  readonly activeToolNames?: ReadonlyArray<string>;
+  readonly onSetActiveTools?: (toolNames: string[]) => void;
+}) {
+  const activeToolNames = input?.activeToolNames ?? [...PI_FULL_TOOL_NAMES];
+  let listener: ((event: unknown) => void) | undefined;
+  const session = {
+    model: {
+      provider: "test",
+      id: "model",
+      name: "Test Model",
+      input: ["text"],
+      reasoning: true,
+    },
+    thinkingLevel: "medium",
+    sessionFile: "C:/tmp/t3code-pi-test/pi-session.json",
+    sessionId: "pi-session-test",
+    setActiveToolsByName: vi.fn((toolNames: string[]) => {
+      input?.onSetActiveTools?.(toolNames);
+    }),
+    getActiveToolNames: vi.fn(() => [...activeToolNames]),
+    subscribe: vi.fn((handler: (event: unknown) => void) => {
+      listener = handler;
+      return () => {
+        listener = undefined;
+      };
+    }),
+    prompt: vi.fn(async () => {
+      listener?.({ type: "agent_start" });
+    }),
+    abort: vi.fn(async () => undefined),
+    dispose: vi.fn(),
+    setModel: vi.fn(async () => undefined),
+    setThinkingLevel: vi.fn(),
+    getAvailableThinkingLevels: vi.fn(() => ["medium"]),
+  };
+  const createSession: NonNullable<PiSdkManagerOptions["createSession"]> = vi.fn(
+    async () =>
+      ({
+        session,
+        sessionManager: {},
+        settingsManager: {},
+        modelRegistry: {
+          getAvailable: () => [session.model],
+          find: () => session.model,
+        },
+        authStorage: {},
+      }) as unknown as Awaited<ReturnType<NonNullable<PiSdkManagerOptions["createSession"]>>>,
+  );
+
+  return { createSession, session };
+}
+
 describe("PiSdkManager", () => {
   it("lists materialized sessions that are still in the starting map", async () => {
     const manager = new PiSdkManager({ stateDir: "C:/tmp/t3code-pi-test" });
@@ -64,27 +117,92 @@ describe("PiSdkManager", () => {
     expect(await manager.listSessions()).toEqual([sessionRecord]);
   });
 
-  it("creates Pi browser tools and keeps them active in full and plan mode lists", () => {
+  it("passes browser tools as customTools, not built-in tools", async () => {
+    const { createSession } = createPiSessionFactory();
     const manager = new PiSdkManager({
       stateDir: "C:/tmp/t3code-pi-test",
       browserAutomation: makeBrowserStub(),
+      createSession,
     });
-    const tools = (
-      manager as unknown as {
-        createWrappedTools(input: {
-          cwd: string;
-          contextRef: { current?: unknown };
-        }): ReadonlyArray<{ readonly name: string }>;
-      }
-    ).createWrappedTools({
+
+    await manager.startSession({
+      threadId: ThreadId.make("pi-browser-tools-thread"),
       cwd: "C:/tmp/t3code-pi-test",
-      contextRef: {},
+      runtimeMode: "full-access",
+    });
+
+    const createSessionInput = vi.mocked(createSession).mock.calls[0]?.[0];
+    expect(createSessionInput).toBeTruthy();
+    expect(createSessionInput?.tools.map((tool) => tool.name)).toEqual([
+      "read",
+      "bash",
+      "edit",
+      "write",
+      "grep",
+      "find",
+      "ls",
+    ]);
+    expect(createSessionInput?.customTools.map((tool) => tool.name)).toEqual([
+      ...PI_BROWSER_TOOL_NAMES,
+    ]);
+  });
+
+  it("activates browser custom tools in full and plan modes", async () => {
+    const activeToolUpdates: string[][] = [];
+    const { createSession } = createPiSessionFactory({
+      onSetActiveTools: (toolNames) => activeToolUpdates.push(toolNames),
+    });
+    const manager = new PiSdkManager({
+      stateDir: "C:/tmp/t3code-pi-test",
+      browserAutomation: makeBrowserStub(),
+      createSession,
+    });
+    const threadId = ThreadId.make("pi-browser-active-tools-thread");
+
+    await manager.startSession({
+      threadId,
+      cwd: "C:/tmp/t3code-pi-test",
+      runtimeMode: "full-access",
+    });
+    await manager.sendTurn({ threadId, input: "build", interactionMode: "default" });
+    await manager.startSession({
+      threadId: ThreadId.make("pi-browser-active-tools-plan-thread"),
+      cwd: "C:/tmp/t3code-pi-test",
+      runtimeMode: "full-access",
+    });
+    await manager.sendTurn({
+      threadId: ThreadId.make("pi-browser-active-tools-plan-thread"),
+      input: "plan",
+      interactionMode: "plan",
     });
 
     for (const toolName of PI_BROWSER_TOOL_NAMES) {
-      expect(tools.map((tool) => tool.name)).toContain(toolName);
       expect(PI_FULL_TOOL_NAMES).toContain(toolName);
       expect(PI_PLAN_TOOL_NAMES).toContain(toolName);
     }
+    expect(activeToolUpdates).toContainEqual([...PI_FULL_TOOL_NAMES]);
+    expect(activeToolUpdates).toContainEqual([...PI_PLAN_TOOL_NAMES]);
+  });
+
+  it("fails clearly when configured browser tools are missing from the active session", async () => {
+    const { createSession } = createPiSessionFactory({
+      activeToolNames: ["read", "bash", "grep", "find", "ls"],
+    });
+    const manager = new PiSdkManager({
+      stateDir: "C:/tmp/t3code-pi-test",
+      browserAutomation: makeBrowserStub(),
+      createSession,
+    });
+    const threadId = ThreadId.make("pi-browser-missing-tools-thread");
+
+    await manager.startSession({
+      threadId,
+      cwd: "C:/tmp/t3code-pi-test",
+      runtimeMode: "full-access",
+    });
+
+    await expect(manager.sendTurn({ threadId, input: "use browser" })).rejects.toThrow(
+      "Pi browser tools were not registered in the active session.",
+    );
   });
 });

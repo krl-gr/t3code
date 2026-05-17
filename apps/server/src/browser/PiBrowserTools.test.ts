@@ -53,6 +53,8 @@ describe("PiBrowserTools", () => {
     const tools = createPiBrowserTools(makeBrowserStub());
     expect(tools.map((tool) => tool.name)).toEqual([...PI_BROWSER_TOOL_NAMES]);
     expect(tools.every((tool) => tool.parameters.type === "object")).toBe(true);
+    expect(tools.every((tool) => typeof tool.promptSnippet === "string")).toBe(true);
+    expect(tools.every((tool) => (tool.promptGuidelines?.length ?? 0) > 0)).toBe(true);
   });
 
   it("formats blocked actions as tool results instead of throwing", async () => {
@@ -62,18 +64,36 @@ describe("PiBrowserTools", () => {
     expect(clickTool).toBeTruthy();
 
     const result = await (
-      clickTool as {
+      clickTool as unknown as {
         execute: (
           toolCallId: string,
           params: unknown,
+          signal: AbortSignal | undefined,
+          onUpdate: undefined,
+          ctx: never,
         ) => Promise<{
           readonly isError: boolean;
           readonly details: unknown;
           readonly content: ReadonlyArray<unknown>;
         }>;
       }
-    ).execute("tool-call", { text: "Follow" });
+    ).execute("tool-call", { text: "Follow" }, undefined, undefined, {} as never);
     expect(result.isError).toBe(false);
+    expect(result).toEqual({
+      content: [
+        {
+          type: "text",
+          text: "Blocked browser action.",
+        },
+      ],
+      details: {
+        action: "click",
+        blocked: true,
+        reason: "Blocked browser action.",
+        url: "https://x.com",
+      },
+      isError: false,
+    });
     expect(result.details).toMatchObject({ blocked: true });
     expect(result.content[0]).toMatchObject({
       type: "text",
@@ -86,13 +106,16 @@ describe("PiBrowserTools", () => {
       (tool) => tool.name === "browser_screenshot",
     );
     const result = await (
-      screenshotTool as {
+      screenshotTool as unknown as {
         execute: (
           toolCallId: string,
           params: unknown,
+          signal: AbortSignal | undefined,
+          onUpdate: undefined,
+          ctx: never,
         ) => Promise<{ readonly content: ReadonlyArray<unknown> }>;
       }
-    ).execute("tool-call", {});
+    ).execute("tool-call", {}, undefined, undefined, {} as never);
     expect(result.content).toContainEqual({
       type: "image",
       data: "abc",

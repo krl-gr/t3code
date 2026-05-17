@@ -57,6 +57,7 @@ import {
   getPiToolTitle,
   mapPiToolNameToItemType,
   mapPiToolNameToRequestType,
+  PI_BROWSER_TOOL_NAMES,
   PI_FULL_TOOL_NAMES,
   PI_PLAN_MODE_PROMPT_PREFIX,
   PI_PLAN_TOOL_NAMES,
@@ -68,7 +69,12 @@ import {
 const PI_TURN_START_TIMEOUT_MS = 15_000;
 const PI_DRIVER_KIND = ProviderDriverKind.make("pi");
 
-type PiTool = NonNullable<NonNullable<Parameters<typeof createAgentSession>[0]>["tools"]>[number];
+type PiBuiltinTool = NonNullable<
+  NonNullable<Parameters<typeof createAgentSession>[0]>["tools"]
+>[number];
+type PiCustomTool = NonNullable<
+  NonNullable<Parameters<typeof createAgentSession>[0]>["customTools"]
+>[number];
 type PiModelOptions = {
   readonly pi?: {
     readonly thinkingLevel?: PiThinkingLevel;
@@ -130,7 +136,8 @@ interface PiSessionFactoryInput {
   readonly cwd: string;
   readonly agentDir: string;
   readonly sessionDir: string;
-  readonly tools: PiTool[];
+  readonly tools: PiBuiltinTool[];
+  readonly customTools: PiCustomTool[];
   readonly sessionFile?: string;
   readonly model?: string;
   readonly runtimeMode: ProviderSession["runtimeMode"];
@@ -371,6 +378,7 @@ async function createPiSessionWithSdk(input: PiSessionFactoryInput): Promise<PiC
     resourceLoader,
     sessionManager,
     tools: input.tools,
+    customTools: input.customTools,
     ...(resolvedModel ? { model: resolvedModel } : {}),
   });
 
@@ -443,6 +451,24 @@ export class PiSdkManager extends EventEmitter<PiSdkManagerEvents> {
       throw new Error(`Pi thread '${threadId}' is still starting.`);
     }
     throw new Error(`Unknown Pi thread '${threadId}'.`);
+  }
+
+  private assertBrowserToolsRegistered(context: PiSessionContext) {
+    if (!this.browserAutomation) {
+      return;
+    }
+
+    const effectiveToolNames = new Set(context.session.getActiveToolNames());
+    const missingToolNames = PI_BROWSER_TOOL_NAMES.filter(
+      (toolName) => !effectiveToolNames.has(toolName),
+    );
+    if (missingToolNames.length === 0) {
+      return;
+    }
+
+    throw new Error(
+      `Pi browser tools were not registered in the active session. Missing tools: ${missingToolNames.join(", ")}. Restart the Pi session or rebuild the tool registry.`,
+    );
   }
 
   private buildSessionConfiguredPayload(context: PiSessionContext) {
@@ -649,10 +675,10 @@ export class PiSdkManager extends EventEmitter<PiSdkManagerEvents> {
     throw new Error(`Pi ${input.toolName} execution was cancelled before approval.`);
   }
 
-  private createWrappedTools(input: {
+  private createWrappedBuiltinTools(input: {
     readonly cwd: string;
     readonly contextRef: { current?: PiSessionContext };
-  }): PiTool[] {
+  }): PiBuiltinTool[] {
     const baseTools = [
       createReadTool(input.cwd),
       createBashTool(input.cwd),
@@ -661,15 +687,14 @@ export class PiSdkManager extends EventEmitter<PiSdkManagerEvents> {
       createGrepTool(input.cwd),
       createFindTool(input.cwd),
       createLsTool(input.cwd),
-      ...(this.browserAutomation ? createPiBrowserTools(this.browserAutomation) : []),
     ];
 
     return baseTools.map((tool) => {
-      const execute: PiTool["execute"] = async (
-        toolCallId: Parameters<PiTool["execute"]>[0],
-        params: Parameters<PiTool["execute"]>[1],
-        signal: Parameters<PiTool["execute"]>[2],
-        onUpdate: Parameters<PiTool["execute"]>[3],
+      const execute: PiBuiltinTool["execute"] = async (
+        toolCallId: Parameters<PiBuiltinTool["execute"]>[0],
+        params: Parameters<PiBuiltinTool["execute"]>[1],
+        signal: Parameters<PiBuiltinTool["execute"]>[2],
+        onUpdate: Parameters<PiBuiltinTool["execute"]>[3],
       ) => {
         const context = input.contextRef.current;
         if (!context) {
@@ -689,6 +714,43 @@ export class PiSdkManager extends EventEmitter<PiSdkManagerEvents> {
         });
 
         return tool.execute(toolCallId, params, signal, onUpdate);
+      };
+
+      return Object.assign({}, tool, { execute });
+    });
+  }
+
+  private createWrappedCustomTools(input: {
+    readonly contextRef: { current?: PiSessionContext };
+  }): PiCustomTool[] {
+    const browserTools = this.browserAutomation ? createPiBrowserTools(this.browserAutomation) : [];
+
+    return browserTools.map((tool) => {
+      const execute: PiCustomTool["execute"] = async (
+        toolCallId: Parameters<PiCustomTool["execute"]>[0],
+        params: Parameters<PiCustomTool["execute"]>[1],
+        signal: Parameters<PiCustomTool["execute"]>[2],
+        onUpdate: Parameters<PiCustomTool["execute"]>[3],
+        ctx: Parameters<PiCustomTool["execute"]>[4],
+      ) => {
+        const context = input.contextRef.current;
+        if (!context) {
+          throw new Error("Pi session context is unavailable.");
+        }
+        const currentTurn = context.currentTurn;
+        if (!currentTurn) {
+          throw new Error(`No Pi turn is active while executing '${tool.name}'.`);
+        }
+
+        await this.awaitApprovalDecision({
+          context,
+          toolName: tool.name,
+          turnId: currentTurn.turnId,
+          detail: summarizePiToolArgs(tool.name, params as Record<string, unknown>),
+          ...(signal !== undefined ? { signal } : {}),
+        });
+
+        return tool.execute(toolCallId, params, signal, onUpdate, ctx);
       };
 
       return Object.assign({}, tool, { execute });
@@ -979,13 +1041,15 @@ export class PiSdkManager extends EventEmitter<PiSdkManagerEvents> {
   }
 
   private async createContext(
-    input: Omit<PiSessionFactoryInput, "tools">,
+    input: Omit<PiSessionFactoryInput, "tools" | "customTools">,
   ): Promise<PiSessionContext> {
     const contextRef: { current?: PiSessionContext } = {};
-    const tools = this.createWrappedTools({ cwd: input.cwd, contextRef });
+    const tools = this.createWrappedBuiltinTools({ cwd: input.cwd, contextRef });
+    const customTools = this.createWrappedCustomTools({ contextRef });
     const created = await this.createSessionFactory({
       ...input,
       tools,
+      customTools,
     });
 
     const normalizedModel = toPiModelSlug(created.session.model) ?? input.model ?? PI_DEFAULT_MODEL;
@@ -1142,6 +1206,7 @@ export class PiSdkManager extends EventEmitter<PiSdkManagerEvents> {
     const activeToolNames =
       input.interactionMode === "plan" ? PI_PLAN_TOOL_NAMES : PI_FULL_TOOL_NAMES;
     context.session.setActiveToolsByName(activeToolNames as unknown as string[]);
+    this.assertBrowserToolsRegistered(context);
 
     const images = await this.materializePiImages(input.attachments);
     const turnId = TurnId.make(`pi-turn-${randomUUID()}`);
