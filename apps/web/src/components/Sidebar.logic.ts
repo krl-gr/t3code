@@ -245,6 +245,49 @@ export function orderItemsByPreferredIds<TItem, TId>(input: {
   return [...ordered, ...remaining];
 }
 
+export function orderItemsByPreferredMemberIds<TItem>(input: {
+  items: readonly TItem[];
+  preferredMemberIds: readonly string[];
+  getMemberIds: (item: TItem) => readonly string[];
+}): TItem[] {
+  const { getMemberIds, items, preferredMemberIds } = input;
+  if (preferredMemberIds.length === 0) {
+    return [...items];
+  }
+
+  const preferredIndexByMemberId = new Map<string, number>();
+  for (const [index, memberId] of preferredMemberIds.entries()) {
+    if (!preferredIndexByMemberId.has(memberId)) {
+      preferredIndexByMemberId.set(memberId, index);
+    }
+  }
+
+  const promotedItems: Array<{ item: TItem; preferredIndex: number; originalIndex: number }> = [];
+  const remainingItems: TItem[] = [];
+  for (const [originalIndex, item] of items.entries()) {
+    const preferredIndexes = getMemberIds(item).flatMap((memberId) => {
+      const preferredIndex = preferredIndexByMemberId.get(memberId);
+      return preferredIndex === undefined ? [] : [preferredIndex];
+    });
+    const preferredIndex = preferredIndexes.length > 0 ? Math.min(...preferredIndexes) : undefined;
+    if (preferredIndex === undefined) {
+      remainingItems.push(item);
+      continue;
+    }
+    promotedItems.push({ item, preferredIndex, originalIndex });
+  }
+
+  promotedItems.sort((left, right) => {
+    const byPreferredIndex = left.preferredIndex - right.preferredIndex;
+    if (byPreferredIndex !== 0) {
+      return byPreferredIndex;
+    }
+    return left.originalIndex - right.originalIndex;
+  });
+
+  return [...promotedItems.map((entry) => entry.item), ...remainingItems];
+}
+
 export function getVisibleSidebarThreadIds<TThreadId>(
   renderedProjects: readonly {
     shouldShowThreadPanel?: boolean;

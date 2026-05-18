@@ -12,6 +12,7 @@ import {
   hasUnseenCompletion,
   isContextMenuPointerDown,
   orderItemsByPreferredIds,
+  orderItemsByPreferredMemberIds,
   resolveProjectStatusIndicator,
   resolveFocusedProjectThreadTarget,
   resolveNextPagedThreadVisibleCount,
@@ -357,6 +358,60 @@ describe("orderItemsByPreferredIds", () => {
       "/work/gamma",
       "/work/alpha",
       "/work/beta",
+    ]);
+  });
+});
+
+describe("orderItemsByPreferredMemberIds", () => {
+  it("promotes an item by member id", () => {
+    const ordered = orderItemsByPreferredMemberIds({
+      items: [
+        { id: "project-1", memberIds: ["env-local:project-1"] },
+        { id: "project-2", memberIds: ["env-local:project-2"] },
+        { id: "project-3", memberIds: ["env-local:project-3"] },
+      ],
+      preferredMemberIds: ["env-local:project-3"],
+      getMemberIds: (project) => project.memberIds,
+    });
+
+    expect(ordered.map((project) => project.id)).toEqual(["project-3", "project-1", "project-2"]);
+  });
+
+  it("promotes a grouped item when any member id matches", () => {
+    const ordered = orderItemsByPreferredMemberIds({
+      items: [
+        { id: "project-a", memberIds: ["env-local:project-a", "env-remote:project-a"] },
+        { id: "project-b", memberIds: ["env-local:project-b"] },
+      ],
+      preferredMemberIds: ["env-remote:project-a"],
+      getMemberIds: (project) => project.memberIds,
+    });
+
+    expect(ordered.map((project) => project.id)).toEqual(["project-a", "project-b"]);
+  });
+
+  it("ignores stale preferred ids and preserves non-promoted item order", () => {
+    const ordered = orderItemsByPreferredMemberIds({
+      items: [
+        { id: "project-1", memberIds: ["env-local:project-1"] },
+        { id: "project-2", memberIds: ["env-local:project-2"] },
+        { id: "project-3", memberIds: ["env-local:project-3"] },
+        { id: "project-4", memberIds: ["env-local:project-4"] },
+      ],
+      preferredMemberIds: [
+        "env-local:missing",
+        "env-local:project-3",
+        "env-local:project-1",
+        "env-local:project-3",
+      ],
+      getMemberIds: (project) => project.memberIds,
+    });
+
+    expect(ordered.map((project) => project.id)).toEqual([
+      "project-3",
+      "project-1",
+      "project-2",
+      "project-4",
     ]);
   });
 });

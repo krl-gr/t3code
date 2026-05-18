@@ -160,6 +160,7 @@ import {
   resolveNextPagedThreadVisibleCount,
   resolveSidebarThreadPreviewLimit,
   orderItemsByPreferredIds,
+  orderItemsByPreferredMemberIds,
   shouldClearThreadSelectionOnMouseDown,
   sortProjectsForSidebar,
   useThreadJumpHintVisibility,
@@ -2674,6 +2675,7 @@ interface FocusedSidebarProjectViewProps {
   suppressProjectClickAfterDragRef: React.RefObject<boolean>;
   suppressProjectClickForContextMenuRef: React.RefObject<boolean>;
   onProjectSelect: (projectKey: string) => void;
+  onMoreProjectSelect: (projectKey: string) => void;
 }
 
 const FocusedSidebarProjectView = memo(function FocusedSidebarProjectView(
@@ -2701,6 +2703,7 @@ const FocusedSidebarProjectView = memo(function FocusedSidebarProjectView(
     suppressProjectClickAfterDragRef,
     suppressProjectClickForContextMenuRef,
     onProjectSelect,
+    onMoreProjectSelect,
   } = props;
   const [projectsOpen, setProjectsOpen] = useState(true);
   const [threadsOpen, setThreadsOpen] = useState(true);
@@ -2759,7 +2762,7 @@ const FocusedSidebarProjectView = memo(function FocusedSidebarProjectView(
                   {projects.map((project) => (
                     <MenuItem
                       key={project.projectKey}
-                      onClick={() => onProjectSelect(project.projectKey)}
+                      onClick={() => onMoreProjectSelect(project.projectKey)}
                     >
                       <ProjectFavicon
                         environmentId={project.environmentId}
@@ -2872,6 +2875,7 @@ interface SidebarProjectsContentProps {
   archiveThread: ReturnType<typeof useThreadActions>["archiveThread"];
   deleteThread: ReturnType<typeof useThreadActions>["deleteThread"];
   sortedProjects: readonly SidebarProjectSnapshot[];
+  focusedProjects: readonly SidebarProjectSnapshot[];
   expandedThreadListsByProject: ReadonlySet<string>;
   focusedVisibleThreadCountByProject: ReadonlyMap<string, number>;
   activeRouteProjectKey: string | null;
@@ -2884,6 +2888,7 @@ interface SidebarProjectsContentProps {
   collapseThreadListForProject: (projectKey: string) => void;
   showMoreFocusedThreadsForProject: (projectKey: string) => void;
   showLessFocusedThreadsForProject: (projectKey: string) => void;
+  handleFocusedMoreProjectChange: (projectKey: string) => void;
   dragInProgressRef: React.RefObject<boolean>;
   suppressProjectClickAfterDragRef: React.RefObject<boolean>;
   suppressProjectClickForContextMenuRef: React.RefObject<boolean>;
@@ -2915,6 +2920,7 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
     archiveThread,
     deleteThread,
     sortedProjects,
+    focusedProjects,
     expandedThreadListsByProject,
     focusedVisibleThreadCountByProject,
     activeRouteProjectKey,
@@ -2927,6 +2933,7 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
     collapseThreadListForProject,
     showMoreFocusedThreadsForProject,
     showLessFocusedThreadsForProject,
+    handleFocusedMoreProjectChange,
     dragInProgressRef,
     suppressProjectClickAfterDragRef,
     suppressProjectClickForContextMenuRef,
@@ -2936,8 +2943,8 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
 
   const selectedFocusedProject =
     sidebarViewMode === "focused"
-      ? (sortedProjects.find((project) => project.projectKey === focusedProjectKey) ??
-        sortedProjects[0] ??
+      ? (focusedProjects.find((project) => project.projectKey === focusedProjectKey) ??
+        focusedProjects[0] ??
         null)
       : null;
 
@@ -3015,7 +3022,7 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
       <SidebarGroup className="px-2 py-2">
         {productFeatures.focusedSidebarEnabled && sidebarViewMode === "focused" ? (
           <FocusedSidebarProjectView
-            projects={sortedProjects}
+            projects={focusedProjects}
             selectedProject={selectedFocusedProject}
             selectedProjectKey={selectedFocusedProject?.projectKey ?? null}
             expandedThreadListsByProject={expandedThreadListsByProject}
@@ -3036,6 +3043,7 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
             suppressProjectClickAfterDragRef={suppressProjectClickAfterDragRef}
             suppressProjectClickForContextMenuRef={suppressProjectClickForContextMenuRef}
             onProjectSelect={onFocusedProjectChange}
+            onMoreProjectSelect={handleFocusedMoreProjectChange}
           />
         ) : isManualProjectSorting ? (
           <DndContext
@@ -3128,7 +3136,9 @@ export default function Sidebar() {
     (store) => store.lastActiveThreadKeyByProjectKey,
   );
   const projectOrder = useUiStateStore((store) => store.projectOrder);
+  const focusedProjectOrder = useUiStateStore((store) => store.focusedProjectOrder);
   const reorderProjects = useUiStateStore((store) => store.reorderProjects);
+  const promoteFocusedProjects = useUiStateStore((store) => store.promoteFocusedProjects);
   const setLastActiveThreadForProject = useUiStateStore(
     (store) => store.setLastActiveThreadForProject,
   );
@@ -3467,17 +3477,43 @@ export default function Sidebar() {
     sidebarProjects,
     visibleThreads,
   ]);
+  const focusedOrderedProjects = useMemo(
+    () =>
+      orderItemsByPreferredMemberIds({
+        items: sortedProjects,
+        preferredMemberIds: focusedProjectOrder,
+        getMemberIds: (project) =>
+          project.memberProjects.map((member) => member.physicalProjectKey),
+      }),
+    [focusedProjectOrder, sortedProjects],
+  );
   const isManualProjectSorting = sidebarProjectSortOrder === "manual";
   const selectedFocusedProject = useMemo(() => {
     if (sidebarViewMode !== "focused") {
       return null;
     }
     return (
-      sortedProjects.find((project) => project.projectKey === focusedProjectKey) ??
-      sortedProjects[0] ??
+      focusedOrderedProjects.find((project) => project.projectKey === focusedProjectKey) ??
+      focusedOrderedProjects[0] ??
       null
     );
-  }, [focusedProjectKey, sidebarViewMode, sortedProjects]);
+  }, [focusedOrderedProjects, focusedProjectKey, sidebarViewMode]);
+
+  const handleFocusedMoreProjectChange = useCallback(
+    (projectKey: string) => {
+      const project = sidebarProjectByKey.get(projectKey);
+      if (project && focusedOrderedProjects[0]?.projectKey !== projectKey) {
+        promoteFocusedProjects(project.memberProjects.map((member) => member.physicalProjectKey));
+      }
+      handleFocusedProjectChange(projectKey);
+    },
+    [
+      focusedOrderedProjects,
+      handleFocusedProjectChange,
+      promoteFocusedProjects,
+      sidebarProjectByKey,
+    ],
+  );
 
   useEffect(() => {
     if (sidebarViewMode !== "focused") {
@@ -3492,17 +3528,17 @@ export default function Sidebar() {
         ? activeRouteProjectKey
         : selectedProjectStillExists
           ? focusedProjectKey
-          : (selectedFocusedProject?.projectKey ?? sortedProjects[0]?.projectKey ?? null);
+          : (selectedFocusedProject?.projectKey ?? focusedOrderedProjects[0]?.projectKey ?? null);
     if (nextProjectKey !== focusedProjectKey) {
       setFocusedProjectKey(nextProjectKey);
     }
   }, [
     activeRouteProjectKey,
     focusedProjectKey,
+    focusedOrderedProjects,
     selectedFocusedProject?.projectKey,
     sidebarProjectByKey,
     sidebarViewMode,
-    sortedProjects,
   ]);
 
   const visibleSidebarThreadKeys = useMemo(
@@ -3954,6 +3990,8 @@ export default function Sidebar() {
             suppressProjectClickForContextMenuRef={suppressProjectClickForContextMenuRef}
             attachProjectListAutoAnimateRef={attachProjectListAutoAnimateRef}
             projectsLength={projects.length}
+            focusedProjects={focusedOrderedProjects}
+            handleFocusedMoreProjectChange={handleFocusedMoreProjectChange}
           />
 
           <SidebarSeparator />
