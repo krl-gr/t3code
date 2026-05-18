@@ -2753,7 +2753,7 @@ const FocusedSidebarProjectView = memo(function FocusedSidebarProjectView(
                   />
                 }
               >
-                <MoreHorizontalIcon className="size-4 shrink-0" />
+                <MoreHorizontalIcon className="size-4 shrink-0 text-muted-foreground" />
                 <span className="truncate">More</span>
               </MenuTrigger>
               <MenuPopup align="start" side="bottom" className="min-w-56">

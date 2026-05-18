@@ -1,8 +1,8 @@
 export const productCopy = {
   sidebar: {
     viewMode: {
-      switchToFocused: "Switch to Focus view",
-      switchToNested: "Switch to Classic view",
+      switchToFocused: "Focus view",
+      switchToNested: "Classic view",
     },
     threadContextMenu: {
       ariaLabel: "Thread actions",
