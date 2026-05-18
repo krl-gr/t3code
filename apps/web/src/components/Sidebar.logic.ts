@@ -1,5 +1,9 @@
 import * as React from "react";
-import type { SidebarProjectSortOrder, SidebarThreadSortOrder } from "@t3tools/contracts/settings";
+import type {
+  SidebarProjectSortOrder,
+  SidebarThreadSortOrder,
+  SidebarViewMode,
+} from "@t3tools/contracts/settings";
 import {
   getThreadSortTimestamp,
   sortThreads,
@@ -457,6 +461,26 @@ export function getVisibleThreadsForProject<T extends Pick<Thread, "id">>(input:
     hiddenThreads: threads.filter((thread) => !visibleThreadIds.has(thread.id)),
     visibleThreads: threads.filter((thread) => visibleThreadIds.has(thread.id)),
   };
+}
+
+export function resolveSidebarThreadPreviewLimit(input: {
+  sidebarViewMode: SidebarViewMode;
+  configuredPreviewCount: number;
+  focusedPreviewCount: number;
+}): number {
+  return input.sidebarViewMode === "focused"
+    ? input.focusedPreviewCount
+    : input.configuredPreviewCount;
+}
+
+export function resolveNextPagedThreadVisibleCount(input: {
+  currentVisibleCount: number | undefined;
+  pageSize: number;
+  totalThreadCount: number;
+}): number {
+  const pageSize = Math.max(0, input.pageSize);
+  const currentVisibleCount = Math.max(pageSize, input.currentVisibleCount ?? pageSize);
+  return Math.min(input.totalThreadCount, currentVisibleCount + pageSize);
 }
 
 export function getFallbackThreadIdAfterDelete<

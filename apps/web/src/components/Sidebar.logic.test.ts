@@ -14,8 +14,10 @@ import {
   orderItemsByPreferredIds,
   resolveProjectStatusIndicator,
   resolveFocusedProjectThreadTarget,
+  resolveNextPagedThreadVisibleCount,
   resolveSidebarNewThreadSeedContext,
   resolveSidebarNewThreadEnvMode,
+  resolveSidebarThreadPreviewLimit,
   resolveThreadRowClassName,
   resolveThreadStatusPill,
   shouldClearThreadSelectionOnMouseDown,
@@ -766,6 +768,58 @@ describe("getVisibleThreadsForProject", () => {
       threads.map((thread) => thread.id),
     );
     expect(result.hiddenThreads).toEqual([]);
+  });
+});
+
+describe("resolveSidebarThreadPreviewLimit", () => {
+  it("uses the configured preview count in classic nested view", () => {
+    expect(
+      resolveSidebarThreadPreviewLimit({
+        sidebarViewMode: "nested",
+        configuredPreviewCount: 6,
+        focusedPreviewCount: 30,
+      }),
+    ).toBe(6);
+  });
+
+  it("uses the Focus view product limit instead of the configured preview count", () => {
+    expect(
+      resolveSidebarThreadPreviewLimit({
+        sidebarViewMode: "focused",
+        configuredPreviewCount: 6,
+        focusedPreviewCount: 30,
+      }),
+    ).toBe(30);
+  });
+});
+
+describe("resolveNextPagedThreadVisibleCount", () => {
+  it("advances by one Focus page at a time", () => {
+    expect(
+      resolveNextPagedThreadVisibleCount({
+        currentVisibleCount: undefined,
+        pageSize: 30,
+        totalThreadCount: 75,
+      }),
+    ).toBe(60);
+
+    expect(
+      resolveNextPagedThreadVisibleCount({
+        currentVisibleCount: 60,
+        pageSize: 30,
+        totalThreadCount: 75,
+      }),
+    ).toBe(75);
+  });
+
+  it("caps the visible count at the total thread count", () => {
+    expect(
+      resolveNextPagedThreadVisibleCount({
+        currentVisibleCount: 30,
+        pageSize: 30,
+        totalThreadCount: 31,
+      }),
+    ).toBe(31);
   });
 });
 
