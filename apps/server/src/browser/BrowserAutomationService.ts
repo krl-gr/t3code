@@ -23,11 +23,19 @@ import { resolveBrowserProfilePaths } from "./BrowserProfiles.ts";
 
 export type BrowserName = "chrome" | "msedge";
 
+interface BrowserProcessExitState {
+  readonly exitCode: number | null;
+  readonly signalCode: string | null;
+  readonly killed: boolean;
+}
+
 export interface BrowserProcessHandle {
   readonly browserName: BrowserName;
   readonly executablePath: string;
   readonly debuggingPort: number;
   readonly userDataDir: string;
+  readonly pid?: number;
+  readonly getExitState?: () => BrowserProcessExitState;
   readonly dispose: () => Promise<void>;
 }
 
@@ -42,12 +50,36 @@ export interface LaunchedCdpBrowser {
   readonly context: BrowserContext;
 }
 
+interface BrowserRuntimeMetadata {
+  readonly version: 1;
+  readonly profileId: "default";
+  readonly userDataDir: string;
+  readonly browserName: BrowserName;
+  readonly executablePath: string;
+  readonly debuggingPort: number;
+  readonly pid?: number;
+  readonly launchedAt: string;
+}
+
+interface CdpEndpointProbeResult {
+  readonly ok: boolean;
+  readonly error?: string;
+}
+
 export interface BrowserAutomationServiceDependencies {
   readonly launchCdpBrowser?: (input: {
     readonly userDataDir: string;
     readonly initialUrl?: string;
   }) => Promise<LaunchedCdpBrowser>;
+  readonly connectOverCdp?: (port: number) => Promise<{
+    readonly browser: Browser;
+    readonly context: BrowserContext;
+  }>;
+  readonly probeCdpEndpoint?: (port: number) => Promise<CdpEndpointProbeResult>;
   readonly readFile?: (path: string) => Promise<string>;
+  readonly writeFile?: (path: string, content: string) => Promise<void>;
+  readonly renameFile?: (fromPath: string, toPath: string) => Promise<void>;
+  readonly removeFile?: (path: string) => Promise<void>;
   readonly makeDirectory?: (path: string) => Promise<void>;
   readonly removeDirectory?: (path: string) => Promise<void>;
 }
@@ -121,6 +153,10 @@ function blockedResult(input: {
 function trimText(value: string | null | undefined): string | undefined {
   const trimmed = value?.trim();
   return trimmed && trimmed.length > 0 ? trimmed : undefined;
+}
+
+function normalizeFilesystemPath(value: string): string {
+  return value.replaceAll("\\", "/");
 }
 
 function titleOf(page: Page): Promise<string | undefined> {
@@ -265,28 +301,89 @@ function waitForProcessExit(processHandle: ChildProcess): Promise<void> {
   });
 }
 
-async function waitForCdpEndpoint(port: number, timeoutMs = 15_000): Promise<void> {
-  const endpoint = `http://127.0.0.1:${port}/json/version`;
+function cdpVersionEndpoint(port: number): string {
+  return `http://127.0.0.1:${port}/json/version`;
+}
+
+function isValidLocalPort(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value > 0 && value <= 65_535;
+}
+
+async function probeCdpEndpoint(port: number): Promise<CdpEndpointProbeResult> {
+  const endpoint = cdpVersionEndpoint(port);
+  try {
+    const response = await fetch(endpoint);
+    return response.ok
+      ? { ok: true }
+      : { ok: false, error: `CDP endpoint returned HTTP ${response.status}.` };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+function processExitedBeforeCdpError(port: number, state: BrowserProcessExitState): Error {
+  return new Error(
+    `T3 browser process exited before exposing CDP on ${cdpVersionEndpoint(port)} ` +
+      `(exitCode=${state.exitCode ?? "null"}, signal=${state.signalCode ?? "null"}). ` +
+      "The T3 browser profile may already be in use by another Chrome process. " +
+      "Close the existing T3 browser window or use Settings > Browser > Close browser, then retry.",
+  );
+}
+
+function getExitedProcessState(
+  processHandle: BrowserProcessHandle | undefined,
+): BrowserProcessExitState | null {
+  const state = processHandle?.getExitState?.();
+  if (!state) {
+    return null;
+  }
+  return state.exitCode !== null || state.signalCode !== null || state.killed ? state : null;
+}
+
+function metadataToRecoveredProcessHandle(metadata: BrowserRuntimeMetadata): BrowserProcessHandle {
+  return {
+    browserName: metadata.browserName,
+    executablePath: metadata.executablePath,
+    debuggingPort: metadata.debuggingPort,
+    userDataDir: metadata.userDataDir,
+    ...(metadata.pid ? { pid: metadata.pid } : {}),
+    dispose: async () => undefined,
+  };
+}
+
+async function waitForCdpEndpoint(
+  port: number,
+  timeoutMs = 15_000,
+  processHandle?: BrowserProcessHandle,
+): Promise<void> {
+  const endpoint = cdpVersionEndpoint(port);
   const deadline = Date.now() + timeoutMs;
-  let lastError: unknown;
+  let lastError: string | undefined;
 
   while (Date.now() < deadline) {
-    try {
-      const response = await fetch(endpoint);
-      if (response.ok) {
-        return;
-      }
-      lastError = new Error(`CDP endpoint returned HTTP ${response.status}.`);
-    } catch (error) {
-      lastError = error;
+    const exitedState = getExitedProcessState(processHandle);
+    if (exitedState) {
+      throw processExitedBeforeCdpError(port, exitedState);
     }
+
+    const probe = await probeCdpEndpoint(port);
+    if (probe.ok) {
+      return;
+    }
+    lastError = probe.error;
     await new Promise((resolve) => setTimeout(resolve, 200));
   }
 
+  const exitedState = getExitedProcessState(processHandle);
+  if (exitedState) {
+    throw processExitedBeforeCdpError(port, exitedState);
+  }
+
   throw new Error(
-    `Chrome/Edge did not expose a local CDP endpoint at ${endpoint}. ${
-      lastError instanceof Error ? lastError.message : String(lastError ?? "")
-    }`.trim(),
+    `Chrome/Edge did not expose a local CDP endpoint at ${endpoint}. ${lastError ?? ""}`.trim(),
   );
 }
 
@@ -312,6 +409,12 @@ async function launchBrowserProcess(input: {
     ...executable,
     debuggingPort,
     userDataDir: input.userDataDir,
+    ...(child.pid ? { pid: child.pid } : {}),
+    getExitState: () => ({
+      exitCode: child.exitCode,
+      signalCode: child.signalCode,
+      killed: child.killed,
+    }),
     dispose: async () => {
       if (disposed) {
         return;
@@ -329,8 +432,25 @@ async function launchBrowserProcess(input: {
   };
 }
 
-export async function waitForCdpEndpointForTests(port: number, timeoutMs: number): Promise<void> {
-  return waitForCdpEndpoint(port, timeoutMs);
+export async function waitForCdpEndpointForTests(
+  port: number,
+  timeoutMs: number,
+  processHandle?: BrowserProcessHandle,
+): Promise<void> {
+  return waitForCdpEndpoint(port, timeoutMs, processHandle);
+}
+
+async function connectOverCdp(port: number): Promise<{
+  readonly browser: Browser;
+  readonly context: BrowserContext;
+}> {
+  const browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`);
+  const context = browser.contexts()[0];
+  if (!context) {
+    await browser.close().catch(() => undefined);
+    throw new Error("Chrome/Edge CDP connection did not expose a browser context.");
+  }
+  return { browser, context };
 }
 
 export async function launchCdpBrowser(input: {
@@ -339,15 +459,8 @@ export async function launchCdpBrowser(input: {
 }): Promise<LaunchedCdpBrowser> {
   const browserProcess = await launchBrowserProcess(input);
   try {
-    await waitForCdpEndpoint(browserProcess.debuggingPort);
-    const browser = await chromium.connectOverCDP(
-      `http://127.0.0.1:${browserProcess.debuggingPort}`,
-    );
-    const context = browser.contexts()[0];
-    if (!context) {
-      await browser.close().catch(() => undefined);
-      throw new Error("Chrome/Edge CDP connection did not expose a browser context.");
-    }
+    await waitForCdpEndpoint(browserProcess.debuggingPort, 15_000, browserProcess);
+    const { browser, context } = await connectOverCdp(browserProcess.debuggingPort);
     return { browserProcess, browser, context };
   } catch (error) {
     await browserProcess.dispose().catch(() => undefined);
@@ -363,7 +476,17 @@ export function createBrowserAutomationService(
 ): BrowserAutomationServiceShape {
   const profilePaths = resolveBrowserProfilePaths(serverConfig.stateDir);
   const launchBrowser = dependencies.launchCdpBrowser ?? launchCdpBrowser;
+  const connectBrowser = dependencies.connectOverCdp ?? connectOverCdp;
+  const probeEndpoint = dependencies.probeCdpEndpoint ?? probeCdpEndpoint;
   const readFile = dependencies.readFile ?? ((filePath: string) => fs.readFile(filePath, "utf8"));
+  const writeFile =
+    dependencies.writeFile ??
+    ((filePath: string, content: string) => fs.writeFile(filePath, content));
+  const renameFile =
+    dependencies.renameFile ?? ((fromPath: string, toPath: string) => fs.rename(fromPath, toPath));
+  const removeFile =
+    dependencies.removeFile ??
+    ((filePath: string) => fs.rm(filePath, { force: true }).then(() => undefined));
   const makeDirectory =
     dependencies.makeDirectory ??
     ((directoryPath: string) => fs.mkdir(directoryPath, { recursive: true }).then(() => undefined));
@@ -395,6 +518,82 @@ export function createBrowserAutomationService(
     }
   };
 
+  const readRuntimeMetadata = async (): Promise<BrowserRuntimeMetadata | null> => {
+    const raw = await readFile(profilePaths.defaultRuntimeMetadataPath).catch(() => "");
+    if (!raw.trim()) {
+      return null;
+    }
+    try {
+      const parsed = JSON.parse(raw) as Partial<BrowserRuntimeMetadata>;
+      if (
+        parsed.version !== 1 ||
+        parsed.profileId !== "default" ||
+        typeof parsed.userDataDir !== "string" ||
+        normalizeFilesystemPath(parsed.userDataDir) !==
+          normalizeFilesystemPath(profilePaths.defaultProfileDir) ||
+        (parsed.browserName !== "chrome" && parsed.browserName !== "msedge") ||
+        typeof parsed.executablePath !== "string" ||
+        !isValidLocalPort(parsed.debuggingPort) ||
+        typeof parsed.launchedAt !== "string" ||
+        (parsed.pid !== undefined && !Number.isInteger(parsed.pid))
+      ) {
+        return null;
+      }
+      return {
+        version: 1,
+        profileId: "default",
+        userDataDir: parsed.userDataDir,
+        browserName: parsed.browserName,
+        executablePath: parsed.executablePath,
+        debuggingPort: parsed.debuggingPort,
+        ...(parsed.pid !== undefined ? { pid: parsed.pid } : {}),
+        launchedAt: parsed.launchedAt,
+      };
+    } catch {
+      return null;
+    }
+  };
+
+  const writeRuntimeMetadata = async (launched: LaunchedCdpBrowser) => {
+    await makeDirectory(profilePaths.profilesDir);
+    const metadata: BrowserRuntimeMetadata = {
+      version: 1,
+      profileId: "default",
+      userDataDir: launched.browserProcess.userDataDir,
+      browserName: launched.browserProcess.browserName,
+      executablePath: launched.browserProcess.executablePath,
+      debuggingPort: launched.browserProcess.debuggingPort,
+      ...(launched.browserProcess.pid ? { pid: launched.browserProcess.pid } : {}),
+      launchedAt: new Date().toISOString(),
+    };
+    const temporaryPath = `${profilePaths.defaultRuntimeMetadataPath}.tmp`;
+    await writeFile(temporaryPath, `${JSON.stringify(metadata, null, 2)}\n`);
+    await renameFile(temporaryPath, profilePaths.defaultRuntimeMetadataPath);
+  };
+
+  const removeRuntimeMetadata = async () => {
+    await removeFile(profilePaths.defaultRuntimeMetadataPath).catch(() => undefined);
+    await removeFile(`${profilePaths.defaultRuntimeMetadataPath}.tmp`).catch(() => undefined);
+  };
+
+  const reconnectFromRuntimeMetadata = async (): Promise<boolean> => {
+    const metadata = await readRuntimeMetadata();
+    if (!metadata) {
+      return false;
+    }
+    const probe = await probeEndpoint(metadata.debuggingPort);
+    if (!probe.ok) {
+      return false;
+    }
+    const connected = await connectBrowser(metadata.debuggingPort);
+    browserProcess = metadataToRecoveredProcessHandle(metadata);
+    browser = connected.browser;
+    context = connected.context;
+    activePage = null;
+    browser.on("disconnected", clearBrowserHandles);
+    return true;
+  };
+
   const clearBrowserHandles = () => {
     browserProcess = null;
     browser = null;
@@ -408,25 +607,36 @@ export function createBrowserAutomationService(
     clearBrowserHandles();
     await previousBrowser?.close().catch(() => undefined);
     await previousProcess?.dispose().catch(() => undefined);
+    await removeRuntimeMetadata();
   };
 
   const getPage = async (input?: { readonly initialUrl?: string }): Promise<Page> => {
     await makeDirectory(profilePaths.defaultProfileDir);
     if (!context) {
-      const initialUrl = trimText(input?.initialUrl);
-      const launched = await launchBrowser({
-        userDataDir: profilePaths.defaultProfileDir,
-        ...(initialUrl ? { initialUrl } : {}),
-      });
-      browserProcess = launched.browserProcess;
-      browser = launched.browser;
-      context = launched.context;
-      browser.on("disconnected", clearBrowserHandles);
+      const reconnected = await reconnectFromRuntimeMetadata();
+      if (!reconnected) {
+        const initialUrl = trimText(input?.initialUrl);
+        const launched = await launchBrowser({
+          userDataDir: profilePaths.defaultProfileDir,
+          ...(initialUrl ? { initialUrl } : {}),
+        });
+        await writeRuntimeMetadata(launched);
+        browserProcess = launched.browserProcess;
+        browser = launched.browser;
+        context = launched.context;
+        browser.on("disconnected", clearBrowserHandles);
+      }
     }
 
-    activePage = activePage && !activePage.isClosed() ? activePage : (context.pages()[0] ?? null);
+    const currentContext = context;
+    if (!currentContext) {
+      throw new Error("T3 browser did not expose a usable browser context.");
+    }
+
+    activePage =
+      activePage && !activePage.isClosed() ? activePage : (currentContext.pages()[0] ?? null);
     if (!activePage || activePage.isClosed()) {
-      activePage = await context.newPage();
+      activePage = await currentContext.newPage();
     }
     return activePage;
   };
@@ -435,16 +645,25 @@ export function createBrowserAutomationService(
     const page = activePage && !activePage.isClosed() ? activePage : null;
     const currentTitle = page ? await titleOf(page) : undefined;
     const currentUrl = page?.url();
+    const recoveredMetadata = context ? null : await readRuntimeMetadata();
+    const recoveredProbe = recoveredMetadata
+      ? await probeEndpoint(recoveredMetadata.debuggingPort).catch(() => ({ ok: false }))
+      : null;
+    const snapshotProcess =
+      browserProcess ??
+      (recoveredMetadata && recoveredProbe?.ok
+        ? metadataToRecoveredProcessHandle(recoveredMetadata)
+        : null);
     return {
       profileId: "default",
       profilePath: profilePaths.defaultProfileDir,
-      status: context ? "open" : "closed",
+      status: context || recoveredProbe?.ok ? "open" : "closed",
       allowedOrigins: await readAllowedOrigins(),
-      ...(browserProcess
+      ...(snapshotProcess
         ? {
             launchMode: "cdp-attached" as const,
-            browserName: browserProcess.browserName,
-            debuggingPort: browserProcess.debuggingPort,
+            browserName: snapshotProcess.browserName,
+            debuggingPort: snapshotProcess.debuggingPort,
           }
         : {}),
       ...(currentUrl && currentUrl !== "about:blank" ? { currentUrl } : {}),
@@ -506,10 +725,16 @@ export function createBrowserAutomationService(
       return snapshot();
     },
     closeBrowser: async () => {
+      if (!context) {
+        await reconnectFromRuntimeMetadata().catch(() => false);
+      }
       await closeBrowserHandles();
       return snapshot();
     },
     clearProfileData: async () => {
+      if (!context) {
+        await reconnectFromRuntimeMetadata().catch(() => false);
+      }
       await closeBrowserHandles();
       await removeDirectory(profilePaths.defaultProfileDir);
       await makeDirectory(profilePaths.defaultProfileDir);

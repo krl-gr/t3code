@@ -6,6 +6,7 @@ import { DEFAULT_BROWSER_PROFILE_ID } from "./BrowserPolicy.ts";
 export interface BrowserProfilePaths {
   readonly profilesDir: string;
   readonly defaultProfileDir: string;
+  readonly defaultRuntimeMetadataPath: string;
 }
 
 export function resolveBrowserProfilePaths(stateDir: string): BrowserProfilePaths {
@@ -13,5 +14,6 @@ export function resolveBrowserProfilePaths(stateDir: string): BrowserProfilePath
   return {
     profilesDir,
     defaultProfileDir: path.join(profilesDir, DEFAULT_BROWSER_PROFILE_ID),
+    defaultRuntimeMetadataPath: path.join(profilesDir, `${DEFAULT_BROWSER_PROFILE_ID}.cdp.json`),
   };
 }
