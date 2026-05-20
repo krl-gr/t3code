@@ -60,6 +60,7 @@ import {
   mapPiToolNameToItemType,
   mapPiToolNameToRequestType,
   PI_BROWSER_TOOL_NAMES,
+  PI_DEFAULT_MODE_PROMPT_PREFIX,
   PI_FULL_TOOL_NAMES,
   PI_PLAN_MODE_PROMPT_PREFIX,
   PI_PLAN_TOOL_NAMES,
@@ -343,6 +344,10 @@ function normalizePiPromptInput(input: {
 
   if (input.interactionMode === "ask") {
     return applyAskModePromptPrefix(input.text);
+  }
+
+  if (input.interactionMode === "default") {
+    return [PI_DEFAULT_MODE_PROMPT_PREFIX, "", input.text].join("\n");
   }
 
   return input.text;

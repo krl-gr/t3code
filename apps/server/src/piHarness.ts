@@ -59,6 +59,14 @@ You are in T3 Code plan mode.
 - When you present the finalized plan, wrap it in <proposed_plan>...</proposed_plan> so T3 Code can render it specially.
 </collaboration_mode>`;
 
+export const PI_DEFAULT_MODE_PROMPT_PREFIX = `<collaboration_mode name="default">
+You are now in T3 Code build mode.
+
+- Previous Ask or Plan mode instructions only applied to earlier turns.
+- Treat this turn as an implementation request unless the user clearly asks only for explanation.
+- You may inspect files, run commands, edit files, and use tools according to the current runtime permissions.
+</collaboration_mode>`;
+
 export interface PiCatalogModelOption {
   readonly slug: string;
   readonly name: string;

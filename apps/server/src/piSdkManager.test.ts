@@ -209,6 +209,38 @@ describe("PiSdkManager", () => {
     expect(prompts.at(-1)).toContain("Why?");
   });
 
+  it("resets prior ask instructions when switching back to default mode", async () => {
+    const prompts: string[] = [];
+    const { createSession } = createPiSessionFactory({
+      onPrompt: (prompt) => prompts.push(prompt),
+    });
+    const manager = new PiSdkManager({
+      stateDir: "C:/tmp/t3code-pi-test",
+      browserAutomation: makeBrowserStub(),
+      createSession,
+    });
+    const threadId = ThreadId.make("pi-ask-to-default-mode-thread");
+
+    await manager.startSession({
+      threadId,
+      cwd: "C:/tmp/t3code-pi-test",
+      runtimeMode: "full-access",
+    });
+    await manager.sendTurn({ threadId, input: "What should we do?", interactionMode: "ask" });
+    await manager.sendTurn({
+      threadId,
+      input: "Update the todo file.",
+      interactionMode: "default",
+    });
+
+    expect(prompts.at(0)).toContain("You are in Ask mode.");
+    expect(prompts.at(1)).toContain("You are now in T3 Code build mode.");
+    expect(prompts.at(1)).toContain(
+      "Previous Ask or Plan mode instructions only applied to earlier turns.",
+    );
+    expect(prompts.at(1)).toContain("Update the todo file.");
+  });
+
   it("fails clearly when configured browser tools are missing from the active session", async () => {
     const { createSession } = createPiSessionFactory({
       activeToolNames: ["read", "bash", "grep", "find", "ls"],
