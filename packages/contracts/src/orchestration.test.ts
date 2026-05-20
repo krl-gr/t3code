@@ -17,6 +17,7 @@ import {
   OrchestrationProposedPlan,
   OrchestrationSession,
   ProjectCreateCommand,
+  ProviderInteractionMode,
   ThreadMetaUpdatedPayload,
   ThreadTurnStartCommand,
   ThreadCreatedPayload,
@@ -38,6 +39,7 @@ const decodeThreadTurnStartRequestedPayload = Schema.decodeUnknownEffect(
 const decodeOrchestrationLatestTurn = Schema.decodeUnknownEffect(OrchestrationLatestTurn);
 const decodeOrchestrationProposedPlan = Schema.decodeUnknownEffect(OrchestrationProposedPlan);
 const decodeOrchestrationSession = Schema.decodeUnknownEffect(OrchestrationSession);
+const decodeProviderInteractionMode = Schema.decodeUnknownEffect(ProviderInteractionMode);
 const encodeThreadCreatedPayload = Schema.encodeEffect(ThreadCreatedPayload);
 
 function getOptionValue(
@@ -220,6 +222,50 @@ it.effect("decodes thread.turn.start defaults for provider and runtime mode", ()
     assert.strictEqual(parsed.modelSelection, undefined);
     assert.strictEqual(parsed.runtimeMode, DEFAULT_RUNTIME_MODE);
     assert.strictEqual(parsed.interactionMode, DEFAULT_PROVIDER_INTERACTION_MODE);
+  }),
+);
+
+it.effect("decodes ask provider interaction mode", () =>
+  Effect.gen(function* () {
+    const parsed = yield* decodeProviderInteractionMode("ask");
+    assert.strictEqual(parsed, "ask");
+  }),
+);
+
+it.effect("accepts ask interaction mode in thread.create commands", () =>
+  Effect.gen(function* () {
+    const parsed = yield* decodeOrchestrationCommand({
+      type: "thread.create",
+      commandId: "cmd-thread-ask",
+      threadId: "thread-ask",
+      projectId: "project-1",
+      title: "Ask thread",
+      modelSelection: {
+        provider: "codex",
+        model: "gpt-5.4",
+      },
+      runtimeMode: "full-access",
+      interactionMode: "ask",
+      branch: null,
+      worktreePath: null,
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+    assert.strictEqual(parsed.type, "thread.create");
+    assert.strictEqual(parsed.interactionMode, "ask");
+  }),
+);
+
+it.effect("accepts ask interaction mode in thread interaction mode commands", () =>
+  Effect.gen(function* () {
+    const parsed = yield* decodeOrchestrationCommand({
+      type: "thread.interaction-mode.set",
+      commandId: "cmd-thread-mode-ask",
+      threadId: "thread-ask",
+      interactionMode: "ask",
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+    assert.strictEqual(parsed.type, "thread.interaction-mode.set");
+    assert.strictEqual(parsed.interactionMode, "ask");
   }),
 );
 

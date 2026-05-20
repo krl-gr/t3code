@@ -38,6 +38,7 @@ import * as EffectCodexSchema from "effect-codex-app-server/schema";
 import { buildCodexInitializeParams } from "./CodexProvider.ts";
 import { expandHomePath } from "../../pathExpansion.ts";
 import {
+  CODEX_ASK_MODE_DEVELOPER_INSTRUCTIONS,
   CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS,
   CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS,
 } from "../CodexDeveloperInstructions.ts";
@@ -328,16 +329,31 @@ function buildCodexCollaborationMode(input: {
   }
   const model = normalizeCodexModelSlug(input.model) ?? DEFAULT_MODEL;
   return {
-    mode: input.interactionMode,
+    mode: resolveCodexCollaborationModeKind(input.interactionMode),
     settings: {
       model,
       reasoning_effort: input.effort ?? "medium",
-      developer_instructions:
-        input.interactionMode === "plan"
-          ? CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS
-          : CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS,
+      developer_instructions: resolveCodexDeveloperInstructions(input.interactionMode),
     },
   };
+}
+
+function resolveCodexCollaborationModeKind(
+  interactionMode: ProviderInteractionMode,
+): EffectCodexSchema.V2TurnStartParams__CollaborationMode["mode"] {
+  return interactionMode === "plan" ? "plan" : "default";
+}
+
+function resolveCodexDeveloperInstructions(interactionMode: ProviderInteractionMode): string {
+  switch (interactionMode) {
+    case "plan":
+      return CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS;
+    case "ask":
+      return CODEX_ASK_MODE_DEVELOPER_INSTRUCTIONS;
+    case "default":
+    default:
+      return CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS;
+  }
 }
 
 export function buildTurnStartParams(input: {

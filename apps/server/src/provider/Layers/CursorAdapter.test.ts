@@ -27,7 +27,7 @@ import {
 import { ServerConfig } from "../../config.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
 import type { CursorAdapterShape } from "../Services/CursorAdapter.ts";
-import { makeCursorAdapter } from "./CursorAdapter.ts";
+import { makeCursorAdapter, resolveRequestedModeId } from "./CursorAdapter.ts";
 const decodeCursorSettings = Schema.decodeSync(CursorSettings);
 
 // Test-local service tag so the rest of the file can keep using `yield* CursorAdapter`.
@@ -149,6 +149,39 @@ const cursorAdapterTestLayer = it.layer(
 );
 
 cursorAdapterTestLayer("CursorAdapterLive", (it) => {
+  it("prefers ACP ask/chat modes for app ask mode", () => {
+    const modeId = resolveRequestedModeId({
+      interactionMode: "ask",
+      runtimeMode: "full-access",
+      modeState: {
+        currentModeId: "code",
+        availableModes: [
+          { id: "architect", name: "Architect" },
+          { id: "chat", name: "Chat" },
+          { id: "code", name: "Code" },
+        ],
+      },
+    });
+
+    assert.equal(modeId, "chat");
+  });
+
+  it("does not select plan modes as the ask mode fallback", () => {
+    const modeId = resolveRequestedModeId({
+      interactionMode: "ask",
+      runtimeMode: "full-access",
+      modeState: {
+        currentModeId: "architect",
+        availableModes: [
+          { id: "architect", name: "Architect" },
+          { id: "code", name: "Code" },
+        ],
+      },
+    });
+
+    assert.equal(modeId, "code");
+  });
+
   it.effect("starts a session and maps mock ACP prompt flow to runtime events", () =>
     Effect.gen(function* () {
       const adapter = yield* CursorAdapter;

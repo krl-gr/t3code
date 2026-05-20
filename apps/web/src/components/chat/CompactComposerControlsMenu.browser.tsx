@@ -152,7 +152,7 @@ async function mountMenu(props?: { modelSelection?: ModelSelection; prompt?: str
           onPromptChange={onPromptChange}
         />
       }
-      onToggleInteractionMode={vi.fn()}
+      onInteractionModeChange={vi.fn()}
       onTogglePlanSidebar={vi.fn()}
       onRuntimeModeChange={vi.fn()}
     />,
@@ -178,6 +178,20 @@ describe("CompactComposerControlsMenu", () => {
       draftThreadsByThreadKey: {},
       logicalProjectDraftThreadKeyByLogicalProjectKey: {},
       stickyModelSelectionByProvider: {},
+    });
+  });
+
+  it("renders all interaction modes", async () => {
+    await using _mounted = await mountMenu();
+
+    await page.getByLabelText("More composer controls").click();
+
+    await vi.waitFor(() => {
+      const text = document.body.textContent ?? "";
+      expect(text).toContain("Mode");
+      expect(text).toContain("Build");
+      expect(text).toContain("Ask");
+      expect(text).toContain("Plan");
     });
   });
 
@@ -303,7 +317,7 @@ describe("CompactComposerControlsMenu", () => {
         planSidebarOpen={false}
         runtimeMode="approval-required"
         showInteractionModeToggle={false}
-        onToggleInteractionMode={vi.fn()}
+        onInteractionModeChange={vi.fn()}
         onTogglePlanSidebar={vi.fn()}
         onRuntimeModeChange={vi.fn()}
       />,

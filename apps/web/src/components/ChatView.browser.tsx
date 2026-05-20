@@ -1427,7 +1427,7 @@ async function expectComposerActionsContained(): Promise<void> {
 }
 
 async function waitForInteractionModeButton(
-  expectedLabel: "Build" | "Plan",
+  expectedLabel: "Build" | "Ask" | "Plan",
 ): Promise<HTMLButtonElement> {
   return waitForElement(
     () =>
@@ -3058,7 +3058,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
     }
   });
 
-  it("toggles plan mode with Shift+Tab only while the composer is focused", async () => {
+  it("cycles interaction mode with Shift+Tab only while the composer is focused", async () => {
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
       snapshot: createSnapshotForTargetUser({
@@ -3069,7 +3069,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
 
     try {
       const initialModeButton = await waitForInteractionModeButton("Build");
-      expect(initialModeButton.title).toContain("enter plan mode");
+      expect(initialModeButton.title).toContain("Execute changes normally");
 
       window.dispatchEvent(
         new KeyboardEvent("keydown", {
@@ -3081,7 +3081,9 @@ describe("ChatView timeline estimator parity (full app)", () => {
       );
       await waitForLayout();
 
-      expect((await waitForInteractionModeButton("Build")).title).toContain("enter plan mode");
+      expect((await waitForInteractionModeButton("Build")).title).toContain(
+        "Execute changes normally",
+      );
 
       const composerEditor = await waitForComposerEditor();
       composerEditor.focus();
@@ -3096,9 +3098,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
 
       await vi.waitFor(
         async () => {
-          expect((await waitForInteractionModeButton("Plan")).title).toContain(
-            "return to normal build mode",
-          );
+          expect((await waitForInteractionModeButton("Ask")).title).toContain("Answer only");
         },
         { timeout: 8_000, interval: 16 },
       );
@@ -3114,7 +3114,9 @@ describe("ChatView timeline estimator parity (full app)", () => {
 
       await vi.waitFor(
         async () => {
-          expect((await waitForInteractionModeButton("Build")).title).toContain("enter plan mode");
+          expect((await waitForInteractionModeButton("Plan")).title).toContain(
+            "Produce implementation plans",
+          );
         },
         { timeout: 8_000, interval: 16 },
       );

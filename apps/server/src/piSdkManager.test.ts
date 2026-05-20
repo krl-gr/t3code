@@ -43,6 +43,7 @@ function makeBrowserStub(): BrowserAutomationServiceShape {
 function createPiSessionFactory(input?: {
   readonly activeToolNames?: ReadonlyArray<string>;
   readonly onSetActiveTools?: (toolNames: string[]) => void;
+  readonly onPrompt?: (prompt: string) => void;
 }) {
   const activeToolNames = input?.activeToolNames ?? [...PI_FULL_TOOL_NAMES];
   let listener: ((event: unknown) => void) | undefined;
@@ -67,7 +68,8 @@ function createPiSessionFactory(input?: {
         listener = undefined;
       };
     }),
-    prompt: vi.fn(async () => {
+    prompt: vi.fn(async (prompt: string) => {
+      input?.onPrompt?.(prompt);
       listener?.({ type: "agent_start" });
     }),
     abort: vi.fn(async () => undefined),
@@ -182,6 +184,29 @@ describe("PiSdkManager", () => {
     }
     expect(activeToolUpdates).toContainEqual([...PI_FULL_TOOL_NAMES]);
     expect(activeToolUpdates).toContainEqual([...PI_PLAN_TOOL_NAMES]);
+  });
+
+  it("passes ask mode through with ask instructions", async () => {
+    const prompts: string[] = [];
+    const { createSession } = createPiSessionFactory({
+      onPrompt: (prompt) => prompts.push(prompt),
+    });
+    const manager = new PiSdkManager({
+      stateDir: "C:/tmp/t3code-pi-test",
+      browserAutomation: makeBrowserStub(),
+      createSession,
+    });
+    const threadId = ThreadId.make("pi-ask-mode-thread");
+
+    await manager.startSession({
+      threadId,
+      cwd: "C:/tmp/t3code-pi-test",
+      runtimeMode: "full-access",
+    });
+    await manager.sendTurn({ threadId, input: "Why?", interactionMode: "ask" });
+
+    expect(prompts.at(-1)).toContain("You are in Ask mode.");
+    expect(prompts.at(-1)).toContain("Why?");
   });
 
   it("fails clearly when configured browser tools are missing from the active session", async () => {

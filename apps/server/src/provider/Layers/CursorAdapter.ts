@@ -82,6 +82,7 @@ const CURSOR_RESUME_VERSION = 1 as const;
 const ACP_PLAN_MODE_ALIASES = ["plan", "architect"];
 const ACP_IMPLEMENT_MODE_ALIASES = ["code", "agent", "default", "chat", "implement"];
 const ACP_APPROVAL_MODE_ALIASES = ["ask"];
+const ACP_ASK_MODE_ALIASES = ["ask", "chat"];
 
 function encodeJsonStringForDiagnostics(input: unknown): string | undefined {
   const result = encodeUnknownJsonStringExit(input);
@@ -208,7 +209,12 @@ function isPlanMode(mode: AcpSessionMode): boolean {
   return findModeByAliases([mode], ACP_PLAN_MODE_ALIASES) !== undefined;
 }
 
-function resolveRequestedModeId(input: {
+function currentNonPlanModeId(modeState: AcpSessionModeState): string | undefined {
+  const currentMode = modeState.availableModes.find((mode) => mode.id === modeState.currentModeId);
+  return !currentMode || !isPlanMode(currentMode) ? modeState.currentModeId : undefined;
+}
+
+export function resolveRequestedModeId(input: {
   readonly interactionMode: ProviderInteractionMode | undefined;
   readonly runtimeMode: RuntimeMode;
   readonly modeState: AcpSessionModeState | undefined;
@@ -220,6 +226,15 @@ function resolveRequestedModeId(input: {
 
   if (input.interactionMode === "plan") {
     return findModeByAliases(modeState.availableModes, ACP_PLAN_MODE_ALIASES)?.id;
+  }
+
+  if (input.interactionMode === "ask") {
+    return (
+      findModeByAliases(modeState.availableModes, ACP_ASK_MODE_ALIASES)?.id ??
+      findModeByAliases(modeState.availableModes, ACP_IMPLEMENT_MODE_ALIASES)?.id ??
+      modeState.availableModes.find((mode) => !isPlanMode(mode))?.id ??
+      currentNonPlanModeId(modeState)
+    );
   }
 
   if (input.runtimeMode === "approval-required") {

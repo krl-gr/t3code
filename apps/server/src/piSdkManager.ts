@@ -36,12 +36,14 @@ import {
   type ChatAttachment,
   type PiThinkingLevel,
   type ProviderApprovalDecision,
+  type ProviderInteractionMode,
   type ProviderRuntimeEvent,
   type ProviderSession,
   type ProviderTurnStartResult,
 } from "@t3tools/contracts";
 
 import { resolveAttachmentPath } from "./attachmentStore.ts";
+import { applyAskModePromptPrefix } from "./provider/AskModeInstructions.ts";
 import { createPiBrowserTools } from "./browser/PiBrowserTools.ts";
 import type { BrowserAutomationServiceShape } from "./browser/BrowserAutomationService.ts";
 import type {
@@ -108,7 +110,7 @@ interface Deferred<T> {
 interface PiPendingTurn {
   readonly turnId: TurnId;
   readonly started: Deferred<void>;
-  readonly interactionMode: "default" | "plan";
+  readonly interactionMode: ProviderInteractionMode;
   usage: PiUsageAggregate;
   lastAssistantText: string;
   lastStopReason: string | null;
@@ -333,13 +335,17 @@ function withTimeout<T>(input: {
 
 function normalizePiPromptInput(input: {
   readonly text: string;
-  readonly interactionMode?: "default" | "plan";
+  readonly interactionMode?: ProviderInteractionMode;
 }): string {
-  if (input.interactionMode !== "plan") {
-    return input.text;
+  if (input.interactionMode === "plan") {
+    return [PI_PLAN_MODE_PROMPT_PREFIX, "", input.text].join("\n");
   }
 
-  return [PI_PLAN_MODE_PROMPT_PREFIX, "", input.text].join("\n");
+  if (input.interactionMode === "ask") {
+    return applyAskModePromptPrefix(input.text);
+  }
+
+  return input.text;
 }
 
 async function createPiSessionWithSdk(input: PiSessionFactoryInput): Promise<PiCreatedSession> {
@@ -1165,7 +1171,7 @@ export class PiSdkManager extends EventEmitter<PiSdkManagerEvents> {
     readonly attachments?: ReadonlyArray<ChatAttachment>;
     readonly model?: string;
     readonly modelOptions?: PiModelOptions;
-    readonly interactionMode?: "default" | "plan";
+    readonly interactionMode?: ProviderInteractionMode;
   }): Promise<ProviderTurnStartResult> {
     const context = this.requireSession(input.threadId);
     if (context.currentTurn && !context.currentTurn.completed) {

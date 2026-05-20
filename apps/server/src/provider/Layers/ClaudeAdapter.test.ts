@@ -3087,6 +3087,36 @@ describe("ClaudeAdapterLive", () => {
     );
   });
 
+  it.effect("restores base permission mode and prefixes the prompt in ask mode", () => {
+    const harness = makeHarness();
+    return Effect.gen(function* () {
+      const adapter = yield* ClaudeAdapter;
+
+      const session = yield* adapter.startSession({
+        threadId: THREAD_ID,
+        provider: ProviderDriverKind.make("claudeAgent"),
+        runtimeMode: "full-access",
+      });
+      yield* adapter.sendTurn({
+        threadId: session.threadId,
+        input: "why is this failing?",
+        interactionMode: "ask",
+        attachments: [],
+      });
+
+      const promptText = yield* Effect.promise(() =>
+        readFirstPromptText(harness.getLastCreateQueryInput()),
+      );
+      assert.deepEqual(harness.query.setPermissionModeCalls, ["bypassPermissions"]);
+      assert.include(promptText ?? "", "You are in Ask mode.");
+      assert.include(promptText ?? "", "why is this failing?");
+      assert.notInclude(harness.query.setPermissionModeCalls, "plan");
+    }).pipe(
+      Effect.provideService(Random.Random, makeDeterministicRandomService()),
+      Effect.provide(harness.layer),
+    );
+  });
+
   it.effect("captures ExitPlanMode as a proposed plan and denies auto-exit", () => {
     const harness = makeHarness();
     return Effect.gen(function* () {

@@ -442,6 +442,34 @@ it.layer(OpenCodeAdapterTestLayer)("OpenCodeAdapterLive", (it) => {
     }).pipe(Effect.provide(adapterLayer));
   });
 
+  it.effect("does not route ask mode to the plan agent and prefixes the prompt", () =>
+    Effect.gen(function* () {
+      const adapter = yield* OpenCodeAdapter;
+      yield* adapter.startSession({
+        provider: ProviderDriverKind.make("opencode"),
+        threadId: asThreadId("thread-opencode-ask"),
+        runtimeMode: "full-access",
+      });
+
+      yield* adapter.sendTurn({
+        threadId: asThreadId("thread-opencode-ask"),
+        input: "Why is this failing?",
+        interactionMode: "ask",
+        modelSelection: {
+          instanceId: ProviderInstanceId.make("opencode"),
+          model: "anthropic/claude-sonnet-4-5",
+        },
+      });
+
+      const promptCall = runtimeMock.state.promptCalls.at(-1) as
+        | { agent?: string; parts?: Array<{ type: string; text?: string }> }
+        | undefined;
+      assert.notEqual(promptCall?.agent, "plan");
+      assert.match(promptCall?.parts?.[0]?.text ?? "", /You are in Ask mode\./);
+      assert.match(promptCall?.parts?.[0]?.text ?? "", /Why is this failing\?/);
+    }),
+  );
+
   it.effect("uses the bound custom instance id for fallback sendTurn model selection", () => {
     const instanceId = ProviderInstanceId.make("opencode_zen");
     const adapterLayer = Layer.effect(

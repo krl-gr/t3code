@@ -304,6 +304,14 @@ describe("parseStandaloneComposerSlashCommand", () => {
     expect(parseStandaloneComposerSlashCommand("/default")).toBe("default");
   });
 
+  it("parses standalone /build command as default mode", () => {
+    expect(parseStandaloneComposerSlashCommand("/build")).toBe("default");
+  });
+
+  it("parses standalone /ask command", () => {
+    expect(parseStandaloneComposerSlashCommand("/ask")).toBe("ask");
+  });
+
   it("ignores slash commands with extra message text", () => {
     expect(parseStandaloneComposerSlashCommand("/plan explain this")).toBeNull();
   });
