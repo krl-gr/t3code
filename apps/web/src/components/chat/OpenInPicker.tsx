@@ -4,9 +4,19 @@ import { isOpenFavoriteEditorShortcut, shortcutLabelForCommand } from "../../key
 import { usePreferredEditor } from "../../editorPreferences";
 import { ChevronDownIcon, FolderClosedIcon } from "lucide-react";
 import { Button } from "../ui/button";
+import { ContextActionMenuItem } from "../ContextActionMenuItem";
 import { Group, GroupSeparator } from "../ui/group";
-import { Menu, MenuItem, MenuPopup, MenuShortcut, MenuTrigger } from "../ui/menu";
+import {
+  Menu,
+  MenuGroup,
+  MenuGroupLabel,
+  MenuItem,
+  MenuPopup,
+  MenuShortcut,
+  MenuTrigger,
+} from "../ui/menu";
 import { CONTEXT_BAR_TEXT_TRIGGER_CLASS } from "../BranchToolbar.styles";
+import type { ContextQuickActionId } from "~/contextQuickActions";
 import {
   AntigravityIcon,
   CursorIcon,
@@ -155,11 +165,15 @@ export const OpenInPicker = memo(function OpenInPicker({
   availableEditors,
   openInCwd,
   presentation = "header",
+  pinnedContextActionIds,
+  onContextActionPinnedChange,
 }: {
   keybindings: ResolvedKeybindingsConfig;
   availableEditors: ReadonlyArray<EditorId>;
   openInCwd: string | null;
-  presentation?: "header" | "composer-bar";
+  presentation?: "header" | "composer-bar" | "composer-menu";
+  pinnedContextActionIds?: ReadonlySet<ContextQuickActionId>;
+  onContextActionPinnedChange?: (actionId: ContextQuickActionId, pinned: boolean) => void;
 }) {
   const [preferredEditor, setPreferredEditor] = usePreferredEditor(availableEditors);
   const options = useMemo(
@@ -212,6 +226,32 @@ export const OpenInPicker = memo(function OpenInPicker({
           {primaryOption ? `Open in ${primaryOption.label}` : "Open in editor"}
         </span>
       </Button>
+    );
+  }
+
+  if (presentation === "composer-menu") {
+    return (
+      <MenuGroup>
+        <MenuGroupLabel>Open project</MenuGroupLabel>
+        {options.length === 0 ? (
+          <MenuItem disabled>No installed editors found</MenuItem>
+        ) : (
+          options.map(({ label, Icon, value }) => (
+            <ContextActionMenuItem
+              key={value}
+              actionId="open.preferred"
+              checked={pinnedContextActionIds?.has("open.preferred") ?? false}
+              disabled={!openInCwd}
+              icon={<Icon aria-hidden="true" className="size-4" />}
+              shortcutLabel={value === preferredEditor ? openFavoriteEditorShortcutLabel : null}
+              onCheckedChange={onContextActionPinnedChange}
+              onSelect={() => openInEditor(value)}
+            >
+              {`Open in ${label}`}
+            </ContextActionMenuItem>
+          ))
+        )}
+      </MenuGroup>
     );
   }
 

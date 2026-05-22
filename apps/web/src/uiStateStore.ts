@@ -1,5 +1,10 @@
 import { Debouncer } from "@tanstack/react-pacer";
 import { create } from "zustand";
+import {
+  type ContextQuickActionId,
+  sanitizeContextQuickActionIds,
+  setContextQuickActionPinned as updateContextQuickActionPinned,
+} from "./contextQuickActions";
 
 export const PERSISTED_STATE_KEY = "t3code:ui-state:v1";
 const LEGACY_PERSISTED_STATE_KEYS = [
@@ -21,6 +26,7 @@ export interface PersistedUiState {
   projectOrderCwds?: string[];
   focusedProjectOrderCwds?: string[];
   defaultAdvertisedEndpointKey?: string | null;
+  contextQuickActionIds?: string[];
   threadChangedFilesExpandedById?: Record<string, Record<string, boolean>>;
   lastActiveThreadKeyByProjectKey?: Record<string, string>;
 }
@@ -41,7 +47,12 @@ export interface UiEndpointState {
   defaultAdvertisedEndpointKey: string | null;
 }
 
-export interface UiState extends UiProjectState, UiThreadState, UiEndpointState {}
+export interface UiContextBarState {
+  contextQuickActionIds: ContextQuickActionId[];
+}
+
+export interface UiState
+  extends UiProjectState, UiThreadState, UiEndpointState, UiContextBarState {}
 
 export interface SyncProjectInput {
   /** Physical project key (env + cwd). Used for manual sort order. */
@@ -64,6 +75,7 @@ const initialState: UiState = {
   threadChangedFilesExpandedById: {},
   lastActiveThreadKeyByProjectKey: {},
   defaultAdvertisedEndpointKey: null,
+  contextQuickActionIds: sanitizeContextQuickActionIds(undefined),
 };
 
 const persistedCollapsedProjectCwds = new Set<string>();
@@ -106,6 +118,7 @@ function readPersistedState(): UiState {
         parsed.defaultAdvertisedEndpointKey.length > 0
           ? parsed.defaultAdvertisedEndpointKey
           : null,
+      contextQuickActionIds: sanitizeContextQuickActionIds(parsed.contextQuickActionIds),
       threadChangedFilesExpandedById: sanitizePersistedThreadChangedFilesExpanded(
         parsed.threadChangedFilesExpandedById,
       ),
@@ -230,6 +243,7 @@ export function persistState(state: UiState): void {
         projectOrderCwds,
         focusedProjectOrderCwds,
         defaultAdvertisedEndpointKey: state.defaultAdvertisedEndpointKey,
+        contextQuickActionIds: state.contextQuickActionIds,
         threadChangedFilesExpandedById,
         lastActiveThreadKeyByProjectKey: state.lastActiveThreadKeyByProjectKey,
       } satisfies PersistedUiState),
@@ -684,6 +698,28 @@ export function setDefaultAdvertisedEndpointKey(state: UiState, key: string | nu
   };
 }
 
+export function setContextQuickActionPinned(
+  state: UiState,
+  actionId: ContextQuickActionId,
+  pinned: boolean,
+): UiState {
+  const contextQuickActionIds = updateContextQuickActionPinned(
+    state.contextQuickActionIds,
+    actionId,
+    pinned,
+  );
+  if (
+    contextQuickActionIds.length === state.contextQuickActionIds.length &&
+    contextQuickActionIds.every((id, index) => id === state.contextQuickActionIds[index])
+  ) {
+    return state;
+  }
+  return {
+    ...state,
+    contextQuickActionIds,
+  };
+}
+
 export function toggleProject(state: UiState, projectId: string): UiState {
   const expanded = state.projectExpandedById[projectId] ?? true;
   return {
@@ -791,6 +827,7 @@ interface UiStateStore extends UiState {
   clearThreadUi: (threadId: string) => void;
   setThreadChangedFilesExpanded: (threadId: string, turnId: string, expanded: boolean) => void;
   setDefaultAdvertisedEndpointKey: (key: string | null) => void;
+  setContextQuickActionPinned: (actionId: ContextQuickActionId, pinned: boolean) => void;
   toggleProject: (projectId: string) => void;
   setProjectExpanded: (projectId: string, expanded: boolean) => void;
   reorderProjects: (
@@ -815,6 +852,8 @@ export const useUiStateStore = create<UiStateStore>((set) => ({
     set((state) => setThreadChangedFilesExpanded(state, threadId, turnId, expanded)),
   setDefaultAdvertisedEndpointKey: (key) =>
     set((state) => setDefaultAdvertisedEndpointKey(state, key)),
+  setContextQuickActionPinned: (actionId, pinned) =>
+    set((state) => setContextQuickActionPinned(state, actionId, pinned)),
   toggleProject: (projectId) => set((state) => toggleProject(state, projectId)),
   setProjectExpanded: (projectId, expanded) =>
     set((state) => setProjectExpanded(state, projectId, expanded)),

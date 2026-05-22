@@ -7,14 +7,17 @@ import type {
   ThreadId,
 } from "@t3tools/contracts";
 import { CloudIcon, FolderGit2Icon, FolderGitIcon, FolderIcon, MonitorIcon } from "lucide-react";
-import { memo, useMemo } from "react";
+import { Fragment, memo, useCallback, useMemo, type ReactNode } from "react";
 
 import { useComposerDraftStore, type DraftId } from "../composerDraftStore";
+import type { ContextQuickActionId } from "../contextQuickActions";
 import { useIsMobile } from "../hooks/useMediaQuery";
 import { usePrimaryEnvironmentId } from "../environments/primary";
 import { useStore } from "../store";
 import { createProjectSelectorByRef, createThreadSelectorByRef } from "../storeSelectors";
+import { useUiStateStore } from "../uiStateStore";
 import GitActionsControl from "./GitActionsControl";
+import { ContextActionMenuItem } from "./ContextActionMenuItem";
 import ProjectScriptsControl, { type NewProjectScriptInput } from "./ProjectScriptsControl";
 import {
   type EnvMode,
@@ -84,6 +87,11 @@ interface BranchToolbarProps {
   availableEnvironments?: readonly EnvironmentOption[];
   onEnvironmentChange?: (environmentId: EnvironmentId) => void;
 }
+
+type ContextQuickActionNode = {
+  actionId: ContextQuickActionId;
+  node: ReactNode;
+};
 
 function ContextBarSeparator() {
   return <div aria-hidden="true" className={CONTEXT_BAR_SEPARATOR_CLASS} />;
@@ -308,8 +316,136 @@ export const BranchToolbar = memo(function BranchToolbar({
     activeThreadEnvironmentId: environmentId,
     primaryEnvironmentId,
   });
+  const contextQuickActionIds = useUiStateStore((store) => store.contextQuickActionIds);
+  const setContextQuickActionPinned = useUiStateStore((store) => store.setContextQuickActionPinned);
+  const pinnedContextActionIds = useMemo(
+    () => new Set(contextQuickActionIds),
+    [contextQuickActionIds],
+  );
+  const onContextActionPinnedChange = useCallback(
+    (actionId: ContextQuickActionId, pinned: boolean) => {
+      setContextQuickActionPinned(actionId, pinned);
+    },
+    [setContextQuickActionPinned],
+  );
 
   if (!hasActiveThread || !activeProject) return null;
+
+  const quickActionNodes = contextQuickActionIds.flatMap<ContextQuickActionNode>((actionId) => {
+    if (actionId === "git.quick") {
+      return [
+        {
+          actionId,
+          node: (
+            <GitActionsControl
+              presentation="composer-bar"
+              gitCwd={gitCwd}
+              activeThreadRef={threadRef}
+              {...(draftId ? { draftId } : {})}
+            />
+          ),
+        },
+      ];
+    }
+    if (actionId === "git.commit" || actionId === "git.push" || actionId === "git.pr") {
+      return [
+        {
+          actionId,
+          node: (
+            <GitActionsControl
+              presentation="composer-bar"
+              composerActionId={
+                actionId === "git.commit" ? "commit" : actionId === "git.push" ? "push" : "pr"
+              }
+              gitCwd={gitCwd}
+              activeThreadRef={threadRef}
+              {...(draftId ? { draftId } : {})}
+            />
+          ),
+        },
+      ];
+    }
+    if (actionId === "open.preferred") {
+      if (!showOpenInPicker) return [];
+      return [
+        {
+          actionId,
+          node: (
+            <OpenInPicker
+              presentation="composer-bar"
+              keybindings={keybindings}
+              availableEditors={availableEditors}
+              openInCwd={openInCwd}
+            />
+          ),
+        },
+      ];
+    }
+    if (actionId === "terminal.toggle") {
+      return [
+        {
+          actionId,
+          node: (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Toggle
+                    className={CONTEXT_BAR_ICON_TRIGGER_CLASS}
+                    pressed={terminalOpen}
+                    onPressedChange={onToggleTerminal}
+                    aria-label="Toggle terminal drawer"
+                    variant="outline"
+                    size="xs"
+                    disabled={!terminalAvailable}
+                  />
+                }
+              >
+                <ContextBarTerminalIcon className="size-4" />
+              </TooltipTrigger>
+              <TooltipPopup side="top">
+                {!terminalAvailable
+                  ? "Terminal is unavailable until this thread has an active project."
+                  : terminalToggleShortcutLabel
+                    ? `Toggle terminal drawer (${terminalToggleShortcutLabel})`
+                    : "Toggle terminal drawer"}
+              </TooltipPopup>
+            </Tooltip>
+          ),
+        },
+      ];
+    }
+    if (actionId === "diff.toggle") {
+      return [
+        {
+          actionId,
+          node: (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Toggle
+                    className={CONTEXT_BAR_ICON_TRIGGER_CLASS}
+                    pressed={diffOpen}
+                    onPressedChange={onToggleDiff}
+                    aria-label="Toggle diff panel"
+                    variant="outline"
+                    size="xs"
+                  />
+                }
+              >
+                <ContextBarDiffIcon className="size-4" />
+              </TooltipTrigger>
+              <TooltipPopup side="top">
+                {diffToggleShortcutLabel
+                  ? `Toggle diff panel (${diffToggleShortcutLabel})`
+                  : "Toggle diff panel"}
+              </TooltipPopup>
+            </Tooltip>
+          ),
+        },
+      ];
+    }
+    return [];
+  });
 
   return (
     <div
@@ -377,71 +513,13 @@ export const BranchToolbar = memo(function BranchToolbar({
       </div>
 
       <div className="flex shrink-0 items-center justify-end gap-0 text-[rgba(186,185,186,0.7)]">
-        <GitActionsControl
-          presentation="composer-bar"
-          gitCwd={gitCwd}
-          activeThreadRef={threadRef}
-          {...(draftId ? { draftId } : {})}
-        />
-        {showOpenInPicker ? (
-          <>
-            <ContextBarSeparator />
-            <OpenInPicker
-              presentation="composer-bar"
-              keybindings={keybindings}
-              availableEditors={availableEditors}
-              openInCwd={openInCwd}
-            />
-          </>
-        ) : null}
-        <ContextBarSeparator />
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Toggle
-                className={CONTEXT_BAR_ICON_TRIGGER_CLASS}
-                pressed={terminalOpen}
-                onPressedChange={onToggleTerminal}
-                aria-label="Toggle terminal drawer"
-                variant="outline"
-                size="xs"
-                disabled={!terminalAvailable}
-              />
-            }
-          >
-            <ContextBarTerminalIcon className="size-4" />
-          </TooltipTrigger>
-          <TooltipPopup side="top">
-            {!terminalAvailable
-              ? "Terminal is unavailable until this thread has an active project."
-              : terminalToggleShortcutLabel
-                ? `Toggle terminal drawer (${terminalToggleShortcutLabel})`
-                : "Toggle terminal drawer"}
-          </TooltipPopup>
-        </Tooltip>
-        <ContextBarSeparator />
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Toggle
-                className={CONTEXT_BAR_ICON_TRIGGER_CLASS}
-                pressed={diffOpen}
-                onPressedChange={onToggleDiff}
-                aria-label="Toggle diff panel"
-                variant="outline"
-                size="xs"
-              />
-            }
-          >
-            <ContextBarDiffIcon className="size-4" />
-          </TooltipTrigger>
-          <TooltipPopup side="top">
-            {diffToggleShortcutLabel
-              ? `Toggle diff panel (${diffToggleShortcutLabel})`
-              : "Toggle diff panel"}
-          </TooltipPopup>
-        </Tooltip>
-        <ContextBarSeparator />
+        {quickActionNodes.map((entry, index) => (
+          <Fragment key={entry.actionId}>
+            {index > 0 ? <ContextBarSeparator /> : null}
+            {entry.node}
+          </Fragment>
+        ))}
+        {quickActionNodes.length > 0 ? <ContextBarSeparator /> : null}
         <Menu>
           <MenuTrigger
             render={
@@ -455,7 +533,53 @@ export const BranchToolbar = memo(function BranchToolbar({
           >
             <ContextBarMoreIcon className="size-4" />
           </MenuTrigger>
-          <MenuPopup align="end" side="top" className="min-w-52">
+          <MenuPopup align="end" side="top" className="min-w-64">
+            <GitActionsControl
+              presentation="composer-menu"
+              gitCwd={gitCwd}
+              activeThreadRef={threadRef}
+              pinnedContextActionIds={pinnedContextActionIds}
+              onContextActionPinnedChange={onContextActionPinnedChange}
+              {...(draftId ? { draftId } : {})}
+            />
+            {showOpenInPicker ? (
+              <>
+                <OpenInPicker
+                  presentation="composer-menu"
+                  keybindings={keybindings}
+                  availableEditors={availableEditors}
+                  openInCwd={openInCwd}
+                  pinnedContextActionIds={pinnedContextActionIds}
+                  onContextActionPinnedChange={onContextActionPinnedChange}
+                />
+                <MenuSeparator />
+              </>
+            ) : null}
+            <MenuGroup>
+              <MenuGroupLabel>View</MenuGroupLabel>
+              <ContextActionMenuItem
+                actionId="terminal.toggle"
+                checked={pinnedContextActionIds.has("terminal.toggle")}
+                disabled={!terminalAvailable}
+                icon={<ContextBarTerminalIcon className="size-4" />}
+                shortcutLabel={terminalToggleShortcutLabel}
+                onCheckedChange={onContextActionPinnedChange}
+                onSelect={onToggleTerminal}
+              >
+                Terminal
+              </ContextActionMenuItem>
+              <ContextActionMenuItem
+                actionId="diff.toggle"
+                checked={pinnedContextActionIds.has("diff.toggle")}
+                icon={<ContextBarDiffIcon className="size-4" />}
+                shortcutLabel={diffToggleShortcutLabel}
+                onCheckedChange={onContextActionPinnedChange}
+                onSelect={onToggleDiff}
+              >
+                Diff
+              </ContextActionMenuItem>
+            </MenuGroup>
+            <MenuSeparator />
             {activeProjectScripts ? (
               <ProjectScriptsControl
                 presentation="menu"

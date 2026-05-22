@@ -18,6 +18,7 @@ import {
   syncThreads,
   type UiState,
 } from "./uiStateStore";
+import { DEFAULT_CONTEXT_QUICK_ACTION_IDS } from "./contextQuickActions";
 
 function makeUiState(overrides: Partial<UiState> = {}): UiState {
   return {
@@ -28,6 +29,7 @@ function makeUiState(overrides: Partial<UiState> = {}): UiState {
     threadChangedFilesExpandedById: {},
     lastActiveThreadKeyByProjectKey: {},
     defaultAdvertisedEndpointKey: null,
+    contextQuickActionIds: [...DEFAULT_CONTEXT_QUICK_ACTION_IDS],
     ...overrides,
   };
 }
