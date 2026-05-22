@@ -2,6 +2,7 @@ import { Globe2Icon, RotateCcwIcon, SquareIcon, Trash2Icon } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { BrowserProfileSnapshot } from "@t3tools/contracts";
 
+import { APP_BASE_NAME } from "../../branding";
 import { useSettings, useUpdateSettings } from "../../hooks/useSettings";
 import { ensureLocalApi } from "../../localApi";
 import { Button } from "../ui/button";
@@ -71,7 +72,7 @@ export function BrowserSettingsPanel() {
       <SettingsSection title="Browser" icon={<Globe2Icon className="size-3.5" />}>
         <SettingsRow
           title="Profile"
-          description="T3 Code uses an isolated persistent browser profile for manual logins."
+          description={`${APP_BASE_NAME} uses an isolated persistent browser profile for manual logins.`}
           status={
             <span className="break-all">
               {status}

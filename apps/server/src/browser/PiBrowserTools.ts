@@ -1,5 +1,6 @@
 import { Type } from "@sinclair/typebox";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
+import { PRODUCT_BASE_NAME } from "@t3tools/shared/branding";
 
 import type {
   BrowserAutomationServiceShape,
@@ -51,7 +52,7 @@ function toToolResult(result: BrowserToolResult) {
 }
 
 const BROWSER_PROMPT_GUIDELINES = [
-  "Browser tools use an isolated persistent T3 browser profile.",
+  `Browser tools use an isolated persistent ${PRODUCT_BASE_NAME} browser profile.`,
   "Never request or expose cookies, tokens, localStorage, passwords, payment details, or private credentials.",
   "Browser actions are read/search/navigation only; mutating social/account actions are blocked.",
 ] as const;
@@ -61,9 +62,8 @@ export function createPiBrowserTools(browser: BrowserAutomationServiceShape): To
     {
       name: "browser_navigate",
       label: "Open browser page",
-      description: "Open an allowlisted URL in the persistent T3 browser profile.",
-      promptSnippet:
-        "browser_navigate - open an allowlisted URL in the persistent T3 browser profile",
+      description: `Open an allowlisted URL in the persistent ${PRODUCT_BASE_NAME} browser profile.`,
+      promptSnippet: `browser_navigate - open an allowlisted URL in the persistent ${PRODUCT_BASE_NAME} browser profile`,
       promptGuidelines: [...BROWSER_PROMPT_GUIDELINES],
       parameters: Type.Object({
         url: Type.String({ minLength: 1 }),

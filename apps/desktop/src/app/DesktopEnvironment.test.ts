@@ -123,7 +123,7 @@ describe("DesktopEnvironment", () => {
         },
       );
 
-      assert.equal(environment.displayName, "T3 Code (Local)");
+      assert.equal(environment.displayName, "Up.computer (Local)");
       assert.equal(environment.branding.stageLabel, "Local");
       assert.equal(normalizePath(environment.stateDir), "/tmp/t3/local");
       assert.equal(environment.userDataDirName, "t3code-local");

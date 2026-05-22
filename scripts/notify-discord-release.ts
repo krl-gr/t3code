@@ -16,6 +16,7 @@ import {
   HttpClientRequest,
   HttpClientResponse,
 } from "effect/unstable/http";
+import { PRODUCT_BASE_NAME } from "@t3tools/shared/branding";
 
 export type DiscordReleaseTarget = "prerelease" | "latest";
 
@@ -97,8 +98,8 @@ export const buildDiscordReleaseAnnouncement = (
       url: options.releaseUrl.href,
       description:
         options.target === "prerelease"
-          ? "A new T3 Code prerelease is available for nightly testers."
-          : "A new T3 Code latest release is available.",
+          ? `A new ${PRODUCT_BASE_NAME} prerelease is available for nightly testers.`
+          : `A new ${PRODUCT_BASE_NAME} latest release is available.`,
       color: targetColors[options.target],
       fields: [
         {
@@ -224,7 +225,7 @@ export const notifyDiscordReleaseCommand = Command.make(
       yield* postDiscordWebhook(webhookUrl, payload);
       yield* Effect.logInfo("discord release announcement completed");
     }),
-).pipe(Command.withDescription("Post a T3 Code release announcement to Discord."));
+).pipe(Command.withDescription(`Post a ${PRODUCT_BASE_NAME} release announcement to Discord.`));
 
 if (import.meta.main) {
   Command.run(notifyDiscordReleaseCommand, { version: "0.0.0" }).pipe(

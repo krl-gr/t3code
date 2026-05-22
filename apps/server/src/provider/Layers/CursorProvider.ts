@@ -21,6 +21,7 @@ import * as Path from "effect/Path";
 import * as Result from "effect/Result";
 import { HttpClient } from "effect/unstable/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
+import { PRODUCT_BASE_NAME } from "@t3tools/shared/branding";
 import {
   createModelCapabilities,
   getProviderOptionBooleanSelectionValue,
@@ -81,7 +82,7 @@ export function buildInitialCursorProviderSnapshot(
           version: null,
           status: "warning",
           auth: { status: "unknown" },
-          message: "Cursor is disabled in T3 Code settings.",
+          message: `Cursor is disabled in ${PRODUCT_BASE_NAME} settings.`,
         },
       });
     }
@@ -1108,7 +1109,7 @@ export const checkCursorProviderStatus = Effect.fn("checkCursorProviderStatus")(
         version: null,
         status: "warning",
         auth: { status: "unknown" },
-        message: "Cursor is disabled in T3 Code settings.",
+        message: `Cursor is disabled in ${PRODUCT_BASE_NAME} settings.`,
       },
     });
   }

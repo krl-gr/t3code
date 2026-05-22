@@ -22,6 +22,7 @@ import type {
 } from "@t3tools/contracts";
 import { ServerSettingsError } from "@t3tools/contracts";
 
+import { PRODUCT_BASE_NAME, PRODUCT_DESKTOP_CLIENT_TITLE } from "@t3tools/shared/branding";
 import { createModelCapabilities } from "@t3tools/shared/model";
 import {
   AUTH_PROBE_TIMEOUT_MS,
@@ -239,7 +240,7 @@ export function buildCodexInitializeParams(): CodexSchema.V1InitializeParams {
   return {
     clientInfo: {
       name: "t3code_desktop",
-      title: "T3 Code Desktop",
+      title: PRODUCT_DESKTOP_CLIENT_TITLE,
       version: packageJson.version,
     },
     capabilities: {
@@ -278,7 +279,7 @@ const probeCodexAppServerProvider = Effect.fn("probeCodexAppServerProvider")(fun
   const initialize = yield* client.request("initialize", {
     clientInfo: {
       name: "t3code_desktop",
-      title: "T3 Code Desktop",
+      title: PRODUCT_DESKTOP_CLIENT_TITLE,
       version: "0.1.0",
     },
     capabilities: {
@@ -349,7 +350,7 @@ const makePendingCodexProvider = (
           version: null,
           status: "warning",
           auth: { status: "unknown" },
-          message: "Codex is disabled in T3 Code settings.",
+          message: `Codex is disabled in ${PRODUCT_BASE_NAME} settings.`,
         },
       });
     }
@@ -433,7 +434,7 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
         version: null,
         status: "warning",
         auth: { status: "unknown" },
-        message: "Codex is disabled in T3 Code settings.",
+        message: `Codex is disabled in ${PRODUCT_BASE_NAME} settings.`,
       },
     });
   }

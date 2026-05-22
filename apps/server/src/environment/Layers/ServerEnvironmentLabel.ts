@@ -3,6 +3,7 @@ import * as OS from "node:os";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
+import { PRODUCT_BASE_NAME } from "@t3tools/shared/branding";
 
 import { ProcessRunner } from "../../processRunner.ts";
 
@@ -106,5 +107,5 @@ export const resolveServerEnvironmentLabel = Effect.fn("resolveServerEnvironment
     return hostname;
   }
 
-  return normalizeLabel(input.cwdBaseName) ?? "T3 environment";
+  return normalizeLabel(input.cwdBaseName) ?? `${PRODUCT_BASE_NAME} environment`;
 });

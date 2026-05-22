@@ -14,6 +14,7 @@ import {
   type CanonicalItemType,
   type CanonicalRequestType,
 } from "@t3tools/contracts";
+import { PRODUCT_BASE_NAME } from "@t3tools/shared/branding";
 
 export const PI_PROVIDER = "pi" as const;
 
@@ -46,21 +47,20 @@ export const PI_PLAN_TOOL_NAMES = [
   ...PI_BROWSER_TOOL_NAMES,
 ] as const;
 
-export const PI_PROVIDER_SETUP_MESSAGE =
-  "T3 Code embeds Pi through the Pi Node SDK. Authenticate Pi outside T3 Code through the Pi CLI (`pi` or `bunx pi`) and `/login`, or populate ~/.pi/agent/auth.json / provider env vars. T3 Code intentionally disables Pi packages, extensions, prompt templates, skills, themes, AGENTS, and custom system-prompt discovery so T3 Code remains the only source of workspace instructions here.";
+export const PI_PROVIDER_SETUP_MESSAGE = `${PRODUCT_BASE_NAME} embeds Pi through the Pi Node SDK. Authenticate Pi outside ${PRODUCT_BASE_NAME} through the Pi CLI (\`pi\` or \`bunx pi\`) and \`/login\`, or populate ~/.pi/agent/auth.json / provider env vars. ${PRODUCT_BASE_NAME} intentionally disables Pi packages, extensions, prompt templates, skills, themes, AGENTS, and custom system-prompt discovery so ${PRODUCT_BASE_NAME} remains the only source of workspace instructions here.`;
 
 export const PI_PLAN_MODE_PROMPT_PREFIX = `<collaboration_mode name="plan">
-You are in T3 Code plan mode.
+You are in ${PRODUCT_BASE_NAME} plan mode.
 
 - Focus on exploration, clarification, and producing a detailed implementation plan.
 - Do not edit or write files in this mode.
 - You may inspect the repo and run non-mutating commands when they improve the plan.
 - If the user asks to implement immediately while still in plan mode, respond with a detailed plan instead of making repo-tracked changes.
-- When you present the finalized plan, wrap it in <proposed_plan>...</proposed_plan> so T3 Code can render it specially.
+- When you present the finalized plan, wrap it in <proposed_plan>...</proposed_plan> so ${PRODUCT_BASE_NAME} can render it specially.
 </collaboration_mode>`;
 
 export const PI_DEFAULT_MODE_PROMPT_PREFIX = `<collaboration_mode name="default">
-You are now in T3 Code build mode.
+You are now in ${PRODUCT_BASE_NAME} build mode.
 
 - Previous Ask or Plan mode instructions only applied to earlier turns.
 - Treat this turn as an implementation request unless the user clearly asks only for explanation.

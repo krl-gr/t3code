@@ -11,6 +11,7 @@ import { chromium } from "playwright-core";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import { PRODUCT_BASE_NAME } from "@t3tools/shared/branding";
 
 import { ServerConfig, type ServerConfigShape } from "../config.ts";
 import {
@@ -285,7 +286,7 @@ async function resolveInstalledBrowserExecutable(): Promise<BrowserExecutableCan
   }
 
   throw new Error(
-    `Unable to find Chrome or Edge for T3 browser automation. Checked: ${candidates
+    `Unable to find Chrome or Edge for ${PRODUCT_BASE_NAME} browser automation. Checked: ${candidates
       .map((candidate) => candidate.executablePath)
       .join(", ")}`,
   );
@@ -326,10 +327,10 @@ async function probeCdpEndpoint(port: number): Promise<CdpEndpointProbeResult> {
 
 function processExitedBeforeCdpError(port: number, state: BrowserProcessExitState): Error {
   return new Error(
-    `T3 browser process exited before exposing CDP on ${cdpVersionEndpoint(port)} ` +
+    `${PRODUCT_BASE_NAME} browser process exited before exposing CDP on ${cdpVersionEndpoint(port)} ` +
       `(exitCode=${state.exitCode ?? "null"}, signal=${state.signalCode ?? "null"}). ` +
-      "The T3 browser profile may already be in use by another Chrome process. " +
-      "Close the existing T3 browser window or use Settings > Browser > Close browser, then retry.",
+      `The ${PRODUCT_BASE_NAME} browser profile may already be in use by another Chrome process. ` +
+      `Close the existing ${PRODUCT_BASE_NAME} browser window or use Settings > Browser > Close browser, then retry.`,
   );
 }
 
@@ -630,7 +631,7 @@ export function createBrowserAutomationService(
 
     const currentContext = context;
     if (!currentContext) {
-      throw new Error("T3 browser did not expose a usable browser context.");
+      throw new Error(`${PRODUCT_BASE_NAME} browser did not expose a usable browser context.`);
     }
 
     activePage =

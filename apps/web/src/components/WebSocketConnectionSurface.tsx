@@ -12,6 +12,7 @@ import {
 } from "../rpc/wsConnectionState";
 import { stackedThreadToast, toastManager } from "./ui/toast";
 import { getPrimaryEnvironmentConnection } from "../environments/runtime";
+import { APP_BASE_NAME } from "../branding";
 
 const FORCED_WS_RECONNECT_DEBOUNCE_MS = 5_000;
 type WsAutoReconnectTrigger = "focus" | "online";
@@ -54,7 +55,7 @@ function describeExhaustedToast(): string {
 }
 
 function getConnectionDisplayName(status: WsConnectionStatus): string {
-  return status.connectionLabel?.trim() || "T3 Server";
+  return status.connectionLabel?.trim() || `${APP_BASE_NAME} Server`;
 }
 
 function buildReconnectTitle(status: WsConnectionStatus): string {

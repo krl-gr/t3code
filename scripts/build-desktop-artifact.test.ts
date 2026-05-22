@@ -25,9 +25,9 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
   });
 
   it("switches desktop packaging product names to nightly for nightly builds", () => {
-    assert.equal(resolveDesktopProductName("0.0.17"), "T3 Code (Alpha)");
-    assert.equal(resolveDesktopProductName("0.0.17-local"), "T3 Code (Local)");
-    assert.equal(resolveDesktopProductName("0.0.17-nightly.20260413.42"), "T3 Code (Nightly)");
+    assert.equal(resolveDesktopProductName("0.0.17"), "Up.computer (Alpha)");
+    assert.equal(resolveDesktopProductName("0.0.17-local"), "Up.computer (Local)");
+    assert.equal(resolveDesktopProductName("0.0.17-nightly.20260413.42"), "Up.computer (Nightly)");
   });
 
   it("separates local desktop package identity from release builds", () => {
@@ -35,10 +35,10 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
     assert.equal(resolveDesktopBuildVersion("0.0.17", "local"), "0.0.17-local");
     assert.equal(resolveDesktopAppId("0.0.17"), "com.t3tools.t3code");
     assert.equal(resolveDesktopAppId("0.0.17-local"), "com.t3tools.t3code.local");
-    assert.equal(resolveDesktopArtifactName("0.0.17"), "T3-Code-${version}-${arch}.${ext}");
+    assert.equal(resolveDesktopArtifactName("0.0.17"), "Up.computer-${version}-${arch}.${ext}");
     assert.equal(
       resolveDesktopArtifactName("0.0.17-local"),
-      "T3-Code-Local-${version}-${arch}.${ext}",
+      "Up.computer-Local-${version}-${arch}.${ext}",
     );
   });
 

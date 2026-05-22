@@ -19,6 +19,7 @@ import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import { HttpClient } from "effect/unstable/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
+import { PRODUCT_BASE_NAME } from "@t3tools/shared/branding";
 
 import { ProviderRegistry } from "./Services/ProviderRegistry.ts";
 import { makeProviderMaintenanceCommandCoordinator } from "./providerMaintenanceCommandCoordinator.ts";
@@ -359,9 +360,9 @@ export const make = Effect.fn("ProviderMaintenanceRunner.make")(function* () {
                 startedAt,
                 finishedAt,
                 message: couldNotVerify
-                  ? "Update command completed, but T3 Code could not verify the provider version."
+                  ? `Update command completed, but ${PRODUCT_BASE_NAME} could not verify the provider version.`
                   : stillOutdated
-                    ? "Update command completed, but T3 Code still detects an outdated provider version."
+                    ? `Update command completed, but ${PRODUCT_BASE_NAME} still detects an outdated provider version.`
                     : "Provider updated.",
                 output: commandOutput(result),
               }),

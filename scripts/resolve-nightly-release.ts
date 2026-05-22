@@ -10,6 +10,7 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import { Command, Flag } from "effect/unstable/cli";
+import { PRODUCT_BASE_NAME } from "@t3tools/shared/branding";
 
 interface NightlyReleaseMetadata {
   readonly baseVersion: string;
@@ -61,7 +62,7 @@ export const resolveNightlyReleaseMetadata = (
     baseVersion,
     version,
     tag: `v${version}`,
-    name: `T3 Code Nightly ${version} (${shortSha})`,
+    name: `${PRODUCT_BASE_NAME} Nightly ${version} (${shortSha})`,
     shortSha,
   };
 };

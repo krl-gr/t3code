@@ -234,7 +234,7 @@ describe("PiSdkManager", () => {
     });
 
     expect(prompts.at(0)).toContain("You are in Ask mode.");
-    expect(prompts.at(1)).toContain("You are now in T3 Code build mode.");
+    expect(prompts.at(1)).toContain("You are now in Up.computer build mode.");
     expect(prompts.at(1)).toContain(
       "Previous Ask or Plan mode instructions only applied to earlier turns.",
     );

@@ -12,6 +12,7 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Result from "effect/Result";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
+import { PRODUCT_BASE_NAME } from "@t3tools/shared/branding";
 import {
   createModelCapabilities,
   getModelSelectionStringOptionValue,
@@ -544,7 +545,7 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
         version: null,
         status: "warning",
         auth: { status: "unknown" },
-        message: "Claude is disabled in T3 Code settings.",
+        message: `Claude is disabled in ${PRODUCT_BASE_NAME} settings.`,
       },
     });
   }
@@ -693,7 +694,7 @@ export const makePendingClaudeProvider = (
           version: null,
           status: "warning",
           auth: { status: "unknown" },
-          message: "Claude is disabled in T3 Code settings.",
+          message: `Claude is disabled in ${PRODUCT_BASE_NAME} settings.`,
         },
       });
     }

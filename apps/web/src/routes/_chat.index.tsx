@@ -6,7 +6,7 @@ import { Button } from "../components/ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "../components/ui/empty";
 import { SidebarInset, SidebarTrigger } from "../components/ui/sidebar";
 import { useSavedEnvironmentRegistryStore } from "../environments/runtime";
-import { APP_DISPLAY_NAME } from "~/branding";
+import { APP_BASE_NAME, APP_DISPLAY_NAME } from "~/branding";
 
 function ChatIndexRouteView() {
   const { authGateState } = Route.useRouteContext();
@@ -48,7 +48,7 @@ function HostedStaticOnboardingState() {
                 Connect an environment to get started
               </EmptyTitle>
               <EmptyDescription className="mt-2 text-sm leading-relaxed text-muted-foreground/78">
-                Open a pairing link from your T3 Code desktop app or add a reachable backend
+                Open a pairing link from your {APP_BASE_NAME} desktop app or add a reachable backend
                 manually. Your saved environments stay in this browser.
               </EmptyDescription>
               <div className="mt-6 flex justify-center">

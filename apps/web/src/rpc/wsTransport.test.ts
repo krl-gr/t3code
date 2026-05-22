@@ -222,7 +222,7 @@ describe("WsTransport", () => {
         closeCode: 1006,
         closeReason: "server unavailable",
         hasConnected: false,
-        lastError: "Unable to connect to the T3 server WebSocket.",
+        lastError: "Unable to connect to the Up.computer server WebSocket.",
         phase: "disconnected",
       });
     });

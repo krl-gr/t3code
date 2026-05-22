@@ -8,6 +8,7 @@ import { BRAND_ASSET_PATHS } from "./lib/brand-assets.ts";
 import { getDefaultBuildArch } from "./lib/build-target-arch.ts";
 import { resolveCatalogDependencies } from "./lib/resolve-catalog.ts";
 
+import { PRODUCT_BASE_NAME } from "@t3tools/shared/branding";
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Config from "effect/Config";
@@ -588,12 +589,12 @@ export function resolveMockUpdateServerUrl(mockUpdateServerPort: number | undefi
 
 export function resolveDesktopProductName(version: string): string {
   if (isLocalDesktopVersion(version)) {
-    return "T3 Code (Local)";
+    return `${PRODUCT_BASE_NAME} (Local)`;
   }
 
   return resolveDesktopUpdateChannel(version) === "nightly"
-    ? "T3 Code (Nightly)"
-    : (desktopPackageJson.productName ?? "T3 Code");
+    ? `${PRODUCT_BASE_NAME} (Nightly)`
+    : (desktopPackageJson.productName ?? PRODUCT_BASE_NAME);
 }
 
 export function resolveDesktopAppId(version: string): string {
@@ -602,8 +603,8 @@ export function resolveDesktopAppId(version: string): string {
 
 export function resolveDesktopArtifactName(version: string): string {
   return isLocalDesktopVersion(version)
-    ? "T3-Code-Local-${version}-${arch}.${ext}"
-    : "T3-Code-${version}-${arch}.${ext}";
+    ? `${PRODUCT_BASE_NAME}-Local-\${version}-\${arch}.\${ext}`
+    : `${PRODUCT_BASE_NAME}-\${version}-\${arch}.\${ext}`;
 }
 
 const createBuildConfig = Effect.fn("createBuildConfig")(function* (
@@ -836,7 +837,7 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
     buildVersion: appVersion,
     t3codeCommitHash: commitHash,
     private: true,
-    description: "T3 Code desktop build",
+    description: `${PRODUCT_BASE_NAME} desktop build`,
     author: "T3 Tools",
     main: "apps/desktop/dist-electron/main.cjs",
     build: yield* createBuildConfig(
@@ -999,7 +1000,7 @@ const buildDesktopArtifactCli = Command.make("build-desktop-artifact", {
     Flag.optional,
   ),
 }).pipe(
-  Command.withDescription("Build a desktop artifact for T3 Code."),
+  Command.withDescription(`Build a desktop artifact for ${PRODUCT_BASE_NAME}.`),
   Command.withHandler((input) => Effect.flatMap(resolveBuildOptions(input), buildDesktopArtifact)),
 );
 

@@ -41,6 +41,7 @@ import {
   type ProviderSession,
   type ProviderTurnStartResult,
 } from "@t3tools/contracts";
+import { PRODUCT_BASE_NAME } from "@t3tools/shared/branding";
 
 import { resolveAttachmentPath } from "./attachmentStore.ts";
 import { applyAskModePromptPrefix } from "./provider/AskModeInstructions.ts";
@@ -1150,7 +1151,7 @@ export class PiSdkManager extends EventEmitter<PiSdkManagerEvents> {
       this.emitSessionStarted(context);
       if (previousContext) {
         await this.disposeContext(previousContext, {
-          reason: "Pi session replaced by a newer T3 Code session.",
+          reason: `Pi session replaced by a newer ${PRODUCT_BASE_NAME} session.`,
           emitExit: false,
         });
       }
@@ -1300,7 +1301,9 @@ export class PiSdkManager extends EventEmitter<PiSdkManagerEvents> {
     _requestId?: ApprovalRequestId,
     _answers?: unknown,
   ): Promise<void> {
-    throw new Error("Pi user-input requests are not supported by this T3 Code integration.");
+    throw new Error(
+      `Pi user-input requests are not supported by this ${PRODUCT_BASE_NAME} integration.`,
+    );
   }
 
   async stopSession(threadId: ThreadId): Promise<void> {

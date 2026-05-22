@@ -396,7 +396,7 @@ describe("BrowserAutomationService", () => {
     };
 
     await expect(waitForCdpEndpointForTests(port, 50, processHandle)).rejects.toThrow(
-      `T3 browser process exited before exposing CDP on http://127.0.0.1:${port}/json/version`,
+      `Up.computer browser process exited before exposing CDP on http://127.0.0.1:${port}/json/version`,
     );
   });
 });
