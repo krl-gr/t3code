@@ -41,6 +41,8 @@ export function buildLocalDraftThread(
     interactionMode: draftThread.interactionMode,
     session: null,
     messages: [],
+    contextBindings: [],
+    contextBindingCount: 0,
     error,
     createdAt: draftThread.createdAt,
     archivedAt: null,

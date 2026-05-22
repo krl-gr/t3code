@@ -2,6 +2,7 @@ import type {
   EnvironmentId,
   ModelSelection,
   OrchestrationLatestTurn,
+  ThreadContextBinding,
   OrchestrationProposedPlanId,
   RepositoryIdentity,
   OrchestrationSessionStatus,
@@ -105,6 +106,8 @@ export interface Thread {
   session: ThreadSession | null;
   messages: ChatMessage[];
   proposedPlans: ProposedPlan[];
+  contextBindings?: ThreadContextBinding[];
+  contextBindingCount?: number;
   error: string | null;
   createdAt: string;
   archivedAt: string | null;
@@ -132,6 +135,7 @@ export interface ThreadShell {
   updatedAt?: string | undefined;
   branch: string | null;
   worktreePath: string | null;
+  contextBindingCount?: number;
 }
 
 export interface ThreadTurnState {
@@ -156,6 +160,7 @@ export interface SidebarThreadSummary {
   hasPendingApprovals: boolean;
   hasPendingUserInput: boolean;
   hasActionableProposedPlan: boolean;
+  contextBindingCount?: number;
 }
 
 export interface ThreadSession {

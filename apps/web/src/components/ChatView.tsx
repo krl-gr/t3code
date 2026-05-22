@@ -130,7 +130,7 @@ import {
   useSavedEnvironmentRegistryStore,
   useSavedEnvironmentRuntimeStore,
 } from "../environments/runtime";
-import { buildDraftThreadRouteParams } from "../threadRoutes";
+import { buildDraftThreadRouteParams, buildThreadRouteParams } from "../threadRoutes";
 import {
   type ComposerImageAttachment,
   type DraftThreadEnvMode,
@@ -3520,6 +3520,71 @@ export default function ChatView(props: ChatViewProps) {
     }
     void onRevertToTurnCountRef.current(targetTurnCount);
   }, []);
+  const onForkAssistantMessage = useCallback(
+    (sourceMessageId: MessageId) => {
+      if (!activeThread || !activeProject || !isServerThread) {
+        toastManager.add({
+          type: "warning",
+          title: "Create the chat first",
+          description: "Forking is available after the thread exists.",
+        });
+        return;
+      }
+
+      const api = readEnvironmentApi(activeThread.environmentId);
+      if (!api) {
+        toastManager.add({
+          type: "error",
+          title: "Environment unavailable",
+          description: "Reconnect before forking this chat.",
+        });
+        return;
+      }
+
+      const nextThreadId = newThreadId();
+      const nextThreadRef = scopeThreadRef(activeThread.environmentId, nextThreadId);
+      void (async () => {
+        try {
+          await api.orchestration.dispatchCommand({
+            type: "thread.context-fork.create",
+            commandId: newCommandId(),
+            threadId: nextThreadId,
+            projectId: activeProject.id,
+            title: truncate(`Fork: ${activeThread.title}`),
+            modelSelection: activeThread.modelSelection,
+            runtimeMode,
+            interactionMode,
+            branch: activeThreadBranch,
+            worktreePath: activeThread.worktreePath,
+            sourceThreadId: activeThread.id,
+            sourceMessageId,
+            createdAt: new Date().toISOString(),
+          });
+          await navigate({
+            to: "/$environmentId/$threadId",
+            params: buildThreadRouteParams(nextThreadRef),
+          });
+        } catch (error) {
+          toastManager.add(
+            stackedThreadToast({
+              type: "error",
+              title: "Failed to fork chat",
+              description: error instanceof Error ? error.message : "An error occurred.",
+            }),
+          );
+        }
+      })();
+    },
+    [
+      activeProject,
+      activeThread,
+      activeThreadBranch,
+      interactionMode,
+      isServerThread,
+      navigate,
+      runtimeMode,
+    ],
+  );
 
   // Empty state: no active thread
   if (!activeThread) {
@@ -3577,6 +3642,7 @@ export default function ChatView(props: ChatViewProps) {
               onOpenTurnDiff={onOpenTurnDiff}
               revertTurnCountByUserMessageId={revertTurnCountByUserMessageId}
               onRevertUserMessage={onRevertUserMessage}
+              onForkAssistantMessage={onForkAssistantMessage}
               isRevertingCheckpoint={isRevertingCheckpoint}
               onImageExpand={onExpandTimelineImage}
               markdownCwd={gitCwd ?? undefined}

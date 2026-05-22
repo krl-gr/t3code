@@ -4,9 +4,11 @@ import {
   DEFAULT_PROVIDER_INTERACTION_MODE,
   MessageId,
   ProjectId,
+  ThreadContextBindingId,
   ThreadId,
   TurnId,
   type OrchestrationEvent,
+  type OrchestrationReadModel,
   ProviderInstanceId,
 } from "@t3tools/contracts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -227,6 +229,158 @@ describe("OrchestrationEngine", () => {
 
     expect(result.sequence).toBe(8);
     expect(fullSnapshotReadCount).toBe(0);
+
+    await runtime.dispose();
+  });
+
+  it("hydrates source thread detail for snapshot context commands without keeping all messages in the command read model", async () => {
+    let nextSequence = 20;
+    const appendedEvents: OrchestrationEvent[] = [];
+    const eventStore: OrchestrationEventStoreShape = {
+      append: (event) =>
+        Effect.sync(() => {
+          const savedEvent = {
+            ...event,
+            sequence: nextSequence,
+          } as OrchestrationEvent;
+          nextSequence += 1;
+          appendedEvents.push(savedEvent);
+          return savedEvent;
+        }),
+      readFromSequence: () => Stream.empty,
+      readAll: () => Stream.empty,
+    };
+
+    const project = {
+      id: asProjectId("project-context"),
+      title: "Context Project",
+      workspaceRoot: "/tmp/project-context",
+      defaultModelSelection: {
+        instanceId: ProviderInstanceId.make("codex"),
+        model: "gpt-5-codex",
+      },
+      scripts: [],
+      createdAt: "2026-03-04T00:00:00.000Z",
+      updatedAt: "2026-03-04T00:00:00.000Z",
+      deletedAt: null,
+    };
+    const targetThread: OrchestrationReadModel["threads"][number] = {
+      id: ThreadId.make("thread-target"),
+      projectId: project.id,
+      title: "Target",
+      modelSelection: project.defaultModelSelection,
+      interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+      runtimeMode: "full-access",
+      branch: null,
+      worktreePath: null,
+      latestTurn: null,
+      createdAt: "2026-03-04T00:00:01.000Z",
+      updatedAt: "2026-03-04T00:00:01.000Z",
+      archivedAt: null,
+      deletedAt: null,
+      messages: [],
+      proposedPlans: [],
+      contextBindings: [],
+      activities: [],
+      checkpoints: [],
+      session: null,
+    };
+    const sourceThreadLight: OrchestrationReadModel["threads"][number] = {
+      ...targetThread,
+      id: ThreadId.make("thread-source"),
+      title: "Source",
+      createdAt: "2026-03-04T00:00:02.000Z",
+      updatedAt: "2026-03-04T00:00:02.000Z",
+    };
+    const sourceThreadDetail: OrchestrationReadModel["threads"][number] = {
+      ...sourceThreadLight,
+      messages: [
+        {
+          id: MessageId.make("source-message-1"),
+          role: "user",
+          text: "historical source prompt",
+          turnId: null,
+          streaming: false,
+          createdAt: "2026-03-04T00:00:03.000Z",
+          updatedAt: "2026-03-04T00:00:03.000Z",
+        },
+      ],
+    };
+    const commandReadModel: OrchestrationReadModel = {
+      snapshotSequence: 19,
+      updatedAt: "2026-03-04T00:00:03.000Z",
+      projects: [project],
+      threads: [targetThread, sourceThreadLight],
+    };
+
+    const layer = OrchestrationEngineLive.pipe(
+      Layer.provide(
+        Layer.succeed(ProjectionSnapshotQuery, {
+          getCommandReadModel: () => Effect.succeed(commandReadModel),
+          getSnapshot: () => Effect.succeed(commandReadModel),
+          getShellSnapshot: () =>
+            Effect.succeed({
+              snapshotSequence: commandReadModel.snapshotSequence,
+              projects: [],
+              threads: [],
+              updatedAt: commandReadModel.updatedAt,
+            }),
+          getArchivedShellSnapshot: () =>
+            Effect.succeed({
+              snapshotSequence: commandReadModel.snapshotSequence,
+              projects: [],
+              threads: [],
+              updatedAt: commandReadModel.updatedAt,
+            }),
+          getSnapshotSequence: () =>
+            Effect.succeed({ snapshotSequence: commandReadModel.snapshotSequence }),
+          getCounts: () => Effect.succeed({ projectCount: 1, threadCount: 2 }),
+          getActiveProjectByWorkspaceRoot: () => Effect.succeed(Option.none()),
+          getProjectShellById: () => Effect.succeed(Option.none()),
+          getFirstActiveThreadIdByProjectId: () => Effect.succeed(Option.none()),
+          getThreadCheckpointContext: () => Effect.succeed(Option.none()),
+          getFullThreadDiffContext: () => Effect.succeed(Option.none()),
+          getThreadShellById: () => Effect.succeed(Option.none()),
+          getThreadDetailById: (threadId) =>
+            Effect.succeed(
+              threadId === sourceThreadDetail.id ? Option.some(sourceThreadDetail) : Option.none(),
+            ),
+        }),
+      ),
+      Layer.provide(
+        Layer.succeed(OrchestrationProjectionPipeline, {
+          bootstrap: Effect.void,
+          projectEvent: () => Effect.void,
+        } satisfies OrchestrationProjectionPipelineShape),
+      ),
+      Layer.provide(Layer.succeed(OrchestrationEventStore, eventStore)),
+      Layer.provide(OrchestrationCommandReceiptRepositoryLive),
+      Layer.provide(SqlitePersistenceMemory),
+    );
+
+    const runtime = ManagedRuntime.make(layer);
+    const engine = await runtime.runPromise(Effect.service(OrchestrationEngineService));
+    const result = await runtime.runPromise(
+      engine.dispatch({
+        type: "thread.context-binding.add",
+        commandId: CommandId.make("cmd-context-add"),
+        threadId: targetThread.id,
+        bindingId: ThreadContextBindingId.make("ctx-source"),
+        sourceThreadId: sourceThreadDetail.id,
+        mode: "snapshot",
+        createdAt: "2026-03-04T00:00:04.000Z",
+      }),
+    );
+
+    expect(result.sequence).toBe(20);
+    expect(sourceThreadLight.messages).toHaveLength(0);
+    const bindingEvent = appendedEvents.find(
+      (event) => event.type === "thread.context-binding-added",
+    );
+    expect(bindingEvent?.type).toBe("thread.context-binding-added");
+    if (bindingEvent?.type === "thread.context-binding-added") {
+      expect(bindingEvent.payload.binding.snapshotText).toContain("historical source prompt");
+    }
 
     await runtime.dispose();
   });

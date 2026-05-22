@@ -25,6 +25,7 @@ import {
   CheckIcon,
   CircleAlertIcon,
   EyeIcon,
+  GitBranchIcon,
   GlobeIcon,
   HammerIcon,
   type LucideIcon,
@@ -84,6 +85,7 @@ interface TimelineRowSharedState {
   skills: ReadonlyArray<Pick<ServerProviderSkill, "name" | "displayName">>;
   activeThreadEnvironmentId: EnvironmentId;
   onRevertUserMessage: (messageId: MessageId) => void;
+  onForkAssistantMessage: (messageId: MessageId) => void;
   onImageExpand: (preview: ExpandedImagePreview) => void;
   onOpenTurnDiff: (turnId: TurnId, filePath?: string) => void;
 }
@@ -117,6 +119,7 @@ interface MessagesTimelineProps {
   onOpenTurnDiff: (turnId: TurnId, filePath?: string) => void;
   revertTurnCountByUserMessageId: Map<MessageId, number>;
   onRevertUserMessage: (messageId: MessageId) => void;
+  onForkAssistantMessage?: (messageId: MessageId) => void;
   isRevertingCheckpoint: boolean;
   onImageExpand: (preview: ExpandedImagePreview) => void;
   activeThreadEnvironmentId: EnvironmentId;
@@ -147,6 +150,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   onOpenTurnDiff,
   revertTurnCountByUserMessageId,
   onRevertUserMessage,
+  onForkAssistantMessage = () => undefined,
   isRevertingCheckpoint,
   onImageExpand,
   activeThreadEnvironmentId,
@@ -220,6 +224,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       skills,
       activeThreadEnvironmentId,
       onRevertUserMessage,
+      onForkAssistantMessage,
       onImageExpand,
       onOpenTurnDiff,
     }),
@@ -232,6 +237,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       skills,
       activeThreadEnvironmentId,
       onRevertUserMessage,
+      onForkAssistantMessage,
       onImageExpand,
       onOpenTurnDiff,
     ],
@@ -450,10 +456,34 @@ function AssistantTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "mess
               )
             )}
           </p>
+          {!row.message.streaming ? (
+            <ForkAssistantMessageButton messageId={row.message.id} />
+          ) : null}
           <AssistantCopyButton row={row} />
         </div>
       </div>
     </>
+  );
+}
+
+function ForkAssistantMessageButton({ messageId }: { messageId: MessageId }) {
+  const ctx = use(TimelineRowCtx);
+  const activity = use(TimelineRowActivityCtx);
+
+  return (
+    <div className="flex items-center opacity-0 transition-opacity duration-200 group-hover/assistant:opacity-100">
+      <Button
+        type="button"
+        size="icon-xs"
+        variant="outline"
+        disabled={activity.isWorking || activity.isRevertingCheckpoint}
+        className="border-border/50 bg-background/35 text-muted-foreground/45 shadow-none hover:border-border/70 hover:bg-background/55 hover:text-muted-foreground/70"
+        onClick={() => ctx.onForkAssistantMessage(messageId)}
+        title="Fork from message"
+      >
+        <GitBranchIcon className="size-3" />
+      </Button>
+    </div>
   );
 }
 

@@ -17,6 +17,7 @@ import {
   ProviderInstanceId,
   PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
   PROVIDER_SEND_TURN_MAX_IMAGE_BYTES,
+  ThreadContextBindingId,
 } from "@t3tools/contracts";
 import { createModelSelection, normalizeModelSlug } from "@t3tools/shared/model";
 import {
@@ -33,7 +34,9 @@ import {
 } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useDebouncedValue } from "@tanstack/react-pacer";
+import { useShallow } from "zustand/react/shallow";
 import { projectSearchEntriesQueryOptions } from "~/lib/projectReactQuery";
+import { selectEnvironmentState, useStore } from "~/store";
 import {
   clampCollapsedComposerCursor,
   type ComposerTrigger,
@@ -87,13 +90,24 @@ import {
 import { ContextWindowMeter } from "./ContextWindowMeter";
 import { buildExpandedImagePreview, type ExpandedImagePreview } from "./ExpandedImagePreview";
 import { basenameOfPath } from "../../vscode-icons";
-import { cn, randomUUID } from "~/lib/utils";
+import { cn, newCommandId, randomUUID } from "~/lib/utils";
 import { Button } from "../ui/button";
+import {
+  Dialog,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogPanel,
+  DialogPopup,
+  DialogTitle,
+} from "../ui/dialog";
+import { Input } from "../ui/input";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { toastManager } from "../ui/toast";
 import {
   CircleAlertIcon,
+  GitBranchIcon,
   ListTodoIcon,
   type LucideIcon,
   LockIcon,
@@ -118,6 +132,7 @@ import { deriveLatestContextWindowSnapshot } from "../../lib/contextWindow";
 import { formatProviderSkillDisplayName } from "../../providerSkillPresentation";
 import { searchProviderSkills } from "../../providerSkillSearch";
 import { readLocalApi } from "../../localApi";
+import { readEnvironmentApi } from "../../environmentApi";
 import { usePrimaryEnvironmentId } from "../../environments/primary";
 import {
   INTERACTION_MODE_ORDER,
@@ -659,7 +674,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     activeThreadId,
     activeThreadEnvironmentId,
     activeThread,
-    isServerThread: _isServerThread,
+    isServerThread,
     isLocalDraftThread: _isLocalDraftThread,
     phase,
     isConnecting,
@@ -777,6 +792,149 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const composerEnvironmentId = activeThreadEnvironmentId ?? environmentId;
   const showComposerWorkspaceContextControl =
     primaryEnvironmentId !== null && composerEnvironmentId === primaryEnvironmentId;
+  const [chatContextDialogOpen, setChatContextDialogOpen] = useState(false);
+  const [chatContextSearch, setChatContextSearch] = useState("");
+  const [selectedChatContextSourceId, setSelectedChatContextSourceId] = useState<ThreadId | null>(
+    null,
+  );
+  const chatContextThreads = useStore(
+    useShallow(
+      useCallback(
+        (state) => {
+          const environmentState = selectEnvironmentState(state, composerEnvironmentId);
+          return environmentState.threadIds.flatMap((threadId) => {
+            const shell = environmentState.threadShellById[threadId];
+            return shell && shell.id !== activeThreadId ? [shell] : [];
+          });
+        },
+        [activeThreadId, composerEnvironmentId],
+      ),
+    ),
+  );
+  const chatContextProjectById = useStore(
+    useCallback(
+      (state) => selectEnvironmentState(state, composerEnvironmentId).projectById,
+      [composerEnvironmentId],
+    ),
+  );
+  const chatContextPickerState = useMemo(
+    () => ({
+      threads: chatContextThreads,
+      projectById: chatContextProjectById,
+    }),
+    [chatContextProjectById, chatContextThreads],
+  );
+  const chatContextBindings = activeThread?.contextBindings ?? [];
+  const chatContextCandidates = useMemo(() => {
+    const query = chatContextSearch.trim().toLowerCase();
+    return chatContextPickerState.threads
+      .filter((thread) => {
+        const project = chatContextPickerState.projectById[thread.projectId];
+        if (!query) return true;
+        return (
+          thread.title.toLowerCase().includes(query) ||
+          project?.name.toLowerCase().includes(query) ||
+          project?.cwd.toLowerCase().includes(query)
+        );
+      })
+      .toSorted((left, right) => {
+        const leftUpdated = left.updatedAt ?? left.createdAt;
+        const rightUpdated = right.updatedAt ?? right.createdAt;
+        return rightUpdated.localeCompare(leftUpdated) || left.title.localeCompare(right.title);
+      });
+  }, [chatContextPickerState, chatContextSearch]);
+  useEffect(() => {
+    if (!chatContextDialogOpen) {
+      return;
+    }
+    if (
+      selectedChatContextSourceId &&
+      chatContextCandidates.some((thread) => thread.id === selectedChatContextSourceId)
+    ) {
+      return;
+    }
+    setSelectedChatContextSourceId(chatContextCandidates[0]?.id ?? null);
+  }, [chatContextCandidates, chatContextDialogOpen, selectedChatContextSourceId]);
+
+  const openChatContextDialog = useCallback(() => {
+    if (!activeThread || !isServerThread) {
+      toastManager.add({
+        type: "warning",
+        title: "Create the chat first",
+        description: "Chat context can be attached after the thread exists.",
+      });
+      return;
+    }
+    setChatContextSearch("");
+    setSelectedChatContextSourceId(chatContextCandidates[0]?.id ?? null);
+    setChatContextDialogOpen(true);
+  }, [activeThread, chatContextCandidates, isServerThread]);
+
+  const confirmAttachChatContext = useCallback(async () => {
+    if (!activeThread || !selectedChatContextSourceId) {
+      return;
+    }
+    const api = readEnvironmentApi(activeThread.environmentId);
+    if (!api) {
+      toastManager.add({
+        type: "error",
+        title: "Environment unavailable",
+        description: "Reconnect before attaching chat context.",
+      });
+      return;
+    }
+    try {
+      await api.orchestration.dispatchCommand({
+        type: "thread.context-binding.add",
+        commandId: newCommandId(),
+        threadId: activeThread.id,
+        bindingId: ThreadContextBindingId.make(`ctx-${randomUUID()}`),
+        sourceThreadId: selectedChatContextSourceId,
+        mode: "snapshot",
+        createdAt: new Date().toISOString(),
+      });
+      setChatContextDialogOpen(false);
+    } catch (error) {
+      toastManager.add({
+        type: "error",
+        title: "Failed to attach chat context",
+        description: error instanceof Error ? error.message : "An error occurred.",
+      });
+    }
+  }, [activeThread, selectedChatContextSourceId]);
+
+  const removeChatContextBinding = useCallback(
+    async (bindingId: ThreadContextBindingId) => {
+      if (!activeThread) {
+        return;
+      }
+      const api = readEnvironmentApi(activeThread.environmentId);
+      if (!api) {
+        toastManager.add({
+          type: "error",
+          title: "Environment unavailable",
+          description: "Reconnect before removing chat context.",
+        });
+        return;
+      }
+      try {
+        await api.orchestration.dispatchCommand({
+          type: "thread.context-binding.remove",
+          commandId: newCommandId(),
+          threadId: activeThread.id,
+          bindingId,
+          createdAt: new Date().toISOString(),
+        });
+      } catch (error) {
+        toastManager.add({
+          type: "error",
+          title: "Failed to remove chat context",
+          description: error instanceof Error ? error.message : "An error occurred.",
+        });
+      }
+    },
+    [activeThread],
+  );
   const lockedContinuationGroupKey = useMemo((): string | null => {
     if (!lockedProvider || !activeThread) return null;
     const lockedInstanceId =
@@ -2064,295 +2222,287 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   // Render
   // ------------------------------------------------------------------
   return (
-    <form
-      ref={composerFormRef}
-      onSubmit={submitComposer}
-      className="mx-auto w-full min-w-0 max-w-208"
-      data-chat-composer-form="true"
-    >
-      <div
-        className="group rounded-[32px]"
-        onDragEnter={onComposerDragEnter}
-        onDragOver={handleComposerDragOver}
-        onDragLeave={onComposerDragLeave}
-        onDrop={onComposerDrop}
+    <>
+      <form
+        ref={composerFormRef}
+        onSubmit={submitComposer}
+        className="mx-auto w-full min-w-0 max-w-208"
+        data-chat-composer-form="true"
       >
         <div
-          className={cn(
-            "flex min-h-32 flex-col rounded-[32px] bg-card shadow-[0_4px_14.4px_rgba(9,9,9,0.08)] transition-colors duration-200 dark:bg-[#1e1e1e] dark:shadow-[inset_-1px_-1px_1px_rgba(255,255,255,0.06),inset_1px_1px_1px_rgba(255,255,255,0.12),0_4px_14.4px_rgba(9,9,9,0.08)]",
-            environmentUnavailable ? "opacity-75" : null,
-          )}
+          className="group rounded-[32px]"
+          onDragEnter={onComposerDragEnter}
+          onDragOver={handleComposerDragOver}
+          onDragLeave={onComposerDragLeave}
+          onDrop={onComposerDrop}
         >
-          {activePendingApproval ? (
-            <div className="rounded-t-[19px] border-b border-border/65 bg-muted/20">
-              <ComposerPendingApprovalPanel
-                approval={activePendingApproval}
-                pendingCount={pendingApprovals.length}
-              />
-            </div>
-          ) : pendingUserInputs.length > 0 ? (
-            <div className="rounded-t-[19px] border-b border-border/65 bg-muted/20">
-              <ComposerPendingUserInputPanel
-                pendingUserInputs={pendingUserInputs}
-                respondingRequestIds={respondingRequestIds}
-                answers={activePendingDraftAnswers}
-                questionIndex={activePendingQuestionIndex}
-                onToggleOption={onSelectActivePendingUserInputOption}
-                onAdvance={onAdvanceActivePendingUserInput}
-              />
-            </div>
-          ) : showPlanFollowUpPrompt && activeProposedPlan ? (
-            <div className="rounded-t-[19px] border-b border-border/65 bg-muted/20">
-              <ComposerPlanFollowUpBanner
-                key={activeProposedPlan.id}
-                planTitle={proposedPlanTitle(activeProposedPlan.planMarkdown) ?? null}
-              />
-            </div>
-          ) : null}
-
-          <div className={cn("relative flex-1 px-6 pb-2", hasComposerHeader ? "pt-5" : "pt-6")}>
-            {composerMenuOpen && !isComposerApprovalState && (
-              <div className="absolute inset-x-0 bottom-full z-20 mb-2 px-1">
-                <ComposerCommandMenu
-                  items={composerMenuItems}
-                  resolvedTheme={resolvedTheme}
-                  isLoading={isComposerMenuLoading}
-                  triggerKind={composerTriggerKind}
-                  groupSlashCommandSections={
-                    composerTrigger?.kind === "slash-command" &&
-                    composerTrigger.query.trim().length === 0
-                  }
-                  emptyStateText={composerMenuEmptyState}
-                  activeItemId={activeComposerMenuItem?.id ?? null}
-                  onHighlightedItemChange={onComposerMenuItemHighlighted}
-                  onSelect={onSelectComposerItem}
+          <div
+            className={cn(
+              "flex min-h-32 flex-col rounded-[32px] bg-card shadow-[0_4px_14.4px_rgba(9,9,9,0.08)] transition-colors duration-200 dark:bg-[#1e1e1e] dark:shadow-[inset_-1px_-1px_1px_rgba(255,255,255,0.06),inset_1px_1px_1px_rgba(255,255,255,0.12),0_4px_14.4px_rgba(9,9,9,0.08)]",
+              environmentUnavailable ? "opacity-75" : null,
+            )}
+          >
+            {activePendingApproval ? (
+              <div className="rounded-t-[19px] border-b border-border/65 bg-muted/20">
+                <ComposerPendingApprovalPanel
+                  approval={activePendingApproval}
+                  pendingCount={pendingApprovals.length}
                 />
               </div>
-            )}
+            ) : pendingUserInputs.length > 0 ? (
+              <div className="rounded-t-[19px] border-b border-border/65 bg-muted/20">
+                <ComposerPendingUserInputPanel
+                  pendingUserInputs={pendingUserInputs}
+                  respondingRequestIds={respondingRequestIds}
+                  answers={activePendingDraftAnswers}
+                  questionIndex={activePendingQuestionIndex}
+                  onToggleOption={onSelectActivePendingUserInputOption}
+                  onAdvance={onAdvanceActivePendingUserInput}
+                />
+              </div>
+            ) : showPlanFollowUpPrompt && activeProposedPlan ? (
+              <div className="rounded-t-[19px] border-b border-border/65 bg-muted/20">
+                <ComposerPlanFollowUpBanner
+                  key={activeProposedPlan.id}
+                  planTitle={proposedPlanTitle(activeProposedPlan.planMarkdown) ?? null}
+                />
+              </div>
+            ) : null}
 
-            {!isComposerApprovalState &&
-              pendingUserInputs.length === 0 &&
-              composerImages.length > 0 && (
-                <div className="mb-3 flex flex-wrap gap-2">
-                  {composerImages.map((image) => (
-                    <div
-                      key={image.id}
-                      className="relative h-16 w-16 overflow-hidden rounded-lg border border-border/80 bg-background"
-                    >
-                      {image.previewUrl ? (
-                        <button
-                          type="button"
-                          className="h-full w-full cursor-zoom-in"
-                          aria-label={`Preview ${image.name}`}
-                          onClick={() => {
-                            const preview = buildExpandedImagePreview(composerImages, image.id);
-                            if (!preview) return;
-                            onExpandImage(preview);
-                          }}
-                        >
-                          <img
-                            src={image.previewUrl}
-                            alt={image.name}
-                            className="h-full w-full object-cover"
-                          />
-                        </button>
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center px-1 text-center text-[10px] text-muted-foreground/70">
-                          {image.name}
-                        </div>
-                      )}
-                      {nonPersistedComposerImageIdSet.has(image.id) && (
-                        <Tooltip>
-                          <TooltipTrigger
-                            render={
-                              <span
-                                role="img"
-                                aria-label="Draft attachment may not persist"
-                                className="absolute left-1 top-1 inline-flex items-center justify-center rounded bg-background/85 p-0.5 text-amber-600"
-                              >
-                                <CircleAlertIcon className="size-3" />
-                              </span>
-                            }
-                          />
-                          <TooltipPopup
-                            side="top"
-                            className="max-w-64 whitespace-normal leading-tight"
-                          >
-                            Draft attachment could not be saved locally and may be lost on
-                            navigation.
-                          </TooltipPopup>
-                        </Tooltip>
-                      )}
-                      <Button
-                        variant="ghost"
-                        size="icon-xs"
-                        className="absolute right-1 top-1 bg-background/80 hover:bg-background/90"
-                        onClick={() => removeComposerImage(image.id)}
-                        aria-label={`Remove ${image.name}`}
-                      >
-                        <XIcon />
-                      </Button>
-                    </div>
-                  ))}
+            <div className={cn("relative flex-1 px-6 pb-2", hasComposerHeader ? "pt-5" : "pt-6")}>
+              {composerMenuOpen && !isComposerApprovalState && (
+                <div className="absolute inset-x-0 bottom-full z-20 mb-2 px-1">
+                  <ComposerCommandMenu
+                    items={composerMenuItems}
+                    resolvedTheme={resolvedTheme}
+                    isLoading={isComposerMenuLoading}
+                    triggerKind={composerTriggerKind}
+                    groupSlashCommandSections={
+                      composerTrigger?.kind === "slash-command" &&
+                      composerTrigger.query.trim().length === 0
+                    }
+                    emptyStateText={composerMenuEmptyState}
+                    activeItemId={activeComposerMenuItem?.id ?? null}
+                    onHighlightedItemChange={onComposerMenuItemHighlighted}
+                    onSelect={onSelectComposerItem}
+                  />
                 </div>
               )}
 
-            <div className="relative">
-              <ComposerPromptEditor
-                editorRef={composerEditorRef}
-                value={
-                  isComposerApprovalState
-                    ? ""
-                    : activePendingProgress
-                      ? activePendingProgress.customAnswer
-                      : prompt
-                }
-                cursor={composerCursor}
-                terminalContexts={
-                  !isComposerApprovalState && pendingUserInputs.length === 0
-                    ? composerTerminalContexts
-                    : []
-                }
-                skills={selectedProviderStatus?.skills ?? []}
-                className="min-h-14 sm:min-h-14"
-                onRemoveTerminalContext={removeComposerTerminalContextFromDraft}
-                onChange={onPromptChange}
-                onCommandKeyDown={onComposerCommandKey}
-                onPaste={onComposerPaste}
-                placeholder={
-                  isComposerApprovalState
-                    ? (activePendingApproval?.detail ?? "Resolve this approval request to continue")
-                    : activePendingProgress
-                      ? "Type your own answer, or leave this blank to use the selected option"
-                      : showPlanFollowUpPrompt && activeProposedPlan
-                        ? "Add feedback to refine the plan, or leave this blank to implement it"
-                        : environmentUnavailable
-                          ? `${environmentUnavailable.label} is ${
-                              environmentUnavailable.connectionState === "connecting"
-                                ? "connecting"
-                                : "disconnected"
-                            }`
-                          : phase === "disconnected"
-                            ? "Ask for follow-up changes or attach images"
-                            : "Ask anything, @tag files/folders, $use skills, or / for commands"
-                }
-                disabled={
-                  isConnecting ||
-                  isComposerApprovalState ||
-                  (environmentUnavailable !== null && activePendingProgress === null)
-                }
-              />
-            </div>
-          </div>
-
-          {/* Bottom toolbar */}
-          {activePendingApproval ? (
-            <div className="flex items-center justify-end gap-2 px-2.5 pb-2.5 sm:px-3 sm:pb-3">
-              <ComposerPendingApprovalActions
-                requestId={activePendingApproval.requestId}
-                isResponding={respondingRequestIds.includes(activePendingApproval.requestId)}
-                onRespondToApproval={onRespondToApproval}
-              />
-            </div>
-          ) : (
-            <div
-              data-chat-composer-footer="true"
-              data-chat-composer-footer-compact={isComposerFooterCompact ? "true" : "false"}
-              className={cn(
-                "flex min-w-0 flex-nowrap items-center justify-between gap-2 overflow-visible px-4 pb-4",
-                isComposerFooterCompact ? "gap-1.5" : "gap-2",
-              )}
-            >
-              <div className={COMPOSER_CONTROL_ROW_CLASS}>
-                {showComposerWorkspaceContextControl ? (
-                  <>
-                    <ComposerToolbarIconAction
-                      label="Add files to context"
-                      icon={ComposerPlusIcon}
-                      onClick={handleAttachWorkspaceContext}
-                    />
-                    <ComposerToolbarSeparator />
-                  </>
-                ) : null}
-                {showComposerBrowserUseControl ? (
-                  <>
-                    <ComposerPlaceholderAction
-                      label="Browser tools coming soon"
-                      icon={ComposerGlobeIcon}
-                    />
-                    <ComposerToolbarSeparator />
-                  </>
-                ) : null}
-
-                {isComposerFooterCompact ? (
-                  <ComposerProviderModelPicker
-                    compact
-                    activeInstanceId={selectedInstanceId}
-                    model={selectedModelForPickerWithCustomFallback}
-                    lockedProvider={lockedProvider}
-                    lockedContinuationGroupKey={lockedContinuationGroupKey}
-                    instanceEntries={providerInstanceEntries}
-                    keybindings={keybindings}
-                    modelOptionsByInstance={modelOptionsByInstance}
-                    terminalOpen={terminalOpen}
-                    open={isComposerModelPickerOpen}
-                    triggerClassName="max-w-42"
-                    {...(composerProviderState.modelPickerIconClassName
-                      ? {
-                          activeProviderIconClassName:
-                            composerProviderState.modelPickerIconClassName,
-                        }
-                      : {})}
-                    onOpenChange={(open) => {
-                      setIsComposerModelPickerOpen(open);
-                    }}
-                    onInstanceModelChange={onProviderModelSelect}
-                  />
-                ) : (
-                  <>
-                    {composerProviderControls.showInteractionModeToggle ? (
-                      <>
-                        <Select
-                          value={interactionMode}
-                          onValueChange={(value) => {
-                            if (!value) return;
-                            handleInteractionModeChange(value as ProviderInteractionMode);
-                          }}
+              {!isComposerApprovalState &&
+              pendingUserInputs.length === 0 &&
+              chatContextBindings.length > 0 ? (
+                <div className="mb-3 flex min-w-0 flex-wrap gap-2">
+                  {chatContextBindings.map((binding) => {
+                    const sourceProject = binding.sourceProjectId
+                      ? chatContextPickerState.projectById[binding.sourceProjectId]
+                      : undefined;
+                    const syncLabel = binding.cutoffMessageId
+                      ? "Snapshot from selected message"
+                      : "Snapshot from thread";
+                    const tooltip = [
+                      "Snapshot context",
+                      sourceProject?.name,
+                      sourceProject?.cwd,
+                      syncLabel,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ");
+                    return (
+                      <Tooltip key={binding.id}>
+                        <TooltipTrigger
+                          render={
+                            <span className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-border/70 bg-background/55 px-2 py-1 text-xs text-muted-foreground shadow-xs/5" />
+                          }
                         >
-                          <ComposerSelectTrigger
-                            variant="ghost"
-                            size="sm"
-                            className="max-w-28"
-                            aria-label="Interaction mode"
-                            title={interactionModeConfig[interactionMode].description}
+                          <GitBranchIcon className="size-3.5 shrink-0" />
+                          <span className="truncate">Snapshot: {binding.sourceThreadTitle}</span>
+                          <button
+                            type="button"
+                            aria-label={`Remove ${binding.sourceThreadTitle} context`}
+                            className="-mr-0.5 inline-flex size-4 shrink-0 items-center justify-center rounded-full text-muted-foreground/70 hover:bg-muted hover:text-foreground"
+                            onClick={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              void removeChatContextBinding(binding.id);
+                            }}
                           >
-                            <SelectValue>
-                              {interactionModeConfig[interactionMode].label}
-                            </SelectValue>
-                          </ComposerSelectTrigger>
-                          <SelectPopup alignItemWithTrigger={false}>
-                            {INTERACTION_MODE_ORDER.map((mode) => {
-                              const option = interactionModeConfig[mode];
-                              return (
-                                <SelectItem key={mode} value={mode} className="min-w-56 py-2">
-                                  <div className="grid min-w-0 gap-0.5">
-                                    <span className="font-medium text-foreground">
-                                      {option.label}
-                                    </span>
-                                    <span className="text-muted-foreground text-xs leading-4">
-                                      {option.description}
-                                    </span>
-                                  </div>
-                                </SelectItem>
-                              );
-                            })}
-                          </SelectPopup>
-                        </Select>
-                        <ComposerToolbarSeparator />
-                      </>
-                    ) : null}
+                            <XIcon className="size-3" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipPopup side="top" className="max-w-80 whitespace-normal">
+                          {tooltip}
+                        </TooltipPopup>
+                      </Tooltip>
+                    );
+                  })}
+                </div>
+              ) : null}
+
+              {!isComposerApprovalState &&
+                pendingUserInputs.length === 0 &&
+                composerImages.length > 0 && (
+                  <div className="mb-3 flex flex-wrap gap-2">
+                    {composerImages.map((image) => (
+                      <div
+                        key={image.id}
+                        className="relative h-16 w-16 overflow-hidden rounded-lg border border-border/80 bg-background"
+                      >
+                        {image.previewUrl ? (
+                          <button
+                            type="button"
+                            className="h-full w-full cursor-zoom-in"
+                            aria-label={`Preview ${image.name}`}
+                            onClick={() => {
+                              const preview = buildExpandedImagePreview(composerImages, image.id);
+                              if (!preview) return;
+                              onExpandImage(preview);
+                            }}
+                          >
+                            <img
+                              src={image.previewUrl}
+                              alt={image.name}
+                              className="h-full w-full object-cover"
+                            />
+                          </button>
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center px-1 text-center text-[10px] text-muted-foreground/70">
+                            {image.name}
+                          </div>
+                        )}
+                        {nonPersistedComposerImageIdSet.has(image.id) && (
+                          <Tooltip>
+                            <TooltipTrigger
+                              render={
+                                <span
+                                  role="img"
+                                  aria-label="Draft attachment may not persist"
+                                  className="absolute left-1 top-1 inline-flex items-center justify-center rounded bg-background/85 p-0.5 text-amber-600"
+                                >
+                                  <CircleAlertIcon className="size-3" />
+                                </span>
+                              }
+                            />
+                            <TooltipPopup
+                              side="top"
+                              className="max-w-64 whitespace-normal leading-tight"
+                            >
+                              Draft attachment could not be saved locally and may be lost on
+                              navigation.
+                            </TooltipPopup>
+                          </Tooltip>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="icon-xs"
+                          className="absolute right-1 top-1 bg-background/80 hover:bg-background/90"
+                          onClick={() => removeComposerImage(image.id)}
+                          aria-label={`Remove ${image.name}`}
+                        >
+                          <XIcon />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+              <div className="relative">
+                <ComposerPromptEditor
+                  editorRef={composerEditorRef}
+                  value={
+                    isComposerApprovalState
+                      ? ""
+                      : activePendingProgress
+                        ? activePendingProgress.customAnswer
+                        : prompt
+                  }
+                  cursor={composerCursor}
+                  terminalContexts={
+                    !isComposerApprovalState && pendingUserInputs.length === 0
+                      ? composerTerminalContexts
+                      : []
+                  }
+                  skills={selectedProviderStatus?.skills ?? []}
+                  className="min-h-14 sm:min-h-14"
+                  onRemoveTerminalContext={removeComposerTerminalContextFromDraft}
+                  onChange={onPromptChange}
+                  onCommandKeyDown={onComposerCommandKey}
+                  onPaste={onComposerPaste}
+                  placeholder={
+                    isComposerApprovalState
+                      ? (activePendingApproval?.detail ??
+                        "Resolve this approval request to continue")
+                      : activePendingProgress
+                        ? "Type your own answer, or leave this blank to use the selected option"
+                        : showPlanFollowUpPrompt && activeProposedPlan
+                          ? "Add feedback to refine the plan, or leave this blank to implement it"
+                          : environmentUnavailable
+                            ? `${environmentUnavailable.label} is ${
+                                environmentUnavailable.connectionState === "connecting"
+                                  ? "connecting"
+                                  : "disconnected"
+                              }`
+                            : phase === "disconnected"
+                              ? "Ask for follow-up changes or attach images"
+                              : "Ask anything, @tag files/folders, $use skills, or / for commands"
+                  }
+                  disabled={
+                    isConnecting ||
+                    isComposerApprovalState ||
+                    (environmentUnavailable !== null && activePendingProgress === null)
+                  }
+                />
+              </div>
+            </div>
+
+            {/* Bottom toolbar */}
+            {activePendingApproval ? (
+              <div className="flex items-center justify-end gap-2 px-2.5 pb-2.5 sm:px-3 sm:pb-3">
+                <ComposerPendingApprovalActions
+                  requestId={activePendingApproval.requestId}
+                  isResponding={respondingRequestIds.includes(activePendingApproval.requestId)}
+                  onRespondToApproval={onRespondToApproval}
+                />
+              </div>
+            ) : (
+              <div
+                data-chat-composer-footer="true"
+                data-chat-composer-footer-compact={isComposerFooterCompact ? "true" : "false"}
+                className={cn(
+                  "flex min-w-0 flex-nowrap items-center justify-between gap-2 overflow-visible px-4 pb-4",
+                  isComposerFooterCompact ? "gap-1.5" : "gap-2",
+                )}
+              >
+                <div className={COMPOSER_CONTROL_ROW_CLASS}>
+                  {showComposerWorkspaceContextControl ? (
+                    <>
+                      <ComposerToolbarIconAction
+                        label="Add files to context"
+                        icon={ComposerPlusIcon}
+                        onClick={handleAttachWorkspaceContext}
+                      />
+                      <ComposerToolbarSeparator />
+                    </>
+                  ) : null}
+                  <ComposerToolbarIconAction
+                    label="Attach chat context"
+                    icon={GitBranchIcon}
+                    onClick={openChatContextDialog}
+                  />
+                  <ComposerToolbarSeparator />
+                  {showComposerBrowserUseControl ? (
+                    <>
+                      <ComposerPlaceholderAction
+                        label="Browser tools coming soon"
+                        icon={ComposerGlobeIcon}
+                      />
+                      <ComposerToolbarSeparator />
+                    </>
+                  ) : null}
+
+                  {isComposerFooterCompact ? (
                     <ComposerProviderModelPicker
-                      compact={isComposerFooterCompact}
+                      compact
                       activeInstanceId={selectedInstanceId}
                       model={selectedModelForPickerWithCustomFallback}
                       lockedProvider={lockedProvider}
@@ -2362,7 +2512,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                       modelOptionsByInstance={modelOptionsByInstance}
                       terminalOpen={terminalOpen}
                       open={isComposerModelPickerOpen}
-                      triggerClassName="max-w-52 sm:max-w-60"
+                      triggerClassName="max-w-42"
                       {...(composerProviderState.modelPickerIconClassName
                         ? {
                             activeProviderIconClassName:
@@ -2374,77 +2524,224 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                       }}
                       onInstanceModelChange={onProviderModelSelect}
                     />
-                    {providerTraitsPicker ? (
-                      <>
+                  ) : (
+                    <>
+                      {composerProviderControls.showInteractionModeToggle ? (
+                        <>
+                          <Select
+                            value={interactionMode}
+                            onValueChange={(value) => {
+                              if (!value) return;
+                              handleInteractionModeChange(value as ProviderInteractionMode);
+                            }}
+                          >
+                            <ComposerSelectTrigger
+                              variant="ghost"
+                              size="sm"
+                              className="max-w-28"
+                              aria-label="Interaction mode"
+                              title={interactionModeConfig[interactionMode].description}
+                            >
+                              <SelectValue>
+                                {interactionModeConfig[interactionMode].label}
+                              </SelectValue>
+                            </ComposerSelectTrigger>
+                            <SelectPopup alignItemWithTrigger={false}>
+                              {INTERACTION_MODE_ORDER.map((mode) => {
+                                const option = interactionModeConfig[mode];
+                                return (
+                                  <SelectItem key={mode} value={mode} className="min-w-56 py-2">
+                                    <div className="grid min-w-0 gap-0.5">
+                                      <span className="font-medium text-foreground">
+                                        {option.label}
+                                      </span>
+                                      <span className="text-muted-foreground text-xs leading-4">
+                                        {option.description}
+                                      </span>
+                                    </div>
+                                  </SelectItem>
+                                );
+                              })}
+                            </SelectPopup>
+                          </Select>
+                          <ComposerToolbarSeparator />
+                        </>
+                      ) : null}
+                      <ComposerProviderModelPicker
+                        compact={isComposerFooterCompact}
+                        activeInstanceId={selectedInstanceId}
+                        model={selectedModelForPickerWithCustomFallback}
+                        lockedProvider={lockedProvider}
+                        lockedContinuationGroupKey={lockedContinuationGroupKey}
+                        instanceEntries={providerInstanceEntries}
+                        keybindings={keybindings}
+                        modelOptionsByInstance={modelOptionsByInstance}
+                        terminalOpen={terminalOpen}
+                        open={isComposerModelPickerOpen}
+                        triggerClassName="max-w-52 sm:max-w-60"
+                        {...(composerProviderState.modelPickerIconClassName
+                          ? {
+                              activeProviderIconClassName:
+                                composerProviderState.modelPickerIconClassName,
+                            }
+                          : {})}
+                        onOpenChange={(open) => {
+                          setIsComposerModelPickerOpen(open);
+                        }}
+                        onInstanceModelChange={onProviderModelSelect}
+                      />
+                      {providerTraitsPicker ? (
+                        <>
+                          <ComposerToolbarSeparator />
+                          {providerTraitsPicker}
+                          <ComposerToolbarSeparator />
+                        </>
+                      ) : (
                         <ComposerToolbarSeparator />
-                        {providerTraitsPicker}
-                        <ComposerToolbarSeparator />
-                      </>
-                    ) : (
+                      )}
+                      <ComposerFooterModeControls
+                        showInteractionModeToggle={false}
+                        interactionMode={interactionMode}
+                        runtimeMode={runtimeMode}
+                        showPlanToggle={showPlanSidebarToggle}
+                        planSidebarLabel={planSidebarLabel}
+                        planSidebarOpen={planSidebarOpen}
+                        onInteractionModeChange={handleInteractionModeChange}
+                        onRuntimeModeChange={handleRuntimeModeChange}
+                        onTogglePlanSidebar={togglePlanSidebar}
+                      />
+                    </>
+                  )}
+
+                  {isComposerFooterCompact ? (
+                    <>
                       <ComposerToolbarSeparator />
-                    )}
-                    <ComposerFooterModeControls
-                      showInteractionModeToggle={false}
-                      interactionMode={interactionMode}
-                      runtimeMode={runtimeMode}
-                      showPlanToggle={showPlanSidebarToggle}
-                      planSidebarLabel={planSidebarLabel}
-                      planSidebarOpen={planSidebarOpen}
-                      onInteractionModeChange={handleInteractionModeChange}
-                      onRuntimeModeChange={handleRuntimeModeChange}
-                      onTogglePlanSidebar={togglePlanSidebar}
-                    />
-                  </>
-                )}
+                      <CompactComposerControlsMenu
+                        activePlan={showPlanSidebarToggle}
+                        interactionMode={interactionMode}
+                        planSidebarLabel={planSidebarLabel}
+                        planSidebarOpen={planSidebarOpen}
+                        runtimeMode={runtimeMode}
+                        showInteractionModeToggle={
+                          composerProviderControls.showInteractionModeToggle
+                        }
+                        traitsMenuContent={providerTraitsMenuContent}
+                        onInteractionModeChange={handleInteractionModeChange}
+                        onTogglePlanSidebar={togglePlanSidebar}
+                        onRuntimeModeChange={handleRuntimeModeChange}
+                      />
+                    </>
+                  ) : null}
+                </div>
 
-                {isComposerFooterCompact ? (
-                  <>
-                    <ComposerToolbarSeparator />
-                    <CompactComposerControlsMenu
-                      activePlan={showPlanSidebarToggle}
-                      interactionMode={interactionMode}
-                      planSidebarLabel={planSidebarLabel}
-                      planSidebarOpen={planSidebarOpen}
-                      runtimeMode={runtimeMode}
-                      showInteractionModeToggle={composerProviderControls.showInteractionModeToggle}
-                      traitsMenuContent={providerTraitsMenuContent}
-                      onInteractionModeChange={handleInteractionModeChange}
-                      onTogglePlanSidebar={togglePlanSidebar}
-                      onRuntimeModeChange={handleRuntimeModeChange}
-                    />
-                  </>
-                ) : null}
+                {/* Right side: send / stop button */}
+                <div
+                  data-chat-composer-actions="right"
+                  data-chat-composer-primary-actions-compact={
+                    isComposerPrimaryActionsCompact ? "true" : "false"
+                  }
+                  className="flex shrink-0 flex-nowrap items-center justify-end gap-2"
+                >
+                  <ComposerFooterPrimaryActions
+                    compact={isComposerPrimaryActionsCompact}
+                    activeContextWindow={activeContextWindow}
+                    pendingAction={pendingPrimaryAction}
+                    isRunning={phase === "running"}
+                    showPlanFollowUpPrompt={
+                      pendingUserInputs.length === 0 && showPlanFollowUpPrompt
+                    }
+                    promptHasText={prompt.trim().length > 0}
+                    isSendBusy={isSendBusy}
+                    isConnecting={isConnecting}
+                    isEnvironmentUnavailable={environmentUnavailable !== null}
+                    isPreparingWorktree={isPreparingWorktree}
+                    hasSendableContent={composerSendState.hasSendableContent}
+                    onPreviousPendingQuestion={onPreviousActivePendingUserInputQuestion}
+                    onInterrupt={handleInterruptPrimaryAction}
+                    onImplementPlanInNewThread={handleImplementPlanInNewThreadPrimaryAction}
+                  />
+                </div>
               </div>
-
-              {/* Right side: send / stop button */}
-              <div
-                data-chat-composer-actions="right"
-                data-chat-composer-primary-actions-compact={
-                  isComposerPrimaryActionsCompact ? "true" : "false"
-                }
-                className="flex shrink-0 flex-nowrap items-center justify-end gap-2"
-              >
-                <ComposerFooterPrimaryActions
-                  compact={isComposerPrimaryActionsCompact}
-                  activeContextWindow={activeContextWindow}
-                  pendingAction={pendingPrimaryAction}
-                  isRunning={phase === "running"}
-                  showPlanFollowUpPrompt={pendingUserInputs.length === 0 && showPlanFollowUpPrompt}
-                  promptHasText={prompt.trim().length > 0}
-                  isSendBusy={isSendBusy}
-                  isConnecting={isConnecting}
-                  isEnvironmentUnavailable={environmentUnavailable !== null}
-                  isPreparingWorktree={isPreparingWorktree}
-                  hasSendableContent={composerSendState.hasSendableContent}
-                  onPreviousPendingQuestion={onPreviousActivePendingUserInputQuestion}
-                  onInterrupt={handleInterruptPrimaryAction}
-                  onImplementPlanInNewThread={handleImplementPlanInNewThreadPrimaryAction}
-                />
-              </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
-      </div>
-    </form>
+      </form>
+
+      <Dialog open={chatContextDialogOpen} onOpenChange={setChatContextDialogOpen}>
+        <DialogPopup className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <GitBranchIcon className="size-4" />
+              Attach chat context
+            </DialogTitle>
+            <DialogDescription>Select a source chat to attach as a snapshot.</DialogDescription>
+          </DialogHeader>
+          <DialogPanel className="space-y-4">
+            <Input
+              value={chatContextSearch}
+              placeholder="Search chats, projects, paths"
+              onChange={(event) => setChatContextSearch(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter") {
+                  return;
+                }
+                event.preventDefault();
+                void confirmAttachChatContext();
+              }}
+            />
+
+            <div className="max-h-72 space-y-1 overflow-y-auto pr-1">
+              {chatContextCandidates.length === 0 ? (
+                <div className="rounded-lg border border-border/70 bg-muted/20 px-3 py-6 text-center text-muted-foreground text-sm">
+                  No other chats in this environment.
+                </div>
+              ) : (
+                chatContextCandidates.map((thread) => {
+                  const project = chatContextPickerState.projectById[thread.projectId];
+                  const selected = selectedChatContextSourceId === thread.id;
+                  return (
+                    <button
+                      key={thread.id}
+                      type="button"
+                      className={cn(
+                        "flex w-full min-w-0 items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left transition-colors",
+                        selected
+                          ? "border-ring/55 bg-accent/60 text-foreground"
+                          : "border-border/60 bg-background/40 text-foreground hover:bg-accent/40",
+                      )}
+                      aria-pressed={selected}
+                      onClick={() => setSelectedChatContextSourceId(thread.id)}
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-medium">{thread.title}</span>
+                        <span className="block truncate text-muted-foreground text-xs">
+                          {project ? `${project.name} · ${project.cwd}` : thread.id}
+                        </span>
+                      </span>
+                      <span className="shrink-0 text-muted-foreground text-xs">
+                        {thread.archivedAt ? "Archived" : ""}
+                      </span>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </DialogPanel>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setChatContextDialogOpen(false);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button disabled={!selectedChatContextSourceId} onClick={confirmAttachChatContext}>
+              Attach
+            </Button>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
+    </>
   );
 });

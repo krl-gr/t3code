@@ -6,6 +6,7 @@ export const productCopy = {
     },
     threadContextMenu: {
       ariaLabel: "Thread actions",
+      forkThread: "Fork thread",
       rename: "Rename thread",
       markUnread: "Mark unread",
       copyPath: "Copy Path",

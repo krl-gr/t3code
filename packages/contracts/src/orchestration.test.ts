@@ -12,6 +12,8 @@ import {
   OrchestrationGetFullThreadDiffInput,
   OrchestrationGetTurnDiffInput,
   OrchestrationLatestTurn,
+  OrchestrationThread,
+  OrchestrationThreadShell,
   ProjectCreatedPayload,
   ProjectMetaUpdatedPayload,
   OrchestrationProposedPlan,
@@ -37,6 +39,8 @@ const decodeThreadTurnStartRequestedPayload = Schema.decodeUnknownEffect(
   ThreadTurnStartRequestedPayload,
 );
 const decodeOrchestrationLatestTurn = Schema.decodeUnknownEffect(OrchestrationLatestTurn);
+const decodeOrchestrationThread = Schema.decodeUnknownEffect(OrchestrationThread);
+const decodeOrchestrationThreadShell = Schema.decodeUnknownEffect(OrchestrationThreadShell);
 const decodeOrchestrationProposedPlan = Schema.decodeUnknownEffect(OrchestrationProposedPlan);
 const decodeOrchestrationSession = Schema.decodeUnknownEffect(OrchestrationSession);
 const decodeProviderInteractionMode = Schema.decodeUnknownEffect(ProviderInteractionMode);
@@ -624,6 +628,161 @@ it.effect("decodes thread.turn-start-requested title seed when present", () =>
       createdAt: "2026-01-01T00:00:00.000Z",
     });
     assert.strictEqual(parsed.titleSeed, "Investigate reconnect failures");
+  }),
+);
+
+it.effect("decodes historical thread payloads with empty context bindings", () =>
+  Effect.gen(function* () {
+    const parsed = yield* decodeOrchestrationThread({
+      id: "thread-1",
+      projectId: "project-1",
+      title: "Thread title",
+      modelSelection: {
+        provider: "codex",
+        model: "gpt-5.4",
+      },
+      runtimeMode: "full-access",
+      interactionMode: "default",
+      branch: null,
+      worktreePath: null,
+      latestTurn: null,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      archivedAt: null,
+      deletedAt: null,
+      messages: [],
+      proposedPlans: [],
+      activities: [],
+      checkpoints: [],
+      session: null,
+    });
+
+    assert.deepStrictEqual(parsed.contextBindings, []);
+  }),
+);
+
+it.effect("decodes historical thread shells with zero context binding count", () =>
+  Effect.gen(function* () {
+    const parsed = yield* decodeOrchestrationThreadShell({
+      id: "thread-1",
+      projectId: "project-1",
+      title: "Thread title",
+      modelSelection: {
+        provider: "codex",
+        model: "gpt-5.4",
+      },
+      runtimeMode: "full-access",
+      interactionMode: "default",
+      branch: null,
+      worktreePath: null,
+      latestTurn: null,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      archivedAt: null,
+      session: null,
+      latestUserMessageAt: null,
+      hasPendingApprovals: false,
+      hasPendingUserInput: false,
+      hasActionableProposedPlan: false,
+    });
+
+    assert.strictEqual(parsed.contextBindingCount, 0);
+  }),
+);
+
+it.effect("decodes thread context binding commands", () =>
+  Effect.gen(function* () {
+    const add = yield* decodeOrchestrationCommand({
+      type: "thread.context-binding.add",
+      commandId: "cmd-context-add",
+      threadId: "thread-target",
+      bindingId: "ctx-1",
+      sourceThreadId: "thread-source",
+      mode: "snapshot",
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+    const remove = yield* decodeOrchestrationCommand({
+      type: "thread.context-binding.remove",
+      commandId: "cmd-context-remove",
+      threadId: "thread-target",
+      bindingId: "ctx-1",
+      createdAt: "2026-01-01T00:00:01.000Z",
+    });
+    const fork = yield* decodeOrchestrationCommand({
+      type: "thread.context-fork.create",
+      commandId: "cmd-context-fork",
+      threadId: "thread-fork",
+      projectId: "project-1",
+      title: "Fork: Source",
+      modelSelection: {
+        provider: "codex",
+        model: "gpt-5.4",
+      },
+      runtimeMode: "full-access",
+      interactionMode: "default",
+      branch: null,
+      worktreePath: null,
+      sourceThreadId: "thread-source",
+      sourceMessageId: "message-1",
+      createdAt: "2026-01-01T00:00:02.000Z",
+    });
+
+    assert.strictEqual(add.type, "thread.context-binding.add");
+    assert.strictEqual(add.mode, "snapshot");
+    assert.strictEqual(remove.type, "thread.context-binding.remove");
+    assert.strictEqual(fork.type, "thread.context-fork.create");
+    assert.strictEqual(fork.sourceMessageId, "message-1");
+  }),
+);
+
+it.effect("decodes thread context binding events and turn context blocks", () =>
+  Effect.gen(function* () {
+    const added = yield* decodeOrchestrationEvent({
+      sequence: 1,
+      eventId: "event-context-added",
+      aggregateKind: "thread",
+      aggregateId: "thread-target",
+      type: "thread.context-binding-added",
+      occurredAt: "2026-01-01T00:00:00.000Z",
+      commandId: "cmd-context-add",
+      causationEventId: null,
+      correlationId: "cmd-context-add",
+      metadata: {},
+      payload: {
+        threadId: "thread-target",
+        binding: {
+          id: "ctx-1",
+          targetThreadId: "thread-target",
+          sourceThreadId: "thread-source",
+          sourceProjectId: "project-1",
+          sourceThreadTitle: "Source",
+          mode: "snapshot",
+          snapshotText: "USER:\nhello",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+      },
+    });
+    const turnStart = yield* decodeThreadTurnStartRequestedPayload({
+      threadId: "thread-target",
+      messageId: "message-current",
+      contextBlocks: [
+        {
+          bindingId: "ctx-1",
+          sourceThreadId: "thread-source",
+          sourceThreadTitle: "Source",
+          mode: "snapshot",
+          messagesIncluded: 1,
+          omittedMessages: 0,
+          text: "<attached_chat_context>USER:\nhello</attached_chat_context>",
+        },
+      ],
+      createdAt: "2026-01-01T00:00:02.000Z",
+    });
+
+    assert.strictEqual(added.type, "thread.context-binding-added");
+    assert.strictEqual(added.payload.binding.mode, "snapshot");
+    assert.strictEqual(turnStart.contextBlocks?.[0]?.sourceThreadTitle, "Source");
   }),
 );
 

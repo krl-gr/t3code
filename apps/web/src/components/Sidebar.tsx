@@ -56,6 +56,7 @@ import {
   scopeThreadRef,
 } from "@t3tools/client-runtime";
 import { Link, useLocation, useNavigate, useParams, useRouter } from "@tanstack/react-router";
+import { truncate } from "@t3tools/shared/String";
 import {
   type SidebarThreadPreviewCount,
   type SidebarThreadSortOrder,
@@ -67,8 +68,9 @@ import { productConfig } from "../productConfig";
 import { productCopy } from "../productCopy";
 import { productFeatures } from "../productFeatures";
 import { isTerminalFocused } from "../lib/terminalFocus";
-import { cn, isMacPlatform, newCommandId } from "../lib/utils";
+import { cn, isMacPlatform, newCommandId, newThreadId } from "../lib/utils";
 import {
+  selectEnvironmentState,
   selectProjectByRef,
   selectProjectsAcrossEnvironments,
   selectSidebarThreadsForProjectRefs,
@@ -199,7 +201,13 @@ const THREAD_CONTEXT_MENU_VIEWPORT_PADDING = 8;
 const THREAD_CONTEXT_MENU_FALLBACK_WIDTH = 192;
 const THREAD_CONTEXT_MENU_FALLBACK_HEIGHT = 168;
 
-type ThreadContextMenuAction = "rename" | "mark-unread" | "copy-path" | "copy-thread-id" | "delete";
+type ThreadContextMenuAction =
+  | "fork-thread"
+  | "rename"
+  | "mark-unread"
+  | "copy-path"
+  | "copy-thread-id"
+  | "delete";
 
 interface ThreadContextMenuState {
   threadRef: ScopedThreadRef;
@@ -241,6 +249,7 @@ function SidebarThreadContextMenu(props: {
     label: string;
     destructive?: boolean;
   }> = [
+    { id: "fork-thread", label: productCopy.sidebar.threadContextMenu.forkThread },
     { id: "rename", label: productCopy.sidebar.threadContextMenu.rename },
     { id: "mark-unread", label: productCopy.sidebar.threadContextMenu.markUnread },
     { id: "copy-path", label: productCopy.sidebar.threadContextMenu.copyPath },
@@ -2010,6 +2019,58 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       if (!menu) return;
       closeThreadContextMenu();
 
+      if (action === "fork-thread") {
+        const environmentState = selectEnvironmentState(
+          useStore.getState(),
+          menu.threadRef.environmentId,
+        );
+        const sourceThread = environmentState.threadShellById[menu.threadId];
+        const api = readEnvironmentApi(menu.threadRef.environmentId);
+        if (!sourceThread || !api) {
+          toastManager.add(
+            stackedThreadToast({
+              type: "error",
+              title: "Failed to fork thread",
+              description: !sourceThread
+                ? "The source thread is no longer available."
+                : "Environment API unavailable.",
+            }),
+          );
+          return;
+        }
+
+        const nextThreadId = newThreadId();
+        const nextThreadRef = scopeThreadRef(menu.threadRef.environmentId, nextThreadId);
+        void (async () => {
+          try {
+            await api.orchestration.dispatchCommand({
+              type: "thread.context-fork.create",
+              commandId: newCommandId(),
+              threadId: nextThreadId,
+              projectId: sourceThread.projectId,
+              title: truncate(`Fork: ${sourceThread.title}`),
+              modelSelection: sourceThread.modelSelection,
+              runtimeMode: sourceThread.runtimeMode,
+              interactionMode: sourceThread.interactionMode,
+              branch: sourceThread.branch,
+              worktreePath: sourceThread.worktreePath,
+              sourceThreadId: sourceThread.id,
+              createdAt: new Date().toISOString(),
+            });
+            navigateToThread(nextThreadRef);
+          } catch (error) {
+            toastManager.add(
+              stackedThreadToast({
+                type: "error",
+                title: "Failed to fork thread",
+                description: error instanceof Error ? error.message : "An error occurred.",
+              }),
+            );
+          }
+        })();
+        return;
+      }
+
       if (action === "rename") {
         setRenamingThreadKey(menu.threadKey);
         setRenamingTitle(menu.title);
@@ -2066,6 +2127,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       copyThreadIdToClipboard,
       deleteThread,
       markThreadUnread,
+      navigateToThread,
       threadContextMenu,
     ],
   );
