@@ -1483,6 +1483,15 @@ async function expectComposerFooterControlsContained(): Promise<void> {
   );
 }
 
+function isElementVisuallyVisible(element: HTMLElement | null): boolean {
+  if (!element) return false;
+  const rect = element.getBoundingClientRect();
+  const style = getComputedStyle(element);
+  return (
+    rect.width > 0 && rect.height > 0 && style.display !== "none" && style.visibility !== "hidden"
+  );
+}
+
 async function waitForInteractionModeButton(
   expectedLabel: "Build" | "Ask" | "Plan",
 ): Promise<HTMLButtonElement> {
@@ -1814,7 +1823,9 @@ describe("ChatView timeline estimator parity (full app)", () => {
 
       expect(buttons).toHaveLength(2);
       expect(header.querySelector('[data-sidebar="trigger"]')).toBeTruthy();
-      expect(header.querySelector('button[aria-label="New thread"]')).toBeTruthy();
+      const newThreadButton = header.querySelector('button[aria-label="New thread"]');
+      expect(newThreadButton).toBeTruthy();
+      expect(newThreadButton?.querySelector("svg")).toBeTruthy();
       expect(header.querySelector('button[aria-label="Toggle terminal drawer"]')).toBeNull();
       expect(header.querySelector('button[aria-label="Toggle diff panel"]')).toBeNull();
       expect(header.querySelector('button[aria-label="More chat actions"]')).toBeNull();
@@ -1852,6 +1863,61 @@ describe("ChatView timeline estimator parity (full app)", () => {
       const newDraftId = draftIdFromPath(newThreadPath);
 
       expect(useComposerDraftStore.getState().getDraftSession(newDraftId)).toMatchObject({
+        environmentId: LOCAL_ENVIRONMENT_ID,
+        projectId: PROJECT_ID,
+        branch: "main",
+        worktreePath: null,
+        envMode: "local",
+      });
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("creates a fresh draft from the active header new thread button when a draft is already open", async () => {
+    const mounted = await mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      snapshot: createSnapshotForTargetUser({
+        targetMessageId: "msg-user-header-fresh-draft-target" as MessageId,
+        targetText: "header fresh draft target",
+      }),
+    });
+
+    try {
+      const firstNewThreadButton = await waitForElement(
+        () =>
+          document.querySelector<HTMLButtonElement>(
+            '[data-chat-active-header="true"] button[aria-label="New thread"]',
+          ),
+        "Unable to find header new thread button.",
+      );
+      firstNewThreadButton.click();
+
+      const firstDraftPath = await waitForURL(
+        mounted.router,
+        (path) => UUID_ROUTE_RE.test(path),
+        "Route should change to a contextual draft thread.",
+      );
+      const firstDraftId = draftIdFromPath(firstDraftPath);
+
+      const secondNewThreadButton = await waitForElement(
+        () =>
+          document.querySelector<HTMLButtonElement>(
+            '[data-chat-active-header="true"] button[aria-label="New thread"]',
+          ),
+        "Unable to find header new thread button after opening a draft.",
+      );
+      secondNewThreadButton.click();
+
+      const secondDraftPath = await waitForURL(
+        mounted.router,
+        (path) => UUID_ROUTE_RE.test(path) && path !== firstDraftPath,
+        "Header new-thread should create a fresh draft instead of reusing the current one.",
+      );
+      const secondDraftId = draftIdFromPath(secondDraftPath);
+
+      expect(secondDraftId).not.toBe(firstDraftId);
+      expect(useComposerDraftStore.getState().getDraftSession(secondDraftId)).toMatchObject({
         environmentId: LOCAL_ENVIRONMENT_ID,
         projectId: PROJECT_ID,
         branch: "main",
@@ -1905,6 +1971,106 @@ describe("ChatView timeline estimator parity (full app)", () => {
           ).toBeTruthy();
           expect(contextBar.querySelector('button[aria-label="Toggle diff panel"]')).toBeTruthy();
           expect(contextBar.querySelector('button[aria-label="More chat actions"]')).toBeTruthy();
+        },
+        { timeout: 8_000, interval: 16 },
+      );
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("keeps the composer expanded on compact desktop widths", async () => {
+    const mounted = await mountChatView({
+      viewport: COMPACT_FOOTER_VIEWPORT,
+      snapshot: createSnapshotForTargetUser({
+        targetMessageId: "msg-user-compact-composer-expanded-target" as MessageId,
+        targetText: "compact composer expanded target",
+      }),
+    });
+
+    try {
+      const composerForm = await waitForElement(
+        () => document.querySelector<HTMLElement>('[data-chat-composer-form="true"]'),
+        "Unable to find composer form.",
+      );
+      const composerEditor = await waitForComposerEditor();
+      const composerFooter = await waitForElement(
+        () => composerForm.querySelector<HTMLElement>('[data-chat-composer-footer="true"]'),
+        "Unable to find composer footer.",
+      );
+      const sendButton = await waitForElement(
+        () => composerForm.querySelector<HTMLButtonElement>('button[aria-label="Send message"]'),
+        "Unable to find composer send button.",
+      );
+
+      expect(composerForm.querySelector("[data-chat-composer-mobile-collapsed]")).toBeNull();
+      expect(composerForm.querySelector('button[aria-label="Expand composer"]')).toBeNull();
+      expect(isElementVisuallyVisible(composerEditor)).toBe(true);
+      expect(isElementVisuallyVisible(composerFooter)).toBe(true);
+      expect(isElementVisuallyVisible(sendButton)).toBe(true);
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("hides composer quick access actions before the context bar overflows", async () => {
+    gitStatusMockState.data = createMockGitStatus({
+      hasWorkingTreeChanges: true,
+      workingTree: {
+        files: [{ path: "src/App.tsx", insertions: 4, deletions: 1 }],
+        insertions: 4,
+        deletions: 1,
+      },
+    });
+
+    const mounted = await mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      snapshot: createSnapshotForTargetUser({
+        targetMessageId: "msg-user-responsive-context-bar-target" as MessageId,
+        targetText: "responsive context bar target",
+      }),
+      configureFixture: (nextFixture) => {
+        nextFixture.serverConfig = {
+          ...nextFixture.serverConfig,
+          availableEditors: ["vscode"],
+        };
+      },
+    });
+
+    try {
+      const contextBar = await waitForElement(
+        () => document.querySelector<HTMLElement>('[data-chat-context-bar="true"]'),
+        "Unable to find composer context bar.",
+      );
+
+      const quickActionButton = await waitForElement(
+        () =>
+          Array.from(contextBar.querySelectorAll<HTMLButtonElement>("button")).find((button) =>
+            button.textContent?.includes("Commit & push"),
+          ) ?? null,
+        "Unable to find composer quick action button.",
+      );
+      const diffButton = await waitForElement(
+        () => contextBar.querySelector<HTMLButtonElement>('button[aria-label="Toggle diff panel"]'),
+        "Unable to find diff quick action button.",
+      );
+      const moreButton = await waitForElement(
+        () => contextBar.querySelector<HTMLButtonElement>('button[aria-label="More chat actions"]'),
+        "Unable to find more actions button.",
+      );
+
+      expect(isElementVisuallyVisible(quickActionButton)).toBe(true);
+      expect(isElementVisuallyVisible(diffButton)).toBe(true);
+      expect(isElementVisuallyVisible(moreButton)).toBe(true);
+
+      await mounted.setContainerSize({ width: 520, height: DEFAULT_VIEWPORT.height });
+
+      await vi.waitFor(
+        () => {
+          expect(isElementVisuallyVisible(quickActionButton)).toBe(false);
+          expect(isElementVisuallyVisible(diffButton)).toBe(false);
+          expect(isElementVisuallyVisible(moreButton)).toBe(true);
+          expect(contextBar.scrollWidth).toBeLessThanOrEqual(contextBar.clientWidth + 1);
         },
         { timeout: 8_000, interval: 16 },
       );

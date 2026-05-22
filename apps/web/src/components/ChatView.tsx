@@ -1712,15 +1712,18 @@ export default function ChatView(props: ChatViewProps) {
     [keybindings],
   );
   const handleNewThreadAction = useCallback(() => {
-    void startNewThreadFromContext({
-      activeDraftThread: newThreadActiveDraftThread,
-      activeThread: newThreadActiveThread,
-      defaultProjectRef: newThreadDefaultProjectRef,
-      defaultThreadEnvMode: resolveSidebarNewThreadEnvMode({
-        defaultEnvMode: settings.defaultThreadEnvMode,
-      }),
-      handleNewThread,
-    });
+    void startNewThreadFromContext(
+      {
+        activeDraftThread: newThreadActiveDraftThread,
+        activeThread: newThreadActiveThread,
+        defaultProjectRef: newThreadDefaultProjectRef,
+        defaultThreadEnvMode: resolveSidebarNewThreadEnvMode({
+          defaultEnvMode: settings.defaultThreadEnvMode,
+        }),
+        handleNewThread,
+      },
+      { forceNewDraft: true },
+    );
   }, [
     handleNewThread,
     newThreadActiveDraftThread,

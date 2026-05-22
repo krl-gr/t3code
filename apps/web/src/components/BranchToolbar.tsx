@@ -6,8 +6,16 @@ import type {
   ResolvedKeybindingsConfig,
   ThreadId,
 } from "@t3tools/contracts";
-import { CloudIcon, FolderGit2Icon, FolderGitIcon, FolderIcon, MonitorIcon } from "lucide-react";
-import { Fragment, memo, useCallback, useMemo, useState, type ReactNode } from "react";
+import {
+  Fragment,
+  memo,
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 
 import { useComposerDraftStore, type DraftId } from "../composerDraftStore";
 import {
@@ -18,7 +26,6 @@ import {
   editorIdFromContextQuickActionId,
   type ContextQuickActionId,
 } from "../contextQuickActions";
-import { useIsMobile } from "../hooks/useMediaQuery";
 import { usePrimaryEnvironmentId } from "../environments/primary";
 import { useStore } from "../store";
 import { createProjectSelectorByRef, createThreadSelectorByRef } from "../storeSelectors";
@@ -29,10 +36,7 @@ import ProjectScriptsControl, { type NewProjectScriptInput } from "./ProjectScri
 import {
   type EnvMode,
   type EnvironmentOption,
-  resolveCurrentWorkspaceLabel,
-  resolveEnvModeLabel,
   resolveEffectiveEnvMode,
-  resolveLockedWorkspaceLabel,
 } from "./BranchToolbar.logic";
 import {
   CONTEXT_BAR_ICON_TRIGGER_CLASS,
@@ -55,8 +59,6 @@ import {
   MenuGroupLabel,
   MenuItem,
   MenuPopup,
-  MenuRadioGroup,
-  MenuRadioItem,
   MenuSeparator,
   MenuTrigger,
 } from "./ui/menu";
@@ -102,6 +104,12 @@ type ContextQuickActionNode = {
 };
 
 const EMPTY_PROJECT_QUICK_ACTION_IDS: readonly string[] = [];
+const QUICK_ACCESS_LAYOUT_EPSILON_PX = 1;
+
+function readCssPixelValue(value: string): number {
+  const parsedValue = Number.parseFloat(value);
+  return Number.isFinite(parsedValue) ? parsedValue : 0;
+}
 
 function ContextBarSeparator() {
   return <div aria-hidden="true" className={CONTEXT_BAR_SEPARATOR_CLASS} />;
@@ -119,141 +127,6 @@ function ContextBarSlash() {
     </svg>
   );
 }
-
-interface MobileRunContextSelectorProps {
-  envLocked: boolean;
-  envModeLocked: boolean;
-  environmentId: EnvironmentId;
-  availableEnvironments: readonly EnvironmentOption[] | undefined;
-  showEnvironmentPicker: boolean;
-  onEnvironmentChange: ((environmentId: EnvironmentId) => void) | undefined;
-  effectiveEnvMode: EnvMode;
-  activeWorktreePath: string | null;
-  onEnvModeChange: (mode: EnvMode) => void;
-}
-
-const MobileRunContextSelector = memo(function MobileRunContextSelector({
-  envLocked,
-  envModeLocked,
-  environmentId,
-  availableEnvironments,
-  showEnvironmentPicker,
-  onEnvironmentChange,
-  effectiveEnvMode,
-  activeWorktreePath,
-  onEnvModeChange,
-}: MobileRunContextSelectorProps) {
-  const activeEnvironment = useMemo(
-    () => availableEnvironments?.find((env) => env.environmentId === environmentId) ?? null,
-    [availableEnvironments, environmentId],
-  );
-  const WorkspaceIcon =
-    effectiveEnvMode === "worktree"
-      ? FolderGit2Icon
-      : activeWorktreePath
-        ? FolderGitIcon
-        : FolderIcon;
-  const workspaceLabel = envModeLocked
-    ? resolveLockedWorkspaceLabel(activeWorktreePath)
-    : effectiveEnvMode === "worktree"
-      ? resolveEnvModeLabel("worktree")
-      : resolveCurrentWorkspaceLabel(activeWorktreePath);
-  const isLocked = envLocked || envModeLocked;
-  const EnvironmentIcon = activeEnvironment?.isPrimary ? MonitorIcon : CloudIcon;
-  const icon = showEnvironmentPicker ? (
-    // Button's base styles apply `-mx-0.5` to descendant SVGs, which eats 4px
-    // out of whatever gap we set. mx-0! cancels that so gap-0.5 reads as 2px.
-    <span className="inline-flex shrink-0 items-center gap-0.5">
-      <EnvironmentIcon className="size-3 shrink-0 mx-0!" />
-      <WorkspaceIcon className="size-3 shrink-0 mx-0!" />
-    </span>
-  ) : (
-    <WorkspaceIcon className="size-3 shrink-0" />
-  );
-  const triggerContent = (
-    <>
-      {icon}
-      <span className="min-w-0 truncate">
-        {showEnvironmentPicker ? (activeEnvironment?.label ?? "Run on") : workspaceLabel}
-      </span>
-    </>
-  );
-
-  if (isLocked) {
-    return (
-      <span className="inline-flex min-w-0 max-w-[48%] flex-1 items-center justify-start gap-1 rounded-md border border-transparent px-[calc(--spacing(2)-1px)] text-sm font-medium text-muted-foreground/70 md:hidden">
-        {triggerContent}
-      </span>
-    );
-  }
-
-  return (
-    <Menu>
-      <MenuTrigger
-        render={<Button variant="ghost" size="xs" />}
-        className="min-w-0 max-w-[48%] flex-1 justify-start text-muted-foreground/70 hover:text-foreground/80 md:hidden"
-      >
-        {triggerContent}
-      </MenuTrigger>
-      <MenuPopup align="start" side="top" className="w-64">
-        {showEnvironmentPicker && availableEnvironments && onEnvironmentChange ? (
-          <>
-            <MenuGroup>
-              <MenuGroupLabel>Run on</MenuGroupLabel>
-              <MenuRadioGroup
-                value={environmentId}
-                onValueChange={(value) => onEnvironmentChange(value as EnvironmentId)}
-              >
-                {availableEnvironments.map((env) => {
-                  const Icon = env.isPrimary ? MonitorIcon : CloudIcon;
-                  return (
-                    <MenuRadioItem
-                      key={env.environmentId}
-                      disabled={envLocked}
-                      value={env.environmentId}
-                    >
-                      <span className="flex min-w-0 items-center gap-1.5">
-                        <Icon className="size-3" />
-                        <span className="min-w-0 truncate">{env.label}</span>
-                      </span>
-                    </MenuRadioItem>
-                  );
-                })}
-              </MenuRadioGroup>
-            </MenuGroup>
-            <MenuSeparator />
-          </>
-        ) : null}
-        <MenuGroup>
-          <MenuGroupLabel>Workspace</MenuGroupLabel>
-          <MenuRadioGroup
-            value={effectiveEnvMode}
-            onValueChange={(value) => onEnvModeChange(value as EnvMode)}
-          >
-            <MenuRadioItem disabled={envModeLocked} value="local">
-              <span className="flex min-w-0 items-center gap-1.5">
-                {activeWorktreePath ? (
-                  <FolderGitIcon className="size-3" />
-                ) : (
-                  <FolderIcon className="size-3" />
-                )}
-                <span className="min-w-0 truncate">
-                  {resolveCurrentWorkspaceLabel(activeWorktreePath)}
-                </span>
-              </span>
-            </MenuRadioItem>
-            <MenuRadioItem disabled={envModeLocked} value="worktree">
-              <span className="flex min-w-0 items-center gap-1.5">
-                <FolderGit2Icon className="size-3" />
-                <span className="min-w-0 truncate">{resolveEnvModeLabel("worktree")}</span>
-              </span>
-            </MenuRadioItem>
-          </MenuRadioGroup>
-        </MenuGroup>
-      </MenuPopup>
-    </Menu>
-  );
-});
 
 export const BranchToolbar = memo(function BranchToolbar({
   environmentId,
@@ -287,6 +160,11 @@ export const BranchToolbar = memo(function BranchToolbar({
   onEnvironmentChange,
 }: BranchToolbarProps) {
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const [quickAccessHidden, setQuickAccessHidden] = useState(false);
+  const toolbarRef = useRef<HTMLDivElement>(null);
+  const leftContentRef = useRef<HTMLDivElement>(null);
+  const quickAccessRef = useRef<HTMLDivElement>(null);
+  const moreActionsRef = useRef<HTMLDivElement>(null);
   const threadRef = useMemo(
     () => scopeThreadRef(environmentId, threadId),
     [environmentId, threadId],
@@ -316,11 +194,11 @@ export const BranchToolbar = memo(function BranchToolbar({
       draftThreadEnvMode: draftThread?.envMode,
     });
   const envModeLocked = envLocked || (serverThread !== undefined && activeWorktreePath !== null);
+  const hasRenderableToolbar = hasActiveThread && activeProject !== undefined;
 
   const showEnvironmentPicker = Boolean(
     availableEnvironments && availableEnvironments.length > 1 && onEnvironmentChange,
   );
-  const isMobile = useIsMobile();
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const showOpenInPicker = shouldShowOpenInPicker({
     activeProjectName: activeProject?.name,
@@ -390,6 +268,74 @@ export const BranchToolbar = memo(function BranchToolbar({
     },
     [activeProjectKey, setProjectQuickActionPinned],
   );
+  const updateQuickAccessVisibility = useCallback(() => {
+    const toolbarElement = toolbarRef.current;
+    const leftContentElement = leftContentRef.current;
+    const moreActionsElement = moreActionsRef.current;
+    const quickAccessElement = quickAccessRef.current;
+
+    if (!toolbarElement || !leftContentElement || !moreActionsElement || !quickAccessElement) {
+      setQuickAccessHidden(false);
+      return;
+    }
+
+    const toolbarStyle = window.getComputedStyle(toolbarElement);
+    const toolbarContentWidth =
+      toolbarElement.clientWidth -
+      readCssPixelValue(toolbarStyle.paddingLeft) -
+      readCssPixelValue(toolbarStyle.paddingRight);
+    const toolbarGapWidth = readCssPixelValue(toolbarStyle.columnGap);
+    const fullQuickAccessWidth = quickAccessElement.scrollWidth;
+    const requiredWidthWithQuickAccess =
+      leftContentElement.scrollWidth +
+      moreActionsElement.offsetWidth +
+      toolbarGapWidth +
+      fullQuickAccessWidth;
+    const shouldHideQuickAccess =
+      fullQuickAccessWidth > 0 &&
+      requiredWidthWithQuickAccess > toolbarContentWidth + QUICK_ACCESS_LAYOUT_EPSILON_PX;
+
+    setQuickAccessHidden((currentValue) =>
+      currentValue === shouldHideQuickAccess ? currentValue : shouldHideQuickAccess,
+    );
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!hasRenderableToolbar) return;
+    updateQuickAccessVisibility();
+  });
+
+  useLayoutEffect(() => {
+    if (!hasRenderableToolbar) return;
+
+    updateQuickAccessVisibility();
+    window.addEventListener("resize", updateQuickAccessVisibility);
+
+    if (typeof ResizeObserver === "undefined") {
+      return () => {
+        window.removeEventListener("resize", updateQuickAccessVisibility);
+      };
+    }
+
+    const resizeObserver = new ResizeObserver(() => {
+      updateQuickAccessVisibility();
+    });
+    const observedElements = [
+      toolbarRef.current,
+      leftContentRef.current,
+      quickAccessRef.current,
+      moreActionsRef.current,
+    ];
+
+    for (const element of observedElements) {
+      if (element) resizeObserver.observe(element);
+    }
+
+    return () => {
+      window.removeEventListener("resize", updateQuickAccessVisibility);
+      resizeObserver.disconnect();
+    };
+  }, [hasRenderableToolbar, updateQuickAccessVisibility]);
 
   if (!hasActiveThread || !activeProject) return null;
 
@@ -553,53 +499,43 @@ export const BranchToolbar = memo(function BranchToolbar({
 
   return (
     <div
+      ref={toolbarRef}
       className="mx-auto flex w-full max-w-208 min-w-0 items-center justify-between gap-2 pb-3 pl-3 pr-4 pt-1 drop-shadow-[0_4px_2px_rgba(0,0,0,0.25)]"
       data-chat-context-bar="true"
     >
-      <div className="flex min-w-0 items-center gap-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {isMobile ? (
-          <MobileRunContextSelector
-            envLocked={envLocked}
-            envModeLocked={envModeLocked}
-            environmentId={environmentId}
-            availableEnvironments={availableEnvironments}
-            showEnvironmentPicker={showEnvironmentPicker}
-            onEnvironmentChange={onEnvironmentChange}
+      <div
+        ref={leftContentRef}
+        className="flex min-w-0 items-center gap-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
+        <div className="flex min-w-0 shrink-0 items-center gap-0">
+          <span className={CONTEXT_BAR_ICON_TRIGGER_CLASS} aria-hidden="true">
+            <ProjectFavicon
+              environmentId={activeProject.environmentId}
+              cwd={activeProject.cwd}
+              label={activeProject.name}
+              projectKey={activeProject.id}
+              className="size-4"
+            />
+          </span>
+          <ContextBarSlash />
+          {showEnvironmentPicker && availableEnvironments && onEnvironmentChange && (
+            <>
+              <BranchToolbarEnvironmentSelector
+                envLocked={envLocked}
+                environmentId={environmentId}
+                availableEnvironments={availableEnvironments}
+                onEnvironmentChange={onEnvironmentChange}
+              />
+              <ContextBarSeparator />
+            </>
+          )}
+          <BranchToolbarEnvModeSelector
+            envLocked={envModeLocked}
             effectiveEnvMode={effectiveEnvMode}
             activeWorktreePath={activeWorktreePath}
             onEnvModeChange={onEnvModeChange}
           />
-        ) : (
-          <div className="flex min-w-0 shrink-0 items-center gap-0">
-            <span className={CONTEXT_BAR_ICON_TRIGGER_CLASS} aria-hidden="true">
-              <ProjectFavicon
-                environmentId={activeProject.environmentId}
-                cwd={activeProject.cwd}
-                label={activeProject.name}
-                projectKey={activeProject.id}
-                className="size-4"
-              />
-            </span>
-            <ContextBarSlash />
-            {showEnvironmentPicker && availableEnvironments && onEnvironmentChange && (
-              <>
-                <BranchToolbarEnvironmentSelector
-                  envLocked={envLocked}
-                  environmentId={environmentId}
-                  availableEnvironments={availableEnvironments}
-                  onEnvironmentChange={onEnvironmentChange}
-                />
-                <ContextBarSeparator />
-              </>
-            )}
-            <BranchToolbarEnvModeSelector
-              envLocked={envModeLocked}
-              effectiveEnvMode={effectiveEnvMode}
-              activeWorktreePath={activeWorktreePath}
-              onEnvModeChange={onEnvModeChange}
-            />
-          </div>
-        )}
+        </div>
 
         <ContextBarSeparator />
         <BranchToolbarBranchSelector
@@ -616,93 +552,105 @@ export const BranchToolbar = memo(function BranchToolbar({
         />
       </div>
 
-      <div className="flex shrink-0 items-center justify-end gap-0 text-[rgba(186,185,186,0.7)]">
-        {quickAccessNodes.map((entry, index) => (
-          <Fragment key={entry.actionId}>
-            {index > 0 ? <ContextBarSeparator /> : null}
-            {entry.node}
-          </Fragment>
-        ))}
-        {quickAccessNodes.length > 0 ? <ContextBarSeparator /> : null}
-        <Menu open={moreMenuOpen} onOpenChange={setMoreMenuOpen}>
-          <MenuTrigger
-            render={
-              <Button
-                aria-label="More chat actions"
-                size="icon-sm"
-                variant="ghost"
-                className={CONTEXT_BAR_ICON_TRIGGER_CLASS}
-              />
-            }
+      <div className="relative flex shrink-0 items-center justify-end gap-0 text-[rgba(186,185,186,0.7)]">
+        {quickAccessNodes.length > 0 ? (
+          <div
+            ref={quickAccessRef}
+            aria-hidden={quickAccessHidden}
+            className={`flex shrink-0 items-center justify-end gap-0 ${
+              quickAccessHidden ? "invisible pointer-events-none absolute right-0 top-0" : ""
+            }`}
           >
-            <ContextBarMoreIcon className="size-4" />
-          </MenuTrigger>
-          <MenuPopup align="end" side="top" className="min-w-64" keepMounted>
-            {activeProjectScripts ? (
-              <ProjectScriptsControl
-                presentation="menu"
-                scripts={activeProjectScripts}
-                keybindings={keybindings}
-                preferredScriptId={preferredScriptId}
-                pinnedScriptIds={pinnedProjectScriptIds}
-                onRunScript={onRunProjectScript}
-                onRequestMenuClose={() => setMoreMenuOpen(false)}
-                onScriptPinnedChange={onProjectScriptPinnedChange}
-                onAddScript={onAddProjectScript}
-                onUpdateScript={onUpdateProjectScript}
-                onDeleteScript={onDeleteProjectScript}
-              />
-            ) : (
-              <MenuItem disabled>No project actions</MenuItem>
-            )}
-            <MenuSeparator />
-            <GitActionsControl
-              presentation="composer-menu"
-              gitCwd={gitCwd}
-              activeThreadRef={threadRef}
-              pinnedContextActionIds={pinnedContextActionIds}
-              onContextActionPinnedChange={onContextActionPinnedChange}
-              {...(draftId ? { draftId } : {})}
-            />
-            {showOpenInPicker ? (
-              <>
-                <OpenInPicker
-                  presentation="composer-menu"
-                  keybindings={keybindings}
-                  availableEditors={availableEditors}
-                  openInCwd={openInCwd}
-                  pinnedContextActionIds={pinnedContextActionIds}
-                  onContextActionPinnedChange={onContextActionPinnedChange}
+            {quickAccessNodes.map((entry, index) => (
+              <Fragment key={entry.actionId}>
+                {index > 0 ? <ContextBarSeparator /> : null}
+                {entry.node}
+              </Fragment>
+            ))}
+            <ContextBarSeparator />
+          </div>
+        ) : null}
+        <div ref={moreActionsRef} className="flex shrink-0 items-center justify-end">
+          <Menu open={moreMenuOpen} onOpenChange={setMoreMenuOpen}>
+            <MenuTrigger
+              render={
+                <Button
+                  aria-label="More chat actions"
+                  size="icon-sm"
+                  variant="ghost"
+                  className={CONTEXT_BAR_ICON_TRIGGER_CLASS}
                 />
-                <MenuSeparator />
-              </>
-            ) : null}
-            <MenuGroup>
-              <MenuGroupLabel>View</MenuGroupLabel>
-              <ContextActionMenuItem
-                actionId="terminal.toggle"
-                checked={pinnedContextActionIds.has("terminal.toggle")}
-                disabled={!terminalAvailable}
-                icon={<ContextBarTerminalIcon className="size-4" />}
-                shortcutLabel={terminalToggleShortcutLabel}
-                onCheckedChange={onContextActionPinnedChange}
-                onSelect={onToggleTerminal}
-              >
-                Terminal
-              </ContextActionMenuItem>
-              <ContextActionMenuItem
-                actionId="diff.toggle"
-                checked={pinnedContextActionIds.has("diff.toggle")}
-                icon={<ContextBarDiffIcon className="size-4" />}
-                shortcutLabel={diffToggleShortcutLabel}
-                onCheckedChange={onContextActionPinnedChange}
-                onSelect={onToggleDiff}
-              >
-                Diff
-              </ContextActionMenuItem>
-            </MenuGroup>
-          </MenuPopup>
-        </Menu>
+              }
+            >
+              <ContextBarMoreIcon className="size-4" />
+            </MenuTrigger>
+            <MenuPopup align="end" side="top" className="min-w-64" keepMounted>
+              {activeProjectScripts ? (
+                <ProjectScriptsControl
+                  presentation="menu"
+                  scripts={activeProjectScripts}
+                  keybindings={keybindings}
+                  preferredScriptId={preferredScriptId}
+                  pinnedScriptIds={pinnedProjectScriptIds}
+                  onRunScript={onRunProjectScript}
+                  onRequestMenuClose={() => setMoreMenuOpen(false)}
+                  onScriptPinnedChange={onProjectScriptPinnedChange}
+                  onAddScript={onAddProjectScript}
+                  onUpdateScript={onUpdateProjectScript}
+                  onDeleteScript={onDeleteProjectScript}
+                />
+              ) : (
+                <MenuItem disabled>No project actions</MenuItem>
+              )}
+              <MenuSeparator />
+              <GitActionsControl
+                presentation="composer-menu"
+                gitCwd={gitCwd}
+                activeThreadRef={threadRef}
+                pinnedContextActionIds={pinnedContextActionIds}
+                onContextActionPinnedChange={onContextActionPinnedChange}
+                {...(draftId ? { draftId } : {})}
+              />
+              {showOpenInPicker ? (
+                <>
+                  <OpenInPicker
+                    presentation="composer-menu"
+                    keybindings={keybindings}
+                    availableEditors={availableEditors}
+                    openInCwd={openInCwd}
+                    pinnedContextActionIds={pinnedContextActionIds}
+                    onContextActionPinnedChange={onContextActionPinnedChange}
+                  />
+                  <MenuSeparator />
+                </>
+              ) : null}
+              <MenuGroup>
+                <MenuGroupLabel>View</MenuGroupLabel>
+                <ContextActionMenuItem
+                  actionId="terminal.toggle"
+                  checked={pinnedContextActionIds.has("terminal.toggle")}
+                  disabled={!terminalAvailable}
+                  icon={<ContextBarTerminalIcon className="size-4" />}
+                  shortcutLabel={terminalToggleShortcutLabel}
+                  onCheckedChange={onContextActionPinnedChange}
+                  onSelect={onToggleTerminal}
+                >
+                  Terminal
+                </ContextActionMenuItem>
+                <ContextActionMenuItem
+                  actionId="diff.toggle"
+                  checked={pinnedContextActionIds.has("diff.toggle")}
+                  icon={<ContextBarDiffIcon className="size-4" />}
+                  shortcutLabel={diffToggleShortcutLabel}
+                  onCheckedChange={onContextActionPinnedChange}
+                  onSelect={onToggleDiff}
+                >
+                  Diff
+                </ContextActionMenuItem>
+              </MenuGroup>
+            </MenuPopup>
+          </Menu>
+        </div>
       </div>
     </div>
   );

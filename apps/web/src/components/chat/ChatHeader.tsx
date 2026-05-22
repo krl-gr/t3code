@@ -33,11 +33,12 @@ export const ChatHeader = memo(function ChatHeader({
                 className="rounded-full text-muted-foreground/80 hover:text-foreground"
                 aria-label="New thread"
                 onClick={onNewThread}
-              />
+              >
+                <SquarePenIcon className="size-4" aria-hidden="true" />
+              </Button>
             }
           />
-          <SquarePenIcon className="size-4" />
-          <TooltipPopup side="bottom">
+          <TooltipPopup side="bottom" align="end">
             {newThreadShortcutLabel ? `New thread (${newThreadShortcutLabel})` : "New thread"}
           </TooltipPopup>
         </Tooltip>
