@@ -120,6 +120,7 @@ interface MessagesTimelineProps {
   isRevertingCheckpoint: boolean;
   onImageExpand: (preview: ExpandedImagePreview) => void;
   activeThreadEnvironmentId: EnvironmentId;
+  activeProjectName?: string | undefined;
   markdownCwd: string | undefined;
   resolvedTheme: "light" | "dark";
   timestampFormat: TimestampFormat;
@@ -149,6 +150,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   isRevertingCheckpoint,
   onImageExpand,
   activeThreadEnvironmentId,
+  activeProjectName,
   markdownCwd,
   resolvedTheme,
   timestampFormat,
@@ -254,10 +256,14 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   );
 
   if (rows.length === 0 && !isWorking) {
+    const emptyPrompt = activeProjectName?.trim()
+      ? `What should we do in ${activeProjectName.trim()} today?`
+      : "What should we do today?";
+
     return (
       <div className="flex h-full items-center justify-center">
-        <p className="text-sm text-muted-foreground/30">
-          Send a message to start the conversation.
+        <p className="max-w-[min(32rem,calc(100%-2rem))] truncate bg-gradient-to-b from-muted-foreground/45 to-muted-foreground/20 bg-clip-text text-center text-2xl font-medium text-transparent tracking-normal">
+          {emptyPrompt}
         </p>
       </div>
     );

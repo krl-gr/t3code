@@ -1,19 +1,21 @@
 import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime";
-import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
-import {
-  ChevronDownIcon,
-  CloudIcon,
-  FolderGit2Icon,
-  FolderGitIcon,
-  FolderIcon,
-  MonitorIcon,
-} from "lucide-react";
+import type {
+  EditorId,
+  EnvironmentId,
+  ProjectScript,
+  ResolvedKeybindingsConfig,
+  ThreadId,
+} from "@t3tools/contracts";
+import { CloudIcon, FolderGit2Icon, FolderGitIcon, FolderIcon, MonitorIcon } from "lucide-react";
 import { memo, useMemo } from "react";
 
 import { useComposerDraftStore, type DraftId } from "../composerDraftStore";
 import { useIsMobile } from "../hooks/useMediaQuery";
+import { usePrimaryEnvironmentId } from "../environments/primary";
 import { useStore } from "../store";
 import { createProjectSelectorByRef, createThreadSelectorByRef } from "../storeSelectors";
+import GitActionsControl from "./GitActionsControl";
+import ProjectScriptsControl, { type NewProjectScriptInput } from "./ProjectScriptsControl";
 import {
   type EnvMode,
   type EnvironmentOption,
@@ -22,27 +24,57 @@ import {
   resolveEffectiveEnvMode,
   resolveLockedWorkspaceLabel,
 } from "./BranchToolbar.logic";
+import {
+  CONTEXT_BAR_ICON_TRIGGER_CLASS,
+  CONTEXT_BAR_SEPARATOR_CLASS,
+} from "./BranchToolbar.styles";
+import {
+  ContextBarDiffIcon,
+  ContextBarMoreIcon,
+  ContextBarTerminalIcon,
+} from "./BranchToolbar.icons";
 import { BranchToolbarBranchSelector } from "./BranchToolbarBranchSelector";
 import { BranchToolbarEnvironmentSelector } from "./BranchToolbarEnvironmentSelector";
 import { BranchToolbarEnvModeSelector } from "./BranchToolbarEnvModeSelector";
+import { ProjectFavicon } from "./ProjectFavicon";
 import { Button } from "./ui/button";
 import {
   Menu,
   MenuGroup,
   MenuGroupLabel,
+  MenuItem,
   MenuPopup,
   MenuRadioGroup,
   MenuRadioItem,
   MenuSeparator,
   MenuTrigger,
 } from "./ui/menu";
-import { Separator } from "./ui/separator";
+import { Toggle } from "./ui/toggle";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
+import { OpenInPicker, shouldShowOpenInPicker } from "./chat/OpenInPicker";
 
 interface BranchToolbarProps {
   environmentId: EnvironmentId;
   threadId: ThreadId;
   draftId?: DraftId;
+  activeProjectScripts: ProjectScript[] | undefined;
+  availableEditors: ReadonlyArray<EditorId>;
+  diffOpen: boolean;
+  diffToggleShortcutLabel: string | null;
+  gitCwd: string | null;
+  keybindings: ResolvedKeybindingsConfig;
+  openInCwd: string | null;
+  preferredScriptId: string | null;
+  terminalAvailable: boolean;
+  terminalOpen: boolean;
+  terminalToggleShortcutLabel: string | null;
   onEnvModeChange: (mode: EnvMode) => void;
+  onAddProjectScript: (input: NewProjectScriptInput) => Promise<void>;
+  onDeleteProjectScript: (scriptId: string) => Promise<void>;
+  onRunProjectScript: (script: ProjectScript) => void;
+  onToggleDiff: () => void;
+  onToggleTerminal: () => void;
+  onUpdateProjectScript: (scriptId: string, input: NewProjectScriptInput) => Promise<void>;
   effectiveEnvModeOverride?: EnvMode;
   activeThreadBranchOverride?: string | null;
   onActiveThreadBranchOverrideChange?: (branch: string | null) => void;
@@ -51,6 +83,23 @@ interface BranchToolbarProps {
   onComposerFocusRequest?: () => void;
   availableEnvironments?: readonly EnvironmentOption[];
   onEnvironmentChange?: (environmentId: EnvironmentId) => void;
+}
+
+function ContextBarSeparator() {
+  return <div aria-hidden="true" className={CONTEXT_BAR_SEPARATOR_CLASS} />;
+}
+
+function ContextBarSlash() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 6 12"
+      className="h-[12px] w-[6px] shrink-0 text-[#2b2b2c]"
+      fill="none"
+    >
+      <path d="M5.25 0.5L0.75 11.5" stroke="currentColor" strokeWidth="1" />
+    </svg>
+  );
 }
 
 interface MobileRunContextSelectorProps {
@@ -127,7 +176,6 @@ const MobileRunContextSelector = memo(function MobileRunContextSelector({
         className="min-w-0 max-w-[48%] flex-1 justify-start text-muted-foreground/70 hover:text-foreground/80 md:hidden"
       >
         {triggerContent}
-        <ChevronDownIcon className="size-3 shrink-0 opacity-50" />
       </MenuTrigger>
       <MenuPopup align="start" side="top" className="w-64">
         {showEnvironmentPicker && availableEnvironments && onEnvironmentChange ? (
@@ -193,7 +241,24 @@ export const BranchToolbar = memo(function BranchToolbar({
   environmentId,
   threadId,
   draftId,
+  activeProjectScripts,
+  availableEditors,
+  diffOpen,
+  diffToggleShortcutLabel,
+  gitCwd,
+  keybindings,
+  openInCwd,
+  preferredScriptId,
+  terminalAvailable,
+  terminalOpen,
+  terminalToggleShortcutLabel,
   onEnvModeChange,
+  onAddProjectScript,
+  onDeleteProjectScript,
+  onRunProjectScript,
+  onToggleDiff,
+  onToggleTerminal,
+  onUpdateProjectScript,
   effectiveEnvModeOverride,
   activeThreadBranchOverride,
   onActiveThreadBranchOverrideChange,
@@ -237,57 +302,177 @@ export const BranchToolbar = memo(function BranchToolbar({
     availableEnvironments && availableEnvironments.length > 1 && onEnvironmentChange,
   );
   const isMobile = useIsMobile();
+  const primaryEnvironmentId = usePrimaryEnvironmentId();
+  const showOpenInPicker = shouldShowOpenInPicker({
+    activeProjectName: activeProject?.name,
+    activeThreadEnvironmentId: environmentId,
+    primaryEnvironmentId,
+  });
 
   if (!hasActiveThread || !activeProject) return null;
 
   return (
-    <div className="mx-auto flex w-full max-w-208 items-center gap-2 px-2.5 pb-3 pt-1 sm:px-3">
-      {isMobile ? (
-        <MobileRunContextSelector
-          envLocked={envLocked}
-          envModeLocked={envModeLocked}
-          environmentId={environmentId}
-          availableEnvironments={availableEnvironments}
-          showEnvironmentPicker={showEnvironmentPicker}
-          onEnvironmentChange={onEnvironmentChange}
-          effectiveEnvMode={effectiveEnvMode}
-          activeWorktreePath={activeWorktreePath}
-          onEnvModeChange={onEnvModeChange}
-        />
-      ) : (
-        <div className="flex min-w-0 shrink-0 items-center gap-1">
-          {showEnvironmentPicker && availableEnvironments && onEnvironmentChange && (
-            <>
-              <BranchToolbarEnvironmentSelector
-                envLocked={envLocked}
-                environmentId={environmentId}
-                availableEnvironments={availableEnvironments}
-                onEnvironmentChange={onEnvironmentChange}
-              />
-              <Separator orientation="vertical" className="mx-0.5 h-3.5!" />
-            </>
-          )}
-          <BranchToolbarEnvModeSelector
-            envLocked={envModeLocked}
+    <div
+      className="mx-auto flex w-full max-w-208 min-w-0 items-center justify-between gap-2 pb-3 pl-3 pr-4 pt-1 drop-shadow-[0_4px_2px_rgba(0,0,0,0.25)]"
+      data-chat-context-bar="true"
+    >
+      <div className="flex min-w-0 items-center gap-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {isMobile ? (
+          <MobileRunContextSelector
+            envLocked={envLocked}
+            envModeLocked={envModeLocked}
+            environmentId={environmentId}
+            availableEnvironments={availableEnvironments}
+            showEnvironmentPicker={showEnvironmentPicker}
+            onEnvironmentChange={onEnvironmentChange}
             effectiveEnvMode={effectiveEnvMode}
             activeWorktreePath={activeWorktreePath}
             onEnvModeChange={onEnvModeChange}
           />
-        </div>
-      )}
+        ) : (
+          <div className="flex min-w-0 shrink-0 items-center gap-0">
+            <span className={CONTEXT_BAR_ICON_TRIGGER_CLASS} aria-hidden="true">
+              <ProjectFavicon
+                environmentId={activeProject.environmentId}
+                cwd={activeProject.cwd}
+                label={activeProject.name}
+                projectKey={activeProject.id}
+                className="size-4"
+              />
+            </span>
+            <ContextBarSlash />
+            {showEnvironmentPicker && availableEnvironments && onEnvironmentChange && (
+              <>
+                <BranchToolbarEnvironmentSelector
+                  envLocked={envLocked}
+                  environmentId={environmentId}
+                  availableEnvironments={availableEnvironments}
+                  onEnvironmentChange={onEnvironmentChange}
+                />
+                <ContextBarSeparator />
+              </>
+            )}
+            <BranchToolbarEnvModeSelector
+              envLocked={envModeLocked}
+              effectiveEnvMode={effectiveEnvMode}
+              activeWorktreePath={activeWorktreePath}
+              onEnvModeChange={onEnvModeChange}
+            />
+          </div>
+        )}
 
-      <BranchToolbarBranchSelector
-        className="min-w-0 flex-1 justify-end md:ml-auto md:flex-none"
-        environmentId={environmentId}
-        threadId={threadId}
-        {...(draftId ? { draftId } : {})}
-        envLocked={envLocked}
-        {...(effectiveEnvModeOverride ? { effectiveEnvModeOverride } : {})}
-        {...(activeThreadBranchOverride !== undefined ? { activeThreadBranchOverride } : {})}
-        {...(onActiveThreadBranchOverrideChange ? { onActiveThreadBranchOverrideChange } : {})}
-        {...(onCheckoutPullRequestRequest ? { onCheckoutPullRequestRequest } : {})}
-        {...(onComposerFocusRequest ? { onComposerFocusRequest } : {})}
-      />
+        <ContextBarSeparator />
+        <BranchToolbarBranchSelector
+          className="min-w-0 max-w-40 justify-start"
+          environmentId={environmentId}
+          threadId={threadId}
+          {...(draftId ? { draftId } : {})}
+          envLocked={envLocked}
+          {...(effectiveEnvModeOverride ? { effectiveEnvModeOverride } : {})}
+          {...(activeThreadBranchOverride !== undefined ? { activeThreadBranchOverride } : {})}
+          {...(onActiveThreadBranchOverrideChange ? { onActiveThreadBranchOverrideChange } : {})}
+          {...(onCheckoutPullRequestRequest ? { onCheckoutPullRequestRequest } : {})}
+          {...(onComposerFocusRequest ? { onComposerFocusRequest } : {})}
+        />
+      </div>
+
+      <div className="flex shrink-0 items-center justify-end gap-0 text-[rgba(186,185,186,0.7)]">
+        <GitActionsControl
+          presentation="composer-bar"
+          gitCwd={gitCwd}
+          activeThreadRef={threadRef}
+          {...(draftId ? { draftId } : {})}
+        />
+        {showOpenInPicker ? (
+          <>
+            <ContextBarSeparator />
+            <OpenInPicker
+              presentation="composer-bar"
+              keybindings={keybindings}
+              availableEditors={availableEditors}
+              openInCwd={openInCwd}
+            />
+          </>
+        ) : null}
+        <ContextBarSeparator />
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Toggle
+                className={CONTEXT_BAR_ICON_TRIGGER_CLASS}
+                pressed={terminalOpen}
+                onPressedChange={onToggleTerminal}
+                aria-label="Toggle terminal drawer"
+                variant="outline"
+                size="xs"
+                disabled={!terminalAvailable}
+              />
+            }
+          >
+            <ContextBarTerminalIcon className="size-4" />
+          </TooltipTrigger>
+          <TooltipPopup side="top">
+            {!terminalAvailable
+              ? "Terminal is unavailable until this thread has an active project."
+              : terminalToggleShortcutLabel
+                ? `Toggle terminal drawer (${terminalToggleShortcutLabel})`
+                : "Toggle terminal drawer"}
+          </TooltipPopup>
+        </Tooltip>
+        <ContextBarSeparator />
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Toggle
+                className={CONTEXT_BAR_ICON_TRIGGER_CLASS}
+                pressed={diffOpen}
+                onPressedChange={onToggleDiff}
+                aria-label="Toggle diff panel"
+                variant="outline"
+                size="xs"
+              />
+            }
+          >
+            <ContextBarDiffIcon className="size-4" />
+          </TooltipTrigger>
+          <TooltipPopup side="top">
+            {diffToggleShortcutLabel
+              ? `Toggle diff panel (${diffToggleShortcutLabel})`
+              : "Toggle diff panel"}
+          </TooltipPopup>
+        </Tooltip>
+        <ContextBarSeparator />
+        <Menu>
+          <MenuTrigger
+            render={
+              <Button
+                aria-label="More chat actions"
+                size="icon-sm"
+                variant="ghost"
+                className={CONTEXT_BAR_ICON_TRIGGER_CLASS}
+              />
+            }
+          >
+            <ContextBarMoreIcon className="size-4" />
+          </MenuTrigger>
+          <MenuPopup align="end" side="top" className="min-w-52">
+            {activeProjectScripts ? (
+              <ProjectScriptsControl
+                presentation="menu"
+                scripts={activeProjectScripts}
+                keybindings={keybindings}
+                preferredScriptId={preferredScriptId}
+                onRunScript={onRunProjectScript}
+                onAddScript={onAddProjectScript}
+                onUpdateScript={onUpdateProjectScript}
+                onDeleteScript={onDeleteProjectScript}
+              />
+            ) : (
+              <MenuItem disabled>No project actions</MenuItem>
+            )}
+          </MenuPopup>
+        </Menu>
+      </div>
     </div>
   );
 });

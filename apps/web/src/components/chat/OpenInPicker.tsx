@@ -1,4 +1,4 @@
-import { EditorId, type ResolvedKeybindingsConfig } from "@t3tools/contracts";
+import { EditorId, type EnvironmentId, type ResolvedKeybindingsConfig } from "@t3tools/contracts";
 import { memo, useCallback, useEffect, useMemo } from "react";
 import { isOpenFavoriteEditorShortcut, shortcutLabelForCommand } from "../../keybindings";
 import { usePreferredEditor } from "../../editorPreferences";
@@ -6,6 +6,7 @@ import { ChevronDownIcon, FolderClosedIcon } from "lucide-react";
 import { Button } from "../ui/button";
 import { Group, GroupSeparator } from "../ui/group";
 import { Menu, MenuItem, MenuPopup, MenuShortcut, MenuTrigger } from "../ui/menu";
+import { CONTEXT_BAR_TEXT_TRIGGER_CLASS } from "../BranchToolbar.styles";
 import {
   AntigravityIcon,
   CursorIcon,
@@ -153,10 +154,12 @@ export const OpenInPicker = memo(function OpenInPicker({
   keybindings,
   availableEditors,
   openInCwd,
+  presentation = "header",
 }: {
   keybindings: ResolvedKeybindingsConfig;
   availableEditors: ReadonlyArray<EditorId>;
   openInCwd: string | null;
+  presentation?: "header" | "composer-bar";
 }) {
   const [preferredEditor, setPreferredEditor] = usePreferredEditor(availableEditors);
   const options = useMemo(
@@ -196,6 +199,22 @@ export const OpenInPicker = memo(function OpenInPicker({
     return () => window.removeEventListener("keydown", handler);
   }, [preferredEditor, keybindings, openInCwd]);
 
+  if (presentation === "composer-bar") {
+    return (
+      <Button
+        size="xs"
+        variant="ghost"
+        className={`${CONTEXT_BAR_TEXT_TRIGGER_CLASS} max-w-36 truncate`}
+        disabled={!preferredEditor || !openInCwd}
+        onClick={() => openInEditor(preferredEditor)}
+      >
+        <span className="truncate">
+          {primaryOption ? `Open in ${primaryOption.label}` : "Open in editor"}
+        </span>
+      </Button>
+    );
+  }
+
   return (
     <Group aria-label="Subscription actions">
       <Button
@@ -230,3 +249,15 @@ export const OpenInPicker = memo(function OpenInPicker({
     </Group>
   );
 });
+
+export function shouldShowOpenInPicker(input: {
+  readonly activeProjectName: string | undefined;
+  readonly activeThreadEnvironmentId: EnvironmentId;
+  readonly primaryEnvironmentId: EnvironmentId | null;
+}): boolean {
+  return (
+    Boolean(input.activeProjectName) &&
+    input.primaryEnvironmentId !== null &&
+    input.activeThreadEnvironmentId === input.primaryEnvironmentId
+  );
+}

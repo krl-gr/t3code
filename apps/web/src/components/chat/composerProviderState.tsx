@@ -14,7 +14,12 @@ import type { ReactNode } from "react";
 
 import type { DraftId } from "../../composerDraftStore";
 import { getProviderModelCapabilities } from "../../providerModels";
-import { shouldRenderTraitsControls, TraitsMenuContent, TraitsPicker } from "./TraitsPicker";
+import {
+  ComposerTraitsPicker,
+  shouldRenderTraitsControls,
+  TraitsMenuContent,
+  TraitsPicker,
+} from "./TraitsPicker";
 
 export type ComposerProviderStateInput = {
   provider: ProviderDriverKind;
@@ -73,7 +78,7 @@ export function getComposerProviderState(input: ComposerProviderStateInput): Com
 }
 
 function renderTraitsControl(
-  Component: typeof TraitsMenuContent | typeof TraitsPicker,
+  Component: typeof ComposerTraitsPicker | typeof TraitsMenuContent | typeof TraitsPicker,
   input: TraitsRenderInput,
 ): ReactNode {
   const { provider, threadRef, draftId, model, models, modelOptions, prompt, onPromptChange } =
@@ -105,4 +110,8 @@ export function renderProviderTraitsMenuContent(input: TraitsRenderInput): React
 
 export function renderProviderTraitsPicker(input: TraitsRenderInput): ReactNode {
   return renderTraitsControl(TraitsPicker, input);
+}
+
+export function renderComposerProviderTraitsPicker(input: TraitsRenderInput): ReactNode {
+  return renderTraitsControl(ComposerTraitsPicker, input);
 }

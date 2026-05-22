@@ -1,6 +1,9 @@
 import { FolderGit2Icon, FolderGitIcon, FolderIcon } from "lucide-react";
-import { memo, useMemo } from "react";
+import { type ComponentProps, memo, useMemo } from "react";
 
+import { cn } from "~/lib/utils";
+import { ContextBarFolderIcon } from "./BranchToolbar.icons";
+import { CONTEXT_BAR_TEXT_TRIGGER_CLASS } from "./BranchToolbar.styles";
 import {
   resolveCurrentWorkspaceLabel,
   resolveEnvModeLabel,
@@ -24,6 +27,19 @@ interface BranchToolbarEnvModeSelectorProps {
   onEnvModeChange: (mode: EnvMode) => void;
 }
 
+function ContextBarSelectTrigger({ className, ...props }: ComponentProps<typeof SelectTrigger>) {
+  return (
+    <SelectTrigger
+      className={cn(
+        CONTEXT_BAR_TEXT_TRIGGER_CLASS,
+        "[&_[data-slot=select-icon]]:hidden",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
 export const BranchToolbarEnvModeSelector = memo(function BranchToolbarEnvModeSelector({
   envLocked,
   effectiveEnvMode,
@@ -40,18 +56,9 @@ export const BranchToolbarEnvModeSelector = memo(function BranchToolbarEnvModeSe
 
   if (envLocked) {
     return (
-      <span className="inline-flex items-center gap-1 border border-transparent px-[calc(--spacing(3)-1px)] text-sm font-medium text-muted-foreground/70 sm:text-xs">
-        {activeWorktreePath ? (
-          <>
-            <FolderGitIcon className="size-3" />
-            {resolveLockedWorkspaceLabel(activeWorktreePath)}
-          </>
-        ) : (
-          <>
-            <FolderIcon className="size-3" />
-            {resolveLockedWorkspaceLabel(activeWorktreePath)}
-          </>
-        )}
+      <span className={cn(CONTEXT_BAR_TEXT_TRIGGER_CLASS, "inline-flex")}>
+        <ContextBarFolderIcon className="size-[14px] shrink-0" />
+        {resolveLockedWorkspaceLabel(activeWorktreePath)}
       </span>
     );
   }
@@ -63,16 +70,10 @@ export const BranchToolbarEnvModeSelector = memo(function BranchToolbarEnvModeSe
       onValueChange={(value) => onEnvModeChange(value as EnvMode)}
       items={envModeItems}
     >
-      <SelectTrigger variant="ghost" size="xs" className="font-medium" aria-label="Workspace">
-        {effectiveEnvMode === "worktree" ? (
-          <FolderGit2Icon className="size-3" />
-        ) : activeWorktreePath ? (
-          <FolderGitIcon className="size-3" />
-        ) : (
-          <FolderIcon className="size-3" />
-        )}
+      <ContextBarSelectTrigger variant="ghost" size="xs" aria-label="Workspace">
+        <ContextBarFolderIcon className="size-[14px] shrink-0" />
         <SelectValue />
-      </SelectTrigger>
+      </ContextBarSelectTrigger>
       <SelectPopup>
         <SelectGroup>
           <SelectGroupLabel>Workspace</SelectGroupLabel>

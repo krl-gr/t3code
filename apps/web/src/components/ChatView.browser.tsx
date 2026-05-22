@@ -15,6 +15,7 @@ import {
   type ServerLifecycleWelcomePayload,
   type ThreadId,
   type TurnId,
+  type VcsStatusResult,
   WS_METHODS,
   OrchestrationSessionStatus,
   DEFAULT_SERVER_SETTINGS,
@@ -62,11 +63,22 @@ import { BrowserWsRpcHarness, type NormalizedWsRpcRequestBody } from "../../test
 
 import { DEFAULT_CLIENT_SETTINGS } from "@t3tools/contracts/settings";
 
+const gitStatusMockState = vi.hoisted(() => ({
+  data: null as VcsStatusResult | null,
+}));
+
 vi.mock("../lib/gitStatusState", () => ({
-  useGitStatus: () => ({ data: null, error: null, cause: null, isPending: false }),
+  useGitStatus: () => ({
+    data: gitStatusMockState.data,
+    error: null,
+    cause: null,
+    isPending: false,
+  }),
   useGitStatuses: () => new Map(),
-  refreshGitStatus: () => Promise.resolve(null),
-  resetGitStatusStateForTests: () => undefined,
+  refreshGitStatus: () => Promise.resolve(gitStatusMockState.data),
+  resetGitStatusStateForTests: () => {
+    gitStatusMockState.data = null;
+  },
 }));
 
 const THREAD_ID = "thread-browser-test" as ThreadId;
@@ -96,6 +108,26 @@ const NOW_ISO = "2026-03-04T12:00:00.000Z";
 const BASE_TIME_MS = Date.parse(NOW_ISO);
 const ATTACHMENT_SVG = "<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'></svg>";
 const ADD_PROJECT_SUBMENU_PLACEHOLDER = "Enter path (e.g. ~/projects/my-app)";
+
+function createMockGitStatus(overrides: Partial<VcsStatusResult> = {}): VcsStatusResult {
+  return {
+    isRepo: true,
+    hasPrimaryRemote: true,
+    isDefaultRef: true,
+    refName: "main",
+    hasWorkingTreeChanges: false,
+    workingTree: {
+      files: [],
+      insertions: 0,
+      deletions: 0,
+    },
+    hasUpstream: true,
+    aheadCount: 0,
+    behindCount: 0,
+    pr: null,
+    ...overrides,
+  };
+}
 
 interface TestFixture {
   snapshot: OrchestrationReadModel;
@@ -1426,6 +1458,31 @@ async function expectComposerActionsContained(): Promise<void> {
   );
 }
 
+async function expectComposerFooterControlsContained(): Promise<void> {
+  const footer = await waitForElement(
+    () => document.querySelector<HTMLElement>('[data-chat-composer-footer="true"]'),
+    "Unable to find composer footer.",
+  );
+
+  await vi.waitFor(
+    () => {
+      const footerRect = footer.getBoundingClientRect();
+      const controls = Array.from(footer.querySelectorAll<HTMLElement>("button"));
+      expect(controls.length).toBeGreaterThanOrEqual(1);
+
+      for (const control of controls) {
+        const rect = control.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) continue;
+        expect(rect.left).toBeGreaterThanOrEqual(footerRect.left - 0.5);
+        expect(rect.right).toBeLessThanOrEqual(footerRect.right + 0.5);
+        expect(rect.top).toBeGreaterThanOrEqual(footerRect.top - 0.5);
+        expect(rect.bottom).toBeLessThanOrEqual(footerRect.bottom + 0.5);
+      }
+    },
+    { timeout: 8_000, interval: 16 },
+  );
+}
+
 async function waitForInteractionModeButton(
   expectedLabel: "Build" | "Ask" | "Plan",
 ): Promise<HTMLButtonElement> {
@@ -1700,6 +1757,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
     document.body.innerHTML = "";
     wsRequests.length = 0;
     customWsRpcResolver = null;
+    gitStatusMockState.data = null;
     __resetEnvironmentApiOverridesForTests();
     resetSavedEnvironmentRegistryStoreForTests();
     resetSavedEnvironmentRuntimeStoreForTests();
@@ -1736,6 +1794,188 @@ describe("ChatView timeline estimator parity (full app)", () => {
   afterEach(() => {
     customWsRpcResolver = null;
     document.body.innerHTML = "";
+  });
+
+  it("renders the active chat header with only sidebar and new thread actions", async () => {
+    const mounted = await mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      snapshot: createSnapshotForTargetUser({
+        targetMessageId: "msg-user-active-header-target" as MessageId,
+        targetText: "active header target",
+      }),
+    });
+
+    try {
+      const header = await waitForElement(
+        () => document.querySelector<HTMLElement>('[data-chat-active-header="true"]'),
+        "Unable to find active chat header.",
+      );
+      const buttons = Array.from(header.querySelectorAll("button"));
+
+      expect(buttons).toHaveLength(2);
+      expect(header.querySelector('[data-sidebar="trigger"]')).toBeTruthy();
+      expect(header.querySelector('button[aria-label="New thread"]')).toBeTruthy();
+      expect(header.querySelector('button[aria-label="Toggle terminal drawer"]')).toBeNull();
+      expect(header.querySelector('button[aria-label="Toggle diff panel"]')).toBeNull();
+      expect(header.querySelector('button[aria-label="More chat actions"]')).toBeNull();
+      expect(header.textContent).not.toContain("Open in");
+      expect(header.textContent).not.toContain("Commit");
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("creates a contextual draft from the active header new thread button", async () => {
+    const mounted = await mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      snapshot: createSnapshotForTargetUser({
+        targetMessageId: "msg-user-header-new-thread-target" as MessageId,
+        targetText: "header new thread target",
+      }),
+    });
+
+    try {
+      const newThreadButton = await waitForElement(
+        () =>
+          document.querySelector<HTMLButtonElement>(
+            '[data-chat-active-header="true"] button[aria-label="New thread"]',
+          ),
+        "Unable to find header new thread button.",
+      );
+      newThreadButton.click();
+
+      const newThreadPath = await waitForURL(
+        mounted.router,
+        (path) => UUID_ROUTE_RE.test(path),
+        "Route should change to a new contextual draft thread.",
+      );
+      const newDraftId = draftIdFromPath(newThreadPath);
+
+      expect(useComposerDraftStore.getState().getDraftSession(newDraftId)).toMatchObject({
+        environmentId: LOCAL_ENVIRONMENT_ID,
+        projectId: PROJECT_ID,
+        branch: "main",
+        worktreePath: null,
+        envMode: "local",
+      });
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("shows the Git-only composer context bar with workspace, branch, and quick actions", async () => {
+    gitStatusMockState.data = createMockGitStatus({
+      hasWorkingTreeChanges: true,
+      workingTree: {
+        files: [{ path: "src/App.tsx", insertions: 4, deletions: 1 }],
+        insertions: 4,
+        deletions: 1,
+      },
+    });
+
+    const mounted = await mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      snapshot: createSnapshotForTargetUser({
+        targetMessageId: "msg-user-context-bar-target" as MessageId,
+        targetText: "context bar target",
+      }),
+      configureFixture: (nextFixture) => {
+        nextFixture.serverConfig = {
+          ...nextFixture.serverConfig,
+          availableEditors: ["vscode"],
+        };
+      },
+    });
+
+    try {
+      const contextBar = await waitForElement(
+        () => document.querySelector<HTMLElement>('[data-chat-context-bar="true"]'),
+        "Unable to find composer context bar.",
+      );
+
+      await vi.waitFor(
+        () => {
+          const text = contextBar.textContent ?? "";
+          expect(text).toContain("Local checkout");
+          expect(text).toContain("main");
+          expect(text).toContain("Commit & push");
+          expect(text).toContain("Open in VS Code");
+          expect(
+            contextBar.querySelector('button[aria-label="Toggle terminal drawer"]'),
+          ).toBeTruthy();
+          expect(contextBar.querySelector('button[aria-label="Toggle diff panel"]')).toBeTruthy();
+          expect(contextBar.querySelector('button[aria-label="More chat actions"]')).toBeTruthy();
+        },
+        { timeout: 8_000, interval: 16 },
+      );
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("hides the entire composer context bar for non-Git projects", async () => {
+    gitStatusMockState.data = createMockGitStatus({
+      isRepo: false,
+      hasPrimaryRemote: false,
+      isDefaultRef: false,
+      refName: null,
+      hasUpstream: false,
+    });
+
+    const mounted = await mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      snapshot: createSnapshotForTargetUser({
+        targetMessageId: "msg-user-non-git-context-target" as MessageId,
+        targetText: "non git context target",
+      }),
+    });
+
+    try {
+      await vi.waitFor(
+        () => {
+          expect(document.querySelector('[data-chat-context-bar="true"]')).toBeNull();
+        },
+        { timeout: 8_000, interval: 16 },
+      );
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("uses the project-aware empty active thread prompt", async () => {
+    const mounted = await mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      snapshot: addThreadToSnapshot(createDraftOnlySnapshot(), THREAD_ID),
+    });
+
+    try {
+      await expect
+        .element(page.getByText("What should we do in Project today?", { exact: true }))
+        .toBeInTheDocument();
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("keeps composer controls contained at desktop and mobile widths", async () => {
+    const mounted = await mountChatView({
+      viewport: WIDE_FOOTER_VIEWPORT,
+      snapshot: createSnapshotForTargetUser({
+        targetMessageId: "msg-user-composer-controls-target" as MessageId,
+        targetText: "composer controls target",
+      }),
+    });
+
+    try {
+      await waitForComposerEditor();
+      await expectComposerFooterControlsContained();
+
+      await mounted.setViewport(COMPACT_FOOTER_VIEWPORT);
+      await mounted.setContainerSize(COMPACT_FOOTER_VIEWPORT);
+      await expectComposerFooterControlsContained();
+    } finally {
+      await mounted.cleanup();
+    }
   });
 
   it("renders locked single-environment mobile run context as a static workspace label", async () => {

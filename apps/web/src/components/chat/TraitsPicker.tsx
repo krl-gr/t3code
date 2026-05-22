@@ -29,6 +29,7 @@ import {
 import { useComposerDraftStore, DraftId } from "../../composerDraftStore";
 import { getProviderModelCapabilities } from "../../providerModels";
 import { cn } from "~/lib/utils";
+import { COMPOSER_CONTROL_TEXT_TRIGGER_CLASS } from "./composerControlStyles";
 
 type ProviderOptions = ReadonlyArray<ProviderOptionSelection>;
 
@@ -426,6 +427,103 @@ export const TraitsPicker = memo(function TraitsPicker({
             <span>{triggerLabel}</span>
             <ChevronDownIcon aria-hidden="true" className="size-3 opacity-60" />
           </>
+        )}
+      </MenuTrigger>
+      <MenuPopup align="start">
+        <TraitsMenuContent
+          provider={provider}
+          models={models}
+          model={model}
+          prompt={prompt}
+          onPromptChange={onPromptChange}
+          modelOptions={modelOptions}
+          allowPromptInjectedEffort={allowPromptInjectedEffort}
+          {...persistence}
+        />
+      </MenuPopup>
+    </Menu>
+  );
+});
+
+export const ComposerTraitsPicker = memo(function ComposerTraitsPicker({
+  provider,
+  models,
+  model,
+  prompt,
+  onPromptChange,
+  modelOptions,
+  allowPromptInjectedEffort = true,
+  triggerVariant,
+  triggerClassName,
+  ...persistence
+}: TraitsMenuContentProps & TraitsPersistence) {
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const { descriptors, primarySelectDescriptor, ultrathinkPromptControlled } =
+    getTraitsSectionVisibility({
+      provider,
+      models,
+      model,
+      prompt,
+      modelOptions,
+      allowPromptInjectedEffort,
+    });
+  if (
+    !shouldRenderTraitsControls({
+      provider,
+      models,
+      model,
+      prompt,
+      modelOptions,
+      allowPromptInjectedEffort,
+    })
+  ) {
+    return null;
+  }
+
+  const triggerLabel =
+    descriptors
+      .map((descriptor) => {
+        if (ultrathinkPromptControlled && descriptor.id === primarySelectDescriptor?.id) {
+          return "Ultrathink";
+        }
+        if (descriptor.type === "boolean") {
+          if (descriptor.id === "fastMode") {
+            return descriptor.currentValue === true ? "Fast" : "Normal";
+          }
+          return `${descriptor.label} ${descriptor.currentValue === true ? "On" : "Off"}`;
+        }
+        return getProviderOptionCurrentLabel(descriptor);
+      })
+      .filter((label): label is string => typeof label === "string" && label.length > 0)
+      .join(" · ") || "";
+
+  const isCodexStyle = provider === "codex";
+
+  return (
+    <Menu
+      open={isMenuOpen}
+      onOpenChange={(open) => {
+        setIsMenuOpen(open);
+      }}
+    >
+      <MenuTrigger
+        render={
+          <Button
+            size="sm"
+            variant={triggerVariant ?? "ghost"}
+            className={cn(
+              isCodexStyle
+                ? cn(COMPOSER_CONTROL_TEXT_TRIGGER_CLASS, "max-w-40 sm:max-w-48")
+                : COMPOSER_CONTROL_TEXT_TRIGGER_CLASS,
+              triggerClassName,
+            )}
+          />
+        }
+      >
+        {isCodexStyle ? (
+          <span className="flex min-w-0 w-full items-center overflow-hidden">{triggerLabel}</span>
+        ) : (
+          <span>{triggerLabel}</span>
         )}
       </MenuTrigger>
       <MenuPopup align="start">

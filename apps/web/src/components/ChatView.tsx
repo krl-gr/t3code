@@ -102,6 +102,8 @@ import { useMediaQuery } from "../hooks/useMediaQuery";
 import { RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY } from "../rightPanelLayout";
 import { BranchToolbar } from "./BranchToolbar";
 import { resolveShortcutCommand, shortcutLabelForCommand } from "../keybindings";
+import { useHandleNewThread } from "../hooks/useHandleNewThread";
+import { startNewThreadFromContext } from "../lib/chatThreadActions";
 import PlanSidebar from "./PlanSidebar";
 import ThreadTerminalDrawer from "./ThreadTerminalDrawer";
 import { ChevronDownIcon, TriangleAlertIcon, WifiOffIcon } from "lucide-react";
@@ -150,6 +152,7 @@ import { ChatHeader } from "./chat/ChatHeader";
 import { type ExpandedImagePreview } from "./chat/ExpandedImagePreview";
 import { NoActiveThreadState } from "./NoActiveThreadState";
 import { resolveEffectiveEnvMode, resolveEnvironmentOptionLabel } from "./BranchToolbar.logic";
+import { resolveSidebarNewThreadEnvMode } from "./Sidebar.logic";
 import { ProviderStatusBanner } from "./chat/ProviderStatusBanner";
 import { ThreadErrorBanner } from "./chat/ThreadErrorBanner";
 import { ComposerBannerStack, type ComposerBannerStackItem } from "./chat/ComposerBannerStack";
@@ -1633,6 +1636,12 @@ export default function ChatView(props: ChatViewProps) {
   const gitStatusQuery = useGitStatus({ environmentId, cwd: gitCwd });
   const keybindings = useServerKeybindings();
   const availableEditors = useServerAvailableEditors();
+  const {
+    activeDraftThread: newThreadActiveDraftThread,
+    activeThread: newThreadActiveThread,
+    defaultProjectRef: newThreadDefaultProjectRef,
+    handleNewThread,
+  } = useHandleNewThread();
   // Prefer an instance-id match so a custom Codex instance (e.g.
   // `codex_personal`) surfaces its own status/message in the banner rather
   // than the default Codex's. Falls back to first-match-by-kind when no
@@ -1698,6 +1707,27 @@ export default function ChatView(props: ChatViewProps) {
     () => shortcutLabelForCommand(keybindings, "diff.toggle", nonTerminalShortcutLabelOptions),
     [keybindings, nonTerminalShortcutLabelOptions],
   );
+  const newThreadShortcutLabel = useMemo(
+    () => shortcutLabelForCommand(keybindings, "chat.new"),
+    [keybindings],
+  );
+  const handleNewThreadAction = useCallback(() => {
+    void startNewThreadFromContext({
+      activeDraftThread: newThreadActiveDraftThread,
+      activeThread: newThreadActiveThread,
+      defaultProjectRef: newThreadDefaultProjectRef,
+      defaultThreadEnvMode: resolveSidebarNewThreadEnvMode({
+        defaultEnvMode: settings.defaultThreadEnvMode,
+      }),
+      handleNewThread,
+    });
+  }, [
+    handleNewThread,
+    newThreadActiveDraftThread,
+    newThreadActiveThread,
+    newThreadDefaultProjectRef,
+    settings.defaultThreadEnvMode,
+  ]);
   const onToggleDiff = useCallback(() => {
     if (!isServerThread) {
       return;
@@ -3498,7 +3528,7 @@ export default function ChatView(props: ChatViewProps) {
       {/* Top bar */}
       <header
         className={cn(
-          "border-b border-border",
+          "border-b border-transparent",
           isElectron
             ? cn(
                 "drag-region flex h-[52px] items-center px-3 sm:px-5 wco:h-[env(titlebar-area-height)]",
@@ -3509,31 +3539,8 @@ export default function ChatView(props: ChatViewProps) {
         )}
       >
         <ChatHeader
-          activeThreadEnvironmentId={activeThread.environmentId}
-          activeThreadId={activeThread.id}
-          {...(routeKind === "draft" && draftId ? { draftId } : {})}
-          activeThreadTitle={activeThread.title}
-          activeProjectName={activeProject?.name}
-          isGitRepo={isGitRepo}
-          openInCwd={gitCwd}
-          activeProjectScripts={activeProject?.scripts}
-          preferredScriptId={
-            activeProject ? (lastInvokedScriptByProjectId[activeProject.id] ?? null) : null
-          }
-          keybindings={keybindings}
-          availableEditors={availableEditors}
-          terminalAvailable={activeProject !== undefined}
-          terminalOpen={terminalState.terminalOpen}
-          terminalToggleShortcutLabel={terminalToggleShortcutLabel}
-          diffToggleShortcutLabel={diffPanelShortcutLabel}
-          gitCwd={gitCwd}
-          diffOpen={diffOpen}
-          onRunProjectScript={runProjectScript}
-          onAddProjectScript={saveProjectScript}
-          onUpdateProjectScript={updateProjectScript}
-          onDeleteProjectScript={deleteProjectScript}
-          onToggleTerminal={toggleTerminalVisibility}
-          onToggleDiff={onToggleDiff}
+          newThreadShortcutLabel={newThreadShortcutLabel}
+          onNewThread={handleNewThreadAction}
         />
       </header>
 
@@ -3562,6 +3569,7 @@ export default function ChatView(props: ChatViewProps) {
               completionSummary={completionSummary}
               turnDiffSummaryByAssistantMessageId={turnDiffSummaryByAssistantMessageId}
               activeThreadEnvironmentId={activeThread.environmentId}
+              activeProjectName={activeProject?.name}
               routeThreadKey={routeThreadKey}
               onOpenTurnDiff={onOpenTurnDiff}
               revertTurnCountByUserMessageId={revertTurnCountByUserMessageId}
@@ -3680,7 +3688,26 @@ export default function ChatView(props: ChatViewProps) {
                 environmentId={activeThread.environmentId}
                 threadId={activeThread.id}
                 {...(routeKind === "draft" && draftId ? { draftId } : {})}
+                activeProjectScripts={activeProject?.scripts}
+                availableEditors={availableEditors}
+                diffOpen={diffOpen}
+                diffToggleShortcutLabel={diffPanelShortcutLabel}
+                gitCwd={gitCwd}
+                keybindings={keybindings}
+                openInCwd={gitCwd}
+                preferredScriptId={
+                  activeProject ? (lastInvokedScriptByProjectId[activeProject.id] ?? null) : null
+                }
+                terminalAvailable={activeProject !== undefined}
+                terminalOpen={Boolean(terminalState.terminalOpen)}
+                terminalToggleShortcutLabel={terminalToggleShortcutLabel}
                 onEnvModeChange={onEnvModeChange}
+                onAddProjectScript={saveProjectScript}
+                onDeleteProjectScript={deleteProjectScript}
+                onRunProjectScript={runProjectScript}
+                onToggleDiff={onToggleDiff}
+                onToggleTerminal={toggleTerminalVisibility}
+                onUpdateProjectScript={updateProjectScript}
                 {...(canOverrideServerThreadEnvMode ? { effectiveEnvModeOverride: envMode } : {})}
                 {...(canOverrideServerThreadEnvMode
                   ? {

@@ -1,4 +1,5 @@
 import {
+  PROVIDER_DISPLAY_NAMES,
   type ProviderInstanceId,
   type ProviderDriverKind,
   type ResolvedKeybindingsConfig,
@@ -12,6 +13,7 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { cn } from "~/lib/utils";
 import { ModelPickerContent } from "./ModelPickerContent";
 import { ProviderInstanceIcon } from "./ProviderInstanceIcon";
+import { COMPOSER_CONTROL_TEXT_TRIGGER_CLASS } from "./composerControlStyles";
 import {
   ModelEsque,
   getTriggerDisplayModelLabel,
@@ -19,8 +21,9 @@ import {
 } from "./providerIconUtils";
 import { setModelPickerOpen } from "../../modelPickerOpenState";
 import type { ProviderInstanceEntry } from "../../providerInstances";
+import { formatProviderDriverKindLabel } from "../../providerModels";
 
-export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
+interface ProviderModelPickerProps {
   /**
    * The instance currently selected in the composer. Drives the trigger
    * icon, label and the default-highlighted combobox row.
@@ -42,7 +45,9 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
   triggerClassName?: string;
   onOpenChange?: (open: boolean) => void;
   onInstanceModelChange: (instanceId: ProviderInstanceId, model: string) => void;
-}) {
+}
+
+function useProviderModelPickerController(props: ProviderModelPickerProps) {
   const [uncontrolledIsMenuOpen, setUncontrolledIsMenuOpen] = useState(false);
   const isMenuOpen = props.open ?? uncontrolledIsMenuOpen;
 
@@ -92,15 +97,194 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
     setIsMenuOpen(false);
   };
 
+  return {
+    activeEntry,
+    activeInstanceId,
+    handleInstanceModelChange,
+    isMenuOpen,
+    setIsMenuOpen,
+    showInstanceBadge,
+    triggerLabel,
+    triggerSubtitle,
+    triggerTitle,
+  };
+}
+
+function ProviderModelPickerTriggerContent({
+  controller,
+  props,
+  showChevron,
+}: {
+  controller: ReturnType<typeof useProviderModelPickerController>;
+  props: ProviderModelPickerProps;
+  showChevron: boolean;
+}) {
+  const { activeEntry, showInstanceBadge, triggerLabel, triggerSubtitle, triggerTitle } =
+    controller;
+
+  return (
+    <span
+      className={cn(
+        "flex min-w-0 w-full box-border items-center gap-2 overflow-hidden",
+        props.compact ? "max-w-36 sm:pl-1" : undefined,
+      )}
+    >
+      {activeEntry ? (
+        <ProviderInstanceIcon
+          driverKind={activeEntry.driverKind}
+          displayName={activeEntry.displayName}
+          accentColor={activeEntry.accentColor}
+          showBadge={showInstanceBadge}
+          className={showInstanceBadge ? "size-5" : "size-4"}
+          iconClassName={cn("size-4", props.activeProviderIconClassName)}
+          badgeClassName="right-[-0.125rem] bottom-[-0.125rem] h-3 min-w-3 text-[7px]"
+        />
+      ) : null}
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <span
+              className={cn(
+                "min-w-0 flex-1 overflow-hidden",
+                triggerSubtitle
+                  ? "grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1"
+                  : "truncate",
+              )}
+            />
+          }
+        >
+          {triggerSubtitle ? (
+            <>
+              <span className="min-w-0 truncate">{triggerSubtitle}</span>
+              <span aria-hidden="true" className="shrink-0 opacity-60">
+                ·
+              </span>
+              <span className="min-w-0 truncate">{triggerTitle}</span>
+            </>
+          ) : (
+            triggerTitle
+          )}
+        </TooltipTrigger>
+        <TooltipPopup side="top">{triggerLabel}</TooltipPopup>
+      </Tooltip>
+      {showChevron ? (
+        <ChevronDownIcon aria-hidden="true" className="size-3 shrink-0 opacity-60" />
+      ) : null}
+    </span>
+  );
+}
+
+function normalizeTriggerPart(value: string): string {
+  return value.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function providerDriverLabel(driverKind: ProviderDriverKind): string {
+  return PROVIDER_DISPLAY_NAMES[driverKind] ?? formatProviderDriverKindLabel(driverKind);
+}
+
+function maybeInstanceLabel(input: { displayName: string; driverLabel: string }): string | null {
+  const displayName = input.displayName.trim();
+  if (!displayName) return null;
+  const normalizedDisplayName = normalizeTriggerPart(displayName);
+  const normalizedDriverLabel = normalizeTriggerPart(input.driverLabel);
+  if (normalizedDisplayName === normalizedDriverLabel) return null;
+
+  if (normalizedDisplayName.startsWith(`${normalizedDriverLabel} `)) {
+    const suffix = displayName.slice(input.driverLabel.length).trim();
+    return suffix.length > 0 ? suffix : null;
+  }
+
+  return displayName;
+}
+
+function appendUniqueTriggerPart(parts: string[], value: string | null | undefined) {
+  const trimmed = value?.trim();
+  if (!trimmed) return;
+  const normalized = normalizeTriggerPart(trimmed);
+  if (parts.some((part) => normalizeTriggerPart(part) === normalized)) return;
+  parts.push(trimmed);
+}
+
+function buildComposerProviderTriggerLabel(
+  controller: ReturnType<typeof useProviderModelPickerController>,
+): string {
+  const parts: string[] = [];
+  if (controller.activeEntry) {
+    const driverLabel = providerDriverLabel(controller.activeEntry.driverKind);
+    appendUniqueTriggerPart(parts, driverLabel);
+    appendUniqueTriggerPart(
+      parts,
+      maybeInstanceLabel({
+        displayName: controller.activeEntry.displayName,
+        driverLabel,
+      }),
+    );
+  }
+
+  appendUniqueTriggerPart(parts, controller.triggerSubtitle);
+  appendUniqueTriggerPart(parts, controller.triggerTitle);
+  return parts.length > 0 ? parts.join(" · ") : controller.triggerLabel;
+}
+
+function ComposerProviderModelPickerTriggerContent({
+  controller,
+}: {
+  controller: ReturnType<typeof useProviderModelPickerController>;
+}) {
+  const triggerLabel = buildComposerProviderTriggerLabel(controller);
+
+  return (
+    <Tooltip>
+      <TooltipTrigger render={<span className="block min-w-0 flex-1 truncate text-left" />}>
+        {triggerLabel}
+      </TooltipTrigger>
+      <TooltipPopup side="top">{triggerLabel}</TooltipPopup>
+    </Tooltip>
+  );
+}
+
+function ProviderModelPickerPopup({
+  controller,
+  props,
+}: {
+  controller: ReturnType<typeof useProviderModelPickerController>;
+  props: ProviderModelPickerProps;
+}) {
+  return (
+    <PopoverPopup
+      align="start"
+      className="border-0 bg-transparent p-0 shadow-none before:hidden [--viewport-inline-padding:0] *:data-[slot=popover-viewport]:p-0"
+    >
+      <ModelPickerContent
+        activeInstanceId={controller.activeInstanceId}
+        model={props.model}
+        lockedProvider={props.lockedProvider}
+        lockedContinuationGroupKey={props.lockedContinuationGroupKey ?? null}
+        instanceEntries={props.instanceEntries}
+        {...(props.keybindings ? { keybindings: props.keybindings } : {})}
+        modelOptionsByInstance={props.modelOptionsByInstance}
+        terminalOpen={props.terminalOpen ?? false}
+        onRequestClose={() => controller.setIsMenuOpen(false)}
+        onInstanceModelChange={controller.handleInstanceModelChange}
+      />
+    </PopoverPopup>
+  );
+}
+
+export const ProviderModelPicker = memo(function ProviderModelPicker(
+  props: ProviderModelPickerProps,
+) {
+  const controller = useProviderModelPickerController(props);
+
   return (
     <Popover
-      open={isMenuOpen}
+      open={controller.isMenuOpen}
       onOpenChange={(open) => {
         if (props.disabled) {
-          setIsMenuOpen(false);
+          controller.setIsMenuOpen(false);
           return;
         }
-        setIsMenuOpen(open);
+        controller.setIsMenuOpen(open);
       }}
     >
       <PopoverTrigger
@@ -118,70 +302,47 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
           />
         }
       >
-        <span
-          className={cn(
-            "flex min-w-0 w-full box-border items-center gap-2 overflow-hidden",
-            props.compact ? "max-w-36 sm:pl-1" : undefined,
-          )}
-        >
-          {activeEntry ? (
-            <ProviderInstanceIcon
-              driverKind={activeEntry.driverKind}
-              displayName={activeEntry.displayName}
-              accentColor={activeEntry.accentColor}
-              showBadge={showInstanceBadge}
-              className={showInstanceBadge ? "size-5" : "size-4"}
-              iconClassName={cn("size-4", props.activeProviderIconClassName)}
-              badgeClassName="right-[-0.125rem] bottom-[-0.125rem] h-3 min-w-3 text-[7px]"
-            />
-          ) : null}
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <span
-                  className={cn(
-                    "min-w-0 flex-1 overflow-hidden",
-                    triggerSubtitle
-                      ? "grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1"
-                      : "truncate",
-                  )}
-                />
-              }
-            >
-              {triggerSubtitle ? (
-                <>
-                  <span className="min-w-0 truncate">{triggerSubtitle}</span>
-                  <span aria-hidden="true" className="shrink-0 opacity-60">
-                    ·
-                  </span>
-                  <span className="min-w-0 truncate">{triggerTitle}</span>
-                </>
-              ) : (
-                triggerTitle
-              )}
-            </TooltipTrigger>
-            <TooltipPopup side="top">{triggerLabel}</TooltipPopup>
-          </Tooltip>
-          <ChevronDownIcon aria-hidden="true" className="size-3 shrink-0 opacity-60" />
-        </span>
+        <ProviderModelPickerTriggerContent controller={controller} props={props} showChevron />
       </PopoverTrigger>
-      <PopoverPopup
-        align="start"
-        className="border-0 bg-transparent p-0 shadow-none before:hidden [--viewport-inline-padding:0] *:data-[slot=popover-viewport]:p-0"
+      <ProviderModelPickerPopup controller={controller} props={props} />
+    </Popover>
+  );
+});
+
+export const ComposerProviderModelPicker = memo(function ComposerProviderModelPicker(
+  props: ProviderModelPickerProps,
+) {
+  const controller = useProviderModelPickerController(props);
+
+  return (
+    <Popover
+      open={controller.isMenuOpen}
+      onOpenChange={(open) => {
+        if (props.disabled) {
+          controller.setIsMenuOpen(false);
+          return;
+        }
+        controller.setIsMenuOpen(open);
+      }}
+    >
+      <PopoverTrigger
+        render={
+          <Button
+            size="sm"
+            variant={props.triggerVariant ?? "ghost"}
+            data-chat-provider-model-picker="true"
+            className={cn(
+              COMPOSER_CONTROL_TEXT_TRIGGER_CLASS,
+              props.compact ? "max-w-42" : "max-w-48 sm:max-w-56",
+              props.triggerClassName,
+            )}
+            disabled={props.disabled}
+          />
+        }
       >
-        <ModelPickerContent
-          activeInstanceId={activeInstanceId}
-          model={props.model}
-          lockedProvider={props.lockedProvider}
-          lockedContinuationGroupKey={props.lockedContinuationGroupKey ?? null}
-          instanceEntries={props.instanceEntries}
-          {...(props.keybindings ? { keybindings: props.keybindings } : {})}
-          modelOptionsByInstance={props.modelOptionsByInstance}
-          terminalOpen={props.terminalOpen ?? false}
-          onRequestClose={() => setIsMenuOpen(false)}
-          onInstanceModelChange={handleInstanceModelChange}
-        />
-      </PopoverPopup>
+        <ComposerProviderModelPickerTriggerContent controller={controller} />
+      </PopoverTrigger>
+      <ProviderModelPickerPopup controller={controller} props={props} />
     </Popover>
   );
 });
