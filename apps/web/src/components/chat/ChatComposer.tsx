@@ -42,6 +42,7 @@ import {
   expandCollapsedComposerCursor,
   replaceTextRange,
 } from "../../composer-logic";
+import { formatComposerMentionToken } from "../../composer-editor-mentions";
 import { deriveComposerSendState, readFileAsDataUrl } from "../ChatView.logic";
 import {
   type ComposerImageAttachment,
@@ -118,6 +119,7 @@ import { formatProviderSkillDisplayName } from "../../providerSkillPresentation"
 import { searchProviderSkills } from "../../providerSkillSearch";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { readLocalApi } from "../../localApi";
+import { usePrimaryEnvironmentId } from "../../environments/primary";
 import {
   INTERACTION_MODE_ORDER,
   interactionModeConfig,
@@ -185,7 +187,7 @@ function buildContextMentionInsertion(
   cursor: number,
   prompt: string,
 ) {
-  const mentions = paths.map((path) => `@${path}`).join(" ");
+  const mentions = paths.map(formatComposerMentionToken).join(" ");
   if (!mentions) return "";
   const needsLeadingSpace = cursor > 0 && !/\s/.test(prompt[cursor - 1] ?? "");
   const needsTrailingSpace = cursor >= prompt.length || !/\s/.test(prompt[cursor] ?? "");
@@ -667,7 +669,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     routeThreadRef,
     draftId,
     activeThreadId,
-    activeThreadEnvironmentId: _activeThreadEnvironmentId,
+    activeThreadEnvironmentId,
     activeThread,
     isServerThread: _isServerThread,
     isLocalDraftThread: _isLocalDraftThread,
@@ -783,6 +785,10 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     ) ?? ProviderDriverKind.make("codex");
   const selectedProvider: ProviderDriverKind = lockedProvider ?? unlockedSelectedProvider;
   const showComposerBrowserUseControl = supportsComposerBrowserUse(selectedProvider);
+  const primaryEnvironmentId = usePrimaryEnvironmentId();
+  const composerEnvironmentId = activeThreadEnvironmentId ?? environmentId;
+  const showComposerWorkspaceContextControl =
+    primaryEnvironmentId !== null && composerEnvironmentId === primaryEnvironmentId;
   const lockedContinuationGroupKey = useMemo((): string | null => {
     if (!lockedProvider || !activeThread) return null;
     const lockedInstanceId =
@@ -1655,6 +1661,13 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   );
 
   const handleAttachWorkspaceContext = useCallback(() => {
+    if (!showComposerWorkspaceContextControl) {
+      toastManager.add({
+        type: "error",
+        title: "File context picker is only available for local projects.",
+      });
+      return;
+    }
     if (!gitCwd) {
       toastManager.add({
         type: "error",
@@ -1707,7 +1720,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           description: error instanceof Error ? error.message : "The native picker failed.",
         });
       });
-  }, [addWorkspacePathsToComposer, gitCwd]);
+  }, [addWorkspacePathsToComposer, gitCwd, showComposerWorkspaceContextControl]);
 
   const resolveActiveComposerTrigger = useCallback((): {
     snapshot: { value: string; cursor: number; expandedCursor: number };
@@ -1730,7 +1743,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       const { snapshot, trigger } = resolveActiveComposerTrigger();
       if (!trigger) return;
       if (item.type === "path") {
-        const replacement = `@${item.path} `;
+        const replacement = `${formatComposerMentionToken(item.path)} `;
         const replacementRangeEnd = extendReplacementRangeForTrailingSpace(
           snapshot.value,
           trigger.rangeEnd,
@@ -2554,12 +2567,16 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
               )}
             >
               <div className={COMPOSER_CONTROL_ROW_CLASS}>
-                <ComposerToolbarIconAction
-                  label="Add files to context"
-                  icon={ComposerPlusIcon}
-                  onClick={handleAttachWorkspaceContext}
-                />
-                <ComposerToolbarSeparator />
+                {showComposerWorkspaceContextControl ? (
+                  <>
+                    <ComposerToolbarIconAction
+                      label="Add files to context"
+                      icon={ComposerPlusIcon}
+                      onClick={handleAttachWorkspaceContext}
+                    />
+                    <ComposerToolbarSeparator />
+                  </>
+                ) : null}
                 {showComposerBrowserUseControl ? (
                   <>
                     <ComposerPlaceholderAction

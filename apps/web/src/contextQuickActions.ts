@@ -1,6 +1,10 @@
 import { EDITORS, type EditorId } from "@t3tools/contracts";
 
 export type ContextOpenEditorActionId = `open.${EditorId}`;
+export type ContextPreferredOpenActionId = "open.preferred";
+
+export const CONTEXT_PREFERRED_OPEN_QUICK_ACTION_ID: ContextPreferredOpenActionId =
+  "open.preferred";
 
 export function contextOpenEditorActionId(editorId: EditorId): ContextOpenEditorActionId {
   return `open.${editorId}`;
@@ -10,7 +14,7 @@ const EDITOR_ID_SET = new Set<string>(EDITORS.map((editor) => editor.id));
 
 export const DEFAULT_CONTEXT_QUICK_ACTION_IDS = [
   "git.quick",
-  "open.cursor",
+  CONTEXT_PREFERRED_OPEN_QUICK_ACTION_ID,
   "terminal.toggle",
   "diff.toggle",
 ] as const;
@@ -22,10 +26,14 @@ export const CONTEXT_NON_EDITOR_QUICK_ACTION_IDS = [
   "git.commit",
   "git.push",
   "git.pr",
+  CONTEXT_PREFERRED_OPEN_QUICK_ACTION_ID,
 ] as const;
 
 export type ContextNonEditorQuickActionId = (typeof CONTEXT_NON_EDITOR_QUICK_ACTION_IDS)[number];
-export type ContextQuickActionId = ContextNonEditorQuickActionId | ContextOpenEditorActionId;
+export type ContextQuickActionId =
+  | ContextNonEditorQuickActionId
+  | ContextPreferredOpenActionId
+  | ContextOpenEditorActionId;
 
 export const CONTEXT_GIT_QUICK_ACTION_ORDER = [
   "git.quick",
@@ -68,9 +76,6 @@ export function isContextQuickActionId(value: unknown): value is ContextQuickAct
 }
 
 function normalizePersistedContextQuickActionId(value: unknown): ContextQuickActionId | null {
-  if (value === "open.preferred") {
-    return contextOpenEditorActionId("cursor");
-  }
   return isContextQuickActionId(value) ? value : null;
 }
 

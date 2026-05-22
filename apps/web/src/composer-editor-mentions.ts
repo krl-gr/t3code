@@ -21,8 +21,50 @@ export type ComposerPromptSegment =
       context: TerminalContextDraft | null;
     };
 
-const MENTION_TOKEN_REGEX = /(^|\s)@([^\s@]+)(?=\s)/g;
+const SIMPLE_MENTION_PATH_REGEX = /^[^\s@"]+$/;
+const MENTION_TOKEN_REGEX = /(^|\s)@(?:"((?:\\.|[^"\\])*)"|((?!")[^\s@]+))(?=\s)/g;
 const SKILL_TOKEN_REGEX = /(^|\s)\$([a-zA-Z][a-zA-Z0-9:_-]*)(?=\s)/g;
+
+function decodeQuotedMentionPath(value: string): string {
+  let decoded = "";
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index] ?? "";
+    if (char !== "\\") {
+      decoded += char;
+      continue;
+    }
+    const next = value[index + 1];
+    if (next === undefined) {
+      decoded += char;
+      continue;
+    }
+    index += 1;
+    if (next === "n") {
+      decoded += "\n";
+    } else if (next === "r") {
+      decoded += "\r";
+    } else if (next === "t") {
+      decoded += "\t";
+    } else {
+      decoded += next;
+    }
+  }
+  return decoded;
+}
+
+export function formatComposerMentionToken(path: string): string {
+  const normalizedPath = path.startsWith("@") ? path.slice(1) : path;
+  if (SIMPLE_MENTION_PATH_REGEX.test(normalizedPath)) {
+    return `@${normalizedPath}`;
+  }
+  const escapedPath = normalizedPath
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"')
+    .replace(/\n/g, "\\n")
+    .replace(/\r/g, "\\r")
+    .replace(/\t/g, "\\t");
+  return `@"${escapedPath}"`;
+}
 
 function rangeIncludesIndex(start: number, end: number, index: number): boolean {
   return start <= index && index < end;
@@ -58,7 +100,7 @@ function collectInlineTokenMatches(text: string): InlineTokenMatch[] {
   for (const match of text.matchAll(MENTION_TOKEN_REGEX)) {
     const fullMatch = match[0];
     const prefix = match[1] ?? "";
-    const path = match[2] ?? "";
+    const path = match[2] !== undefined ? decodeQuotedMentionPath(match[2]) : (match[3] ?? "");
     const matchIndex = match.index ?? 0;
     const start = matchIndex + prefix.length;
     const end = start + fullMatch.length - prefix.length;

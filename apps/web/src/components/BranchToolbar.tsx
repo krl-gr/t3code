@@ -13,6 +13,7 @@ import { useComposerDraftStore, type DraftId } from "../composerDraftStore";
 import {
   CONTEXT_GIT_QUICK_ACTION_ORDER,
   CONTEXT_OPEN_EDITOR_QUICK_ACTION_ORDER,
+  CONTEXT_PREFERRED_OPEN_QUICK_ACTION_ID,
   CONTEXT_VIEW_QUICK_ACTION_ORDER,
   editorIdFromContextQuickActionId,
   type ContextQuickActionId,
@@ -351,6 +352,7 @@ export const BranchToolbar = memo(function BranchToolbar({
     for (const actionId of CONTEXT_GIT_QUICK_ACTION_ORDER) {
       appendIfPinned(actionId);
     }
+    appendIfPinned(CONTEXT_PREFERRED_OPEN_QUICK_ACTION_ID);
     for (const actionId of CONTEXT_OPEN_EDITOR_QUICK_ACTION_ORDER) {
       const editorId = editorIdFromContextQuickActionId(actionId);
       if (editorId !== null && availableEditorIds.has(editorId)) {
@@ -421,6 +423,22 @@ export const BranchToolbar = memo(function BranchToolbar({
                 gitCwd={gitCwd}
                 activeThreadRef={threadRef}
                 {...(draftId ? { draftId } : {})}
+              />
+            ),
+          },
+        ];
+      }
+      if (actionId === CONTEXT_PREFERRED_OPEN_QUICK_ACTION_ID) {
+        if (!showOpenInPicker) return [];
+        return [
+          {
+            actionId,
+            node: (
+              <OpenInPicker
+                presentation="composer-bar"
+                keybindings={keybindings}
+                availableEditors={availableEditors}
+                openInCwd={openInCwd}
               />
             ),
           },

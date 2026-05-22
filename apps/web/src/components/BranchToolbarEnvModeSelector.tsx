@@ -2,7 +2,6 @@ import { FolderGit2Icon, FolderGitIcon, FolderIcon } from "lucide-react";
 import { type ComponentProps, memo, useMemo } from "react";
 
 import { cn } from "~/lib/utils";
-import { ContextBarFolderIcon } from "./BranchToolbar.icons";
 import { CONTEXT_BAR_TEXT_TRIGGER_CLASS } from "./BranchToolbar.styles";
 import {
   resolveCurrentWorkspaceLabel,
@@ -56,8 +55,8 @@ export const BranchToolbarEnvModeSelector = memo(function BranchToolbarEnvModeSe
 
   if (envLocked) {
     return (
-      <span className={cn(CONTEXT_BAR_TEXT_TRIGGER_CLASS, "inline-flex")}>
-        <ContextBarFolderIcon className="size-[14px] shrink-0" />
+      <span className={cn(CONTEXT_BAR_TEXT_TRIGGER_CLASS, "inline-flex items-center")}>
+        <FolderIcon className="size-3.5 shrink-0" />
         {resolveLockedWorkspaceLabel(activeWorktreePath)}
       </span>
     );
@@ -71,7 +70,7 @@ export const BranchToolbarEnvModeSelector = memo(function BranchToolbarEnvModeSe
       items={envModeItems}
     >
       <ContextBarSelectTrigger variant="ghost" size="xs" aria-label="Workspace">
-        <ContextBarFolderIcon className="size-[14px] shrink-0" />
+        <FolderIcon className="size-3.5 shrink-0" />
         <SelectValue />
       </ContextBarSelectTrigger>
       <SelectPopup>
