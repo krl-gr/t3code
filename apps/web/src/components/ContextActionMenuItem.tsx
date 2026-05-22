@@ -2,7 +2,6 @@ import type { ReactNode } from "react";
 
 import type { ContextQuickActionId } from "~/contextQuickActions";
 import { cn } from "~/lib/utils";
-import { Checkbox } from "./ui/checkbox";
 import { MenuItem, MenuShortcut } from "./ui/menu";
 
 interface ContextActionMenuItemProps {
@@ -17,6 +16,79 @@ interface ContextActionMenuItemProps {
   onSelect: () => void;
 }
 
+export function ActionMenuPinControl({
+  checked,
+  label,
+  onToggle,
+}: {
+  checked: boolean;
+  label: string;
+  onToggle: () => void;
+}) {
+  return (
+    <span
+      aria-checked={checked}
+      aria-label={label}
+      className={cn(
+        "inline-flex size-4 shrink-0 items-center justify-center rounded-[.25rem] border border-input bg-background text-primary-foreground shadow-xs/5 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-offset-background focus-visible:ring-ring dark:not-aria-checked:bg-input/32",
+        checked && "border-primary bg-primary",
+      )}
+      role="checkbox"
+      tabIndex={0}
+      onClickCapture={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+      }}
+      onKeyDown={(event) => {
+        if (event.key !== " " && event.key !== "Enter") {
+          return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        onToggle();
+      }}
+      onMouseDownCapture={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+      }}
+      onMouseUpCapture={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+      }}
+      onPointerDownCapture={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onToggle();
+      }}
+      onPointerUpCapture={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+      }}
+      onTouchStartCapture={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+      }}
+    >
+      {checked ? (
+        <svg
+          className="size-3"
+          fill="none"
+          height="24"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="3"
+          viewBox="0 0 24 24"
+          width="24"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path d="M5.252 12.7 10.2 18.63 18.748 5.37" />
+        </svg>
+      ) : null}
+    </span>
+  );
+}
+
 export function ContextActionMenuItem({
   actionId,
   checked = false,
@@ -29,6 +101,13 @@ export function ContextActionMenuItem({
   onSelect,
 }: ContextActionMenuItemProps) {
   const showPinControl = actionId !== undefined && onCheckedChange !== undefined;
+  const pinControlLabel = `Show ${
+    typeof children === "string" ? children : "action"
+  } in quick access`;
+  const togglePinControl = () => {
+    if (!showPinControl) return;
+    onCheckedChange(actionId, !checked);
+  };
 
   return (
     <MenuItem
@@ -53,19 +132,10 @@ export function ContextActionMenuItem({
       <span className="col-start-3 ms-auto flex items-center gap-2">
         {shortcutLabel ? <MenuShortcut className="ms-0">{shortcutLabel}</MenuShortcut> : null}
         {showPinControl ? (
-          <Checkbox
-            aria-label={`Show ${typeof children === "string" ? children : "action"} in quick access`}
+          <ActionMenuPinControl
             checked={checked}
-            className="size-4"
-            onCheckedChange={(nextChecked) => {
-              onCheckedChange(actionId, nextChecked === true);
-            }}
-            onClick={(event) => {
-              event.stopPropagation();
-            }}
-            onPointerDown={(event) => {
-              event.stopPropagation();
-            }}
+            label={pinControlLabel}
+            onToggle={togglePinControl}
           />
         ) : null}
       </span>

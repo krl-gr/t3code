@@ -16,7 +16,7 @@ import {
   MenuTrigger,
 } from "../ui/menu";
 import { CONTEXT_BAR_TEXT_TRIGGER_CLASS } from "../BranchToolbar.styles";
-import type { ContextQuickActionId } from "~/contextQuickActions";
+import { contextOpenEditorActionId, type ContextQuickActionId } from "~/contextQuickActions";
 import {
   AntigravityIcon,
   CursorIcon,
@@ -165,6 +165,7 @@ export const OpenInPicker = memo(function OpenInPicker({
   availableEditors,
   openInCwd,
   presentation = "header",
+  composerEditorId,
   pinnedContextActionIds,
   onContextActionPinnedChange,
 }: {
@@ -172,6 +173,7 @@ export const OpenInPicker = memo(function OpenInPicker({
   availableEditors: ReadonlyArray<EditorId>;
   openInCwd: string | null;
   presentation?: "header" | "composer-bar" | "composer-menu";
+  composerEditorId?: EditorId | undefined;
   pinnedContextActionIds?: ReadonlySet<ContextQuickActionId>;
   onContextActionPinnedChange?: (actionId: ContextQuickActionId, pinned: boolean) => void;
 }) {
@@ -214,17 +216,17 @@ export const OpenInPicker = memo(function OpenInPicker({
   }, [preferredEditor, keybindings, openInCwd]);
 
   if (presentation === "composer-bar") {
+    const editorId = composerEditorId ?? preferredEditor;
+    const option = options.find(({ value }) => value === editorId) ?? null;
     return (
       <Button
         size="xs"
         variant="ghost"
         className={`${CONTEXT_BAR_TEXT_TRIGGER_CLASS} max-w-36 truncate`}
-        disabled={!preferredEditor || !openInCwd}
-        onClick={() => openInEditor(preferredEditor)}
+        disabled={!editorId || !openInCwd || !option}
+        onClick={() => openInEditor(editorId)}
       >
-        <span className="truncate">
-          {primaryOption ? `Open in ${primaryOption.label}` : "Open in editor"}
-        </span>
+        <span className="truncate">{option ? `Open in ${option.label}` : "Open in editor"}</span>
       </Button>
     );
   }
@@ -239,8 +241,8 @@ export const OpenInPicker = memo(function OpenInPicker({
           options.map(({ label, Icon, value }) => (
             <ContextActionMenuItem
               key={value}
-              actionId="open.preferred"
-              checked={pinnedContextActionIds?.has("open.preferred") ?? false}
+              actionId={contextOpenEditorActionId(value)}
+              checked={pinnedContextActionIds?.has(contextOpenEditorActionId(value)) ?? false}
               disabled={!openInCwd}
               icon={<Icon aria-hidden="true" className="size-4" />}
               shortcutLabel={value === preferredEditor ? openFavoriteEditorShortcutLabel : null}

@@ -37,6 +37,7 @@ import {
   getAppBranding,
   getLocalEnvironmentBootstrap,
   openExternal,
+  pickFileSystemEntries,
   pickFolder,
   setTheme,
   showContextMenu,
@@ -71,6 +72,7 @@ export const installDesktopIpcHandlers = Effect.gen(function* () {
   yield* ipc.handle(getAdvertisedEndpoints);
 
   yield* ipc.handle(pickFolder);
+  yield* ipc.handle(pickFileSystemEntries);
   yield* ipc.handle(confirm);
   yield* ipc.handle(setTheme);
   yield* ipc.handle(showContextMenu);

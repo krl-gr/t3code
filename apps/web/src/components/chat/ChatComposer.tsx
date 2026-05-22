@@ -117,6 +117,7 @@ import { deriveLatestContextWindowSnapshot } from "../../lib/contextWindow";
 import { formatProviderSkillDisplayName } from "../../providerSkillPresentation";
 import { searchProviderSkills } from "../../providerSkillSearch";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
+import { readLocalApi } from "../../localApi";
 import {
   INTERACTION_MODE_ORDER,
   interactionModeConfig,
@@ -148,6 +149,48 @@ const runtimeModeConfig: Record<
 
 const runtimeModeOptions = Object.keys(runtimeModeConfig) as RuntimeMode[];
 const COMPOSER_PATH_QUERY_DEBOUNCE_MS = 120;
+const BROWSER_USE_PROVIDER_DRIVERS = new Set<ProviderDriverKind>([ProviderDriverKind.make("pi")]);
+
+function supportsComposerBrowserUse(provider: ProviderDriverKind): boolean {
+  return BROWSER_USE_PROVIDER_DRIVERS.has(provider);
+}
+
+function normalizeContextPickerPath(path: string): string {
+  return path.trim().replace(/\\/g, "/").replace(/\/+$/g, "");
+}
+
+function workspaceRelativeContextPath(workspaceRoot: string, selectedPath: string): string | null {
+  const normalizedRoot = normalizeContextPickerPath(workspaceRoot);
+  const normalizedSelected = normalizeContextPickerPath(selectedPath);
+  if (!normalizedRoot || !normalizedSelected) return null;
+
+  const caseInsensitive = /^[a-z]:\//i.test(normalizedRoot);
+  const rootForCompare = caseInsensitive ? normalizedRoot.toLowerCase() : normalizedRoot;
+  const selectedForCompare = caseInsensitive
+    ? normalizedSelected.toLowerCase()
+    : normalizedSelected;
+
+  if (selectedForCompare === rootForCompare) {
+    return ".";
+  }
+  const rootPrefix = `${rootForCompare}/`;
+  if (!selectedForCompare.startsWith(rootPrefix)) {
+    return null;
+  }
+  return normalizedSelected.slice(normalizedRoot.length + 1);
+}
+
+function buildContextMentionInsertion(
+  paths: ReadonlyArray<string>,
+  cursor: number,
+  prompt: string,
+) {
+  const mentions = paths.map((path) => `@${path}`).join(" ");
+  if (!mentions) return "";
+  const needsLeadingSpace = cursor > 0 && !/\s/.test(prompt[cursor - 1] ?? "");
+  const needsTrailingSpace = cursor >= prompt.length || !/\s/.test(prompt[cursor] ?? "");
+  return `${needsLeadingSpace ? " " : ""}${mentions}${needsTrailingSpace ? " " : ""}`;
+}
 const EMPTY_PROJECT_ENTRIES: ProjectEntry[] = [];
 const COMPOSER_FLOATING_LAYER_SELECTOR = [
   '[data-slot="popover-popup"]',
@@ -240,6 +283,37 @@ function ComposerPlaceholderAction({
             className={cn(COMPOSER_CONTROL_ICON_TRIGGER_CLASS, "cursor-default")}
             onClick={(event) => {
               event.preventDefault();
+            }}
+          />
+        }
+      >
+        <Icon className="size-4" />
+      </TooltipTrigger>
+      <TooltipPopup side="top">{label}</TooltipPopup>
+    </Tooltip>
+  );
+}
+
+function ComposerToolbarIconAction({
+  label,
+  icon: Icon,
+  onClick,
+}: {
+  label: string;
+  icon: (props: { className?: string }) => ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <button
+            type="button"
+            aria-label={label}
+            className={COMPOSER_CONTROL_ICON_TRIGGER_CLASS}
+            onClick={(event) => {
+              event.preventDefault();
+              onClick();
             }}
           />
         }
@@ -708,6 +782,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       explicitSelectedInstanceId,
     ) ?? ProviderDriverKind.make("codex");
   const selectedProvider: ProviderDriverKind = lockedProvider ?? unlockedSelectedProvider;
+  const showComposerBrowserUseControl = supportsComposerBrowserUse(selectedProvider);
   const lockedContinuationGroupKey = useMemo((): string | null => {
     if (!lockedProvider || !activeThread) return null;
     const lockedInstanceId =
@@ -1564,6 +1639,76 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     };
   }, [composerCursor, composerTerminalContexts, promptRef]);
 
+  const addWorkspacePathsToComposer = useCallback(
+    (paths: ReadonlyArray<string>) => {
+      if (paths.length === 0) return;
+      const snapshot = readComposerSnapshot();
+      const insertion = buildContextMentionInsertion(
+        paths,
+        snapshot.expandedCursor,
+        snapshot.value,
+      );
+      if (!insertion) return;
+      applyPromptReplacement(snapshot.expandedCursor, snapshot.expandedCursor, insertion);
+    },
+    [applyPromptReplacement, readComposerSnapshot],
+  );
+
+  const handleAttachWorkspaceContext = useCallback(() => {
+    if (!gitCwd) {
+      toastManager.add({
+        type: "error",
+        title: "Open a project before adding file context.",
+      });
+      return;
+    }
+
+    const api = readLocalApi();
+    const pickFileSystemEntries = api?.dialogs.pickFileSystemEntries;
+    if (!pickFileSystemEntries) {
+      toastManager.add({
+        type: "error",
+        title: "Native file picker is unavailable.",
+      });
+      return;
+    }
+
+    void pickFileSystemEntries({ initialPath: gitCwd })
+      .then((selectedPaths) => {
+        if (!selectedPaths || selectedPaths.length === 0) return;
+        const seenPaths = new Set<string>();
+        const workspacePaths: string[] = [];
+        let skippedOutsideWorkspace = 0;
+        for (const selectedPath of selectedPaths) {
+          const relativePath = workspaceRelativeContextPath(gitCwd, selectedPath);
+          if (relativePath === null) {
+            skippedOutsideWorkspace += 1;
+            continue;
+          }
+          if (seenPaths.has(relativePath)) continue;
+          seenPaths.add(relativePath);
+          workspacePaths.push(relativePath);
+        }
+        if (workspacePaths.length > 0) {
+          addWorkspacePathsToComposer(workspacePaths);
+        }
+        if (skippedOutsideWorkspace > 0) {
+          toastManager.add({
+            type: "error",
+            title: "Some selected items were outside this project.",
+            description: "Only files and folders inside the current workspace can be added.",
+          });
+        }
+      })
+      .catch((error: unknown) => {
+        toastManager.add({
+          type: "error",
+          title: "Unable to add file context.",
+          description: error instanceof Error ? error.message : "The native picker failed.",
+        });
+      });
+  }, [addWorkspacePathsToComposer, gitCwd]);
+
   const resolveActiveComposerTrigger = useCallback((): {
     snapshot: { value: string; cursor: number; expandedCursor: number };
     trigger: ComposerTrigger | null;
@@ -2409,16 +2554,21 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
               )}
             >
               <div className={COMPOSER_CONTROL_ROW_CLASS}>
-                <ComposerPlaceholderAction
-                  label="Attachments coming soon"
+                <ComposerToolbarIconAction
+                  label="Add files to context"
                   icon={ComposerPlusIcon}
+                  onClick={handleAttachWorkspaceContext}
                 />
                 <ComposerToolbarSeparator />
-                <ComposerPlaceholderAction
-                  label="Browser tools coming soon"
-                  icon={ComposerGlobeIcon}
-                />
-                <ComposerToolbarSeparator />
+                {showComposerBrowserUseControl ? (
+                  <>
+                    <ComposerPlaceholderAction
+                      label="Browser tools coming soon"
+                      icon={ComposerGlobeIcon}
+                    />
+                    <ComposerToolbarSeparator />
+                  </>
+                ) : null}
 
                 {isComposerFooterCompact ? (
                   <ComposerProviderModelPicker

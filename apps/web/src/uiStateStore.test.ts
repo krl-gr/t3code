@@ -30,6 +30,7 @@ function makeUiState(overrides: Partial<UiState> = {}): UiState {
     lastActiveThreadKeyByProjectKey: {},
     defaultAdvertisedEndpointKey: null,
     contextQuickActionIds: [...DEFAULT_CONTEXT_QUICK_ACTION_IDS],
+    projectQuickActionIdsByProjectKey: {},
     ...overrides,
   };
 }

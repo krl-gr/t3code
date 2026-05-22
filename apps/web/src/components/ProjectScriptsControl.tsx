@@ -36,6 +36,7 @@ import {
   AlertDialogPopup,
   AlertDialogTitle,
 } from "./ui/alert-dialog";
+import { ActionMenuPinControl } from "./ContextActionMenuItem";
 import { Button } from "./ui/button";
 import {
   Dialog,
@@ -49,7 +50,15 @@ import {
 import { Group, GroupSeparator } from "./ui/group";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
-import { Menu, MenuItem, MenuPopup, MenuShortcut, MenuTrigger } from "./ui/menu";
+import {
+  Menu,
+  MenuGroup,
+  MenuGroupLabel,
+  MenuItem,
+  MenuPopup,
+  MenuShortcut,
+  MenuTrigger,
+} from "./ui/menu";
 import { Popover, PopoverPopup, PopoverTrigger } from "./ui/popover";
 import { Switch } from "./ui/switch";
 import { Textarea } from "./ui/textarea";
@@ -63,7 +72,31 @@ const SCRIPT_ICONS: Array<{ id: ProjectScriptIcon; label: string }> = [
   { id: "debug", label: "Debug" },
 ];
 
-function ScriptIcon({
+const menuActionButtonClassName =
+  "[&>svg]:-mx-0.5 flex min-h-8 w-full cursor-default select-none items-center gap-2 rounded-sm px-2 py-1 text-left text-base text-foreground outline-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground sm:min-h-7 sm:text-sm [&>svg:not([class*='opacity-'])]:opacity-80 [&>svg:not([class*='size-'])]:size-4.5 sm:[&>svg:not([class*='size-'])]:size-4 [&>svg]:pointer-events-none [&>svg]:shrink-0";
+
+function ProjectActionsMenuAddItem({ onOpenAddDialog }: { onOpenAddDialog: () => void }) {
+  return (
+    <button
+      type="button"
+      className={menuActionButtonClassName}
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onOpenAddDialog();
+      }}
+      onPointerDown={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+      }}
+    >
+      <PlusIcon className="size-4" />
+      Add action
+    </button>
+  );
+}
+
+export function ScriptIcon({
   icon,
   className = "size-3.5",
 }: {
@@ -91,7 +124,10 @@ interface ProjectScriptsControlProps {
   keybindings: ResolvedKeybindingsConfig;
   preferredScriptId?: string | null;
   presentation?: "header" | "menu";
+  pinnedScriptIds?: ReadonlySet<string>;
   onRunScript: (script: ProjectScript) => void;
+  onRequestMenuClose?: () => void;
+  onScriptPinnedChange?: (scriptId: string, pinned: boolean) => void;
   onAddScript: (input: NewProjectScriptInput) => Promise<void> | void;
   onUpdateScript: (scriptId: string, input: NewProjectScriptInput) => Promise<void> | void;
   onDeleteScript: (scriptId: string) => Promise<void> | void;
@@ -102,7 +138,10 @@ export default function ProjectScriptsControl({
   keybindings,
   preferredScriptId = null,
   presentation = "header",
+  pinnedScriptIds,
   onRunScript,
+  onRequestMenuClose,
+  onScriptPinnedChange,
   onAddScript,
   onUpdateScript,
   onDeleteScript,
@@ -210,6 +249,18 @@ export default function ProjectScriptsControl({
     setDialogOpen(true);
   };
 
+  const openAfterMenuClose = useCallback(
+    (openDialog: () => void) => {
+      if (!onRequestMenuClose) {
+        openDialog();
+        return;
+      }
+      onRequestMenuClose();
+      window.requestAnimationFrame(openDialog);
+    },
+    [onRequestMenuClose],
+  );
+
   const confirmDeleteScript = useCallback(() => {
     if (!editingScriptId) return;
     setDeleteConfirmOpen(false);
@@ -219,6 +270,8 @@ export default function ProjectScriptsControl({
 
   const renderScriptMenuItem = (script: ProjectScript) => {
     const shortcutLabel = shortcutLabelForCommand(keybindings, commandForProjectScript(script.id));
+    const isPinned = pinnedScriptIds?.has(script.id) ?? false;
+    const showPinControl = onScriptPinnedChange !== undefined;
     return (
       <MenuItem
         key={script.id}
@@ -229,7 +282,7 @@ export default function ProjectScriptsControl({
         <span className="truncate">
           {script.runOnWorktreeCreate ? `${script.name} (setup)` : script.name}
         </span>
-        <span className="relative ms-auto flex h-6 min-w-6 items-center justify-end">
+        <span className="relative ms-auto flex h-6 min-w-6 items-center justify-end gap-2">
           {shortcutLabel && (
             <MenuShortcut className="ms-0 transition-opacity group-hover:opacity-0 group-focus-visible:opacity-0">
               {shortcutLabel}
@@ -239,7 +292,9 @@ export default function ProjectScriptsControl({
             type="button"
             variant="ghost"
             size="icon-xs"
-            className="absolute right-0 top-1/2 size-6 -translate-y-1/2 opacity-0 pointer-events-none transition-opacity group-hover:opacity-100 group-hover:pointer-events-auto group-focus-visible:opacity-100 group-focus-visible:pointer-events-auto"
+            className={`absolute top-1/2 size-6 -translate-y-1/2 opacity-0 pointer-events-none transition-opacity group-hover:opacity-100 group-hover:pointer-events-auto group-focus-visible:opacity-100 group-focus-visible:pointer-events-auto ${
+              showPinControl ? "right-5" : "right-0"
+            }`}
             aria-label={`Edit ${script.name}`}
             onPointerDown={(event) => {
               event.preventDefault();
@@ -248,11 +303,18 @@ export default function ProjectScriptsControl({
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
-              openEditDialog(script);
+              openAfterMenuClose(() => openEditDialog(script));
             }}
           >
             <SettingsIcon className="size-3.5" />
           </Button>
+          {showPinControl ? (
+            <ActionMenuPinControl
+              checked={isPinned}
+              label={`Show ${script.name} in quick access`}
+              onToggle={() => onScriptPinnedChange(script.id, !isPinned)}
+            />
+          ) : null}
         </span>
       </MenuItem>
     );
@@ -418,18 +480,11 @@ export default function ProjectScriptsControl({
   if (presentation === "menu") {
     return (
       <>
-        {scripts.length > 0 ? scripts.map((script) => renderScriptMenuItem(script)) : null}
-        <MenuItem
-          className={dropdownItemClassName}
-          onClick={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            openAddDialog();
-          }}
-        >
-          <PlusIcon className="size-4" />
-          Add action
-        </MenuItem>
+        <MenuGroup>
+          <MenuGroupLabel>Actions</MenuGroupLabel>
+          {scripts.length > 0 ? scripts.map((script) => renderScriptMenuItem(script)) : null}
+        </MenuGroup>
+        <ProjectActionsMenuAddItem onOpenAddDialog={() => openAfterMenuClose(openAddDialog)} />
         {dialogNodes}
       </>
     );

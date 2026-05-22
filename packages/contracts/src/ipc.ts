@@ -370,6 +370,14 @@ export const PickFolderOptionsSchema = Schema.Struct({
   initialPath: Schema.optionalKey(Schema.NullOr(Schema.String)),
 });
 
+export interface PickFileSystemEntriesOptions {
+  initialPath?: string | null;
+}
+
+export const PickFileSystemEntriesOptionsSchema = Schema.Struct({
+  initialPath: Schema.optionalKey(Schema.NullOr(Schema.String)),
+});
+
 export interface DesktopBridge {
   getAppBranding: () => DesktopAppBranding | null;
   getLocalEnvironmentBootstrap: () => DesktopEnvironmentBootstrap | null;
@@ -408,6 +416,9 @@ export interface DesktopBridge {
   }) => Promise<DesktopServerExposureState>;
   getAdvertisedEndpoints: () => Promise<readonly AdvertisedEndpoint[]>;
   pickFolder: (options?: PickFolderOptions) => Promise<string | null>;
+  pickFileSystemEntries?: (
+    options?: PickFileSystemEntriesOptions,
+  ) => Promise<readonly string[] | null>;
   confirm: (message: string) => Promise<boolean>;
   setTheme: (theme: DesktopTheme) => Promise<void>;
   showContextMenu: <T extends string>(
@@ -437,6 +448,9 @@ export interface DesktopBridge {
 export interface LocalApi {
   dialogs: {
     pickFolder: (options?: PickFolderOptions) => Promise<string | null>;
+    pickFileSystemEntries?: (
+      options?: PickFileSystemEntriesOptions,
+    ) => Promise<readonly string[] | null>;
     confirm: (message: string) => Promise<boolean>;
   };
   shell: {

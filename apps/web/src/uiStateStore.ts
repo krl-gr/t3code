@@ -27,6 +27,7 @@ export interface PersistedUiState {
   focusedProjectOrderCwds?: string[];
   defaultAdvertisedEndpointKey?: string | null;
   contextQuickActionIds?: string[];
+  projectQuickActionIdsByProjectKey?: Record<string, string[]>;
   threadChangedFilesExpandedById?: Record<string, Record<string, boolean>>;
   lastActiveThreadKeyByProjectKey?: Record<string, string>;
 }
@@ -49,6 +50,7 @@ export interface UiEndpointState {
 
 export interface UiContextBarState {
   contextQuickActionIds: ContextQuickActionId[];
+  projectQuickActionIdsByProjectKey: Record<string, string[]>;
 }
 
 export interface UiState
@@ -76,6 +78,7 @@ const initialState: UiState = {
   lastActiveThreadKeyByProjectKey: {},
   defaultAdvertisedEndpointKey: null,
   contextQuickActionIds: sanitizeContextQuickActionIds(undefined),
+  projectQuickActionIdsByProjectKey: {},
 };
 
 const persistedCollapsedProjectCwds = new Set<string>();
@@ -119,6 +122,9 @@ function readPersistedState(): UiState {
           ? parsed.defaultAdvertisedEndpointKey
           : null,
       contextQuickActionIds: sanitizeContextQuickActionIds(parsed.contextQuickActionIds),
+      projectQuickActionIdsByProjectKey: sanitizePersistedStringArrayRecord(
+        parsed.projectQuickActionIdsByProjectKey,
+      ),
       threadChangedFilesExpandedById: sanitizePersistedThreadChangedFilesExpanded(
         parsed.threadChangedFilesExpandedById,
       ),
@@ -140,6 +146,29 @@ function sanitizePersistedStringRecord(value: unknown): Record<string, string> {
   for (const [key, recordValue] of Object.entries(value)) {
     if (key.length > 0 && typeof recordValue === "string" && recordValue.length > 0) {
       nextState[key] = recordValue;
+    }
+  }
+  return nextState;
+}
+
+function sanitizePersistedStringArrayRecord(value: unknown): Record<string, string[]> {
+  if (!value || typeof value !== "object") {
+    return {};
+  }
+
+  const nextState: Record<string, string[]> = {};
+  for (const [key, recordValue] of Object.entries(value)) {
+    if (!key || !Array.isArray(recordValue)) {
+      continue;
+    }
+    const nextValues: string[] = [];
+    for (const entry of recordValue) {
+      if (typeof entry === "string" && entry.length > 0 && !nextValues.includes(entry)) {
+        nextValues.push(entry);
+      }
+    }
+    if (nextValues.length > 0) {
+      nextState[key] = nextValues;
     }
   }
   return nextState;
@@ -244,6 +273,7 @@ export function persistState(state: UiState): void {
         focusedProjectOrderCwds,
         defaultAdvertisedEndpointKey: state.defaultAdvertisedEndpointKey,
         contextQuickActionIds: state.contextQuickActionIds,
+        projectQuickActionIdsByProjectKey: state.projectQuickActionIdsByProjectKey,
         threadChangedFilesExpandedById,
         lastActiveThreadKeyByProjectKey: state.lastActiveThreadKeyByProjectKey,
       } satisfies PersistedUiState),
@@ -720,6 +750,45 @@ export function setContextQuickActionPinned(
   };
 }
 
+export function setProjectQuickActionPinned(
+  state: UiState,
+  projectKey: string,
+  scriptId: string,
+  pinned: boolean,
+): UiState {
+  if (!projectKey || !scriptId) {
+    return state;
+  }
+
+  const currentIds = state.projectQuickActionIdsByProjectKey[projectKey] ?? [];
+  const existingIds = currentIds.filter(
+    (id, index) => id.length > 0 && currentIds.indexOf(id) === index,
+  );
+  const nextIds = pinned
+    ? existingIds.includes(scriptId)
+      ? existingIds
+      : [...existingIds, scriptId]
+    : existingIds.filter((id) => id !== scriptId);
+
+  if (
+    nextIds.length === currentIds.length &&
+    nextIds.every((id, index) => id === currentIds[index])
+  ) {
+    return state;
+  }
+
+  const projectQuickActionIdsByProjectKey = { ...state.projectQuickActionIdsByProjectKey };
+  if (nextIds.length > 0) {
+    projectQuickActionIdsByProjectKey[projectKey] = nextIds;
+  } else {
+    delete projectQuickActionIdsByProjectKey[projectKey];
+  }
+  return {
+    ...state,
+    projectQuickActionIdsByProjectKey,
+  };
+}
+
 export function toggleProject(state: UiState, projectId: string): UiState {
   const expanded = state.projectExpandedById[projectId] ?? true;
   return {
@@ -828,6 +897,7 @@ interface UiStateStore extends UiState {
   setThreadChangedFilesExpanded: (threadId: string, turnId: string, expanded: boolean) => void;
   setDefaultAdvertisedEndpointKey: (key: string | null) => void;
   setContextQuickActionPinned: (actionId: ContextQuickActionId, pinned: boolean) => void;
+  setProjectQuickActionPinned: (projectKey: string, scriptId: string, pinned: boolean) => void;
   toggleProject: (projectId: string) => void;
   setProjectExpanded: (projectId: string, expanded: boolean) => void;
   reorderProjects: (
@@ -854,6 +924,8 @@ export const useUiStateStore = create<UiStateStore>((set) => ({
     set((state) => setDefaultAdvertisedEndpointKey(state, key)),
   setContextQuickActionPinned: (actionId, pinned) =>
     set((state) => setContextQuickActionPinned(state, actionId, pinned)),
+  setProjectQuickActionPinned: (projectKey, scriptId, pinned) =>
+    set((state) => setProjectQuickActionPinned(state, projectKey, scriptId, pinned)),
   toggleProject: (projectId) => set((state) => toggleProject(state, projectId)),
   setProjectExpanded: (projectId, expanded) =>
     set((state) => setProjectExpanded(state, projectId, expanded)),

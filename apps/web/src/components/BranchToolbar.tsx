@@ -7,10 +7,16 @@ import type {
   ThreadId,
 } from "@t3tools/contracts";
 import { CloudIcon, FolderGit2Icon, FolderGitIcon, FolderIcon, MonitorIcon } from "lucide-react";
-import { Fragment, memo, useCallback, useMemo, type ReactNode } from "react";
+import { Fragment, memo, useCallback, useMemo, useState, type ReactNode } from "react";
 
 import { useComposerDraftStore, type DraftId } from "../composerDraftStore";
-import type { ContextQuickActionId } from "../contextQuickActions";
+import {
+  CONTEXT_GIT_QUICK_ACTION_ORDER,
+  CONTEXT_OPEN_EDITOR_QUICK_ACTION_ORDER,
+  CONTEXT_VIEW_QUICK_ACTION_ORDER,
+  editorIdFromContextQuickActionId,
+  type ContextQuickActionId,
+} from "../contextQuickActions";
 import { useIsMobile } from "../hooks/useMediaQuery";
 import { usePrimaryEnvironmentId } from "../environments/primary";
 import { useStore } from "../store";
@@ -30,6 +36,7 @@ import {
 import {
   CONTEXT_BAR_ICON_TRIGGER_CLASS,
   CONTEXT_BAR_SEPARATOR_CLASS,
+  CONTEXT_BAR_TEXT_TRIGGER_CLASS,
 } from "./BranchToolbar.styles";
 import {
   ContextBarDiffIcon,
@@ -89,9 +96,11 @@ interface BranchToolbarProps {
 }
 
 type ContextQuickActionNode = {
-  actionId: ContextQuickActionId;
+  actionId: string;
   node: ReactNode;
 };
+
+const EMPTY_PROJECT_QUICK_ACTION_IDS: readonly string[] = [];
 
 function ContextBarSeparator() {
   return <div aria-hidden="true" className={CONTEXT_BAR_SEPARATOR_CLASS} />;
@@ -276,6 +285,7 @@ export const BranchToolbar = memo(function BranchToolbar({
   availableEnvironments,
   onEnvironmentChange,
 }: BranchToolbarProps) {
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const threadRef = useMemo(
     () => scopeThreadRef(environmentId, threadId),
     [environmentId, threadId],
@@ -317,10 +327,53 @@ export const BranchToolbar = memo(function BranchToolbar({
     primaryEnvironmentId,
   });
   const contextQuickActionIds = useUiStateStore((store) => store.contextQuickActionIds);
+  const projectQuickActionIdsByProjectKey = useUiStateStore(
+    (store) => store.projectQuickActionIdsByProjectKey,
+  );
   const setContextQuickActionPinned = useUiStateStore((store) => store.setContextQuickActionPinned);
+  const setProjectQuickActionPinned = useUiStateStore((store) => store.setProjectQuickActionPinned);
   const pinnedContextActionIds = useMemo(
     () => new Set(contextQuickActionIds),
     [contextQuickActionIds],
+  );
+  const orderedContextQuickActionIds = useMemo(() => {
+    const orderedIds: ContextQuickActionId[] = [];
+    const seenIds = new Set<ContextQuickActionId>();
+    const availableEditorIds = new Set(availableEditors);
+    const appendIfPinned = (actionId: ContextQuickActionId) => {
+      if (!pinnedContextActionIds.has(actionId) || seenIds.has(actionId)) {
+        return;
+      }
+      orderedIds.push(actionId);
+      seenIds.add(actionId);
+    };
+
+    for (const actionId of CONTEXT_GIT_QUICK_ACTION_ORDER) {
+      appendIfPinned(actionId);
+    }
+    for (const actionId of CONTEXT_OPEN_EDITOR_QUICK_ACTION_ORDER) {
+      const editorId = editorIdFromContextQuickActionId(actionId);
+      if (editorId !== null && availableEditorIds.has(editorId)) {
+        appendIfPinned(actionId);
+      }
+    }
+    for (const actionId of CONTEXT_VIEW_QUICK_ACTION_ORDER) {
+      appendIfPinned(actionId);
+    }
+    for (const actionId of contextQuickActionIds) {
+      appendIfPinned(actionId);
+    }
+
+    return orderedIds;
+  }, [availableEditors, contextQuickActionIds, pinnedContextActionIds]);
+  const activeProjectKey = activeProject?.id ?? null;
+  const projectQuickActionIds =
+    activeProjectKey !== null
+      ? (projectQuickActionIdsByProjectKey[activeProjectKey] ?? EMPTY_PROJECT_QUICK_ACTION_IDS)
+      : EMPTY_PROJECT_QUICK_ACTION_IDS;
+  const pinnedProjectScriptIds = useMemo(
+    () => new Set(projectQuickActionIds),
+    [projectQuickActionIds],
   );
   const onContextActionPinnedChange = useCallback(
     (actionId: ContextQuickActionId, pinned: boolean) => {
@@ -328,124 +381,157 @@ export const BranchToolbar = memo(function BranchToolbar({
     },
     [setContextQuickActionPinned],
   );
+  const onProjectScriptPinnedChange = useCallback(
+    (scriptId: string, pinned: boolean) => {
+      if (activeProjectKey === null) return;
+      setProjectQuickActionPinned(activeProjectKey, scriptId, pinned);
+    },
+    [activeProjectKey, setProjectQuickActionPinned],
+  );
 
   if (!hasActiveThread || !activeProject) return null;
 
-  const quickActionNodes = contextQuickActionIds.flatMap<ContextQuickActionNode>((actionId) => {
-    if (actionId === "git.quick") {
-      return [
-        {
-          actionId,
-          node: (
-            <GitActionsControl
-              presentation="composer-bar"
-              gitCwd={gitCwd}
-              activeThreadRef={threadRef}
-              {...(draftId ? { draftId } : {})}
-            />
-          ),
-        },
-      ];
-    }
-    if (actionId === "git.commit" || actionId === "git.push" || actionId === "git.pr") {
-      return [
-        {
-          actionId,
-          node: (
-            <GitActionsControl
-              presentation="composer-bar"
-              composerActionId={
-                actionId === "git.commit" ? "commit" : actionId === "git.push" ? "push" : "pr"
-              }
-              gitCwd={gitCwd}
-              activeThreadRef={threadRef}
-              {...(draftId ? { draftId } : {})}
-            />
-          ),
-        },
-      ];
-    }
-    if (actionId === "open.preferred") {
-      if (!showOpenInPicker) return [];
-      return [
-        {
-          actionId,
-          node: (
-            <OpenInPicker
-              presentation="composer-bar"
-              keybindings={keybindings}
-              availableEditors={availableEditors}
-              openInCwd={openInCwd}
-            />
-          ),
-        },
-      ];
-    }
-    if (actionId === "terminal.toggle") {
-      return [
-        {
-          actionId,
-          node: (
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Toggle
-                    className={CONTEXT_BAR_ICON_TRIGGER_CLASS}
-                    pressed={terminalOpen}
-                    onPressedChange={onToggleTerminal}
-                    aria-label="Toggle terminal drawer"
-                    variant="outline"
-                    size="xs"
-                    disabled={!terminalAvailable}
-                  />
+  const quickActionNodes = orderedContextQuickActionIds.flatMap<ContextQuickActionNode>(
+    (actionId) => {
+      if (actionId === "git.quick") {
+        return [
+          {
+            actionId,
+            node: (
+              <GitActionsControl
+                presentation="composer-bar"
+                gitCwd={gitCwd}
+                activeThreadRef={threadRef}
+                {...(draftId ? { draftId } : {})}
+              />
+            ),
+          },
+        ];
+      }
+      if (actionId === "git.commit" || actionId === "git.push" || actionId === "git.pr") {
+        return [
+          {
+            actionId,
+            node: (
+              <GitActionsControl
+                presentation="composer-bar"
+                composerActionId={
+                  actionId === "git.commit" ? "commit" : actionId === "git.push" ? "push" : "pr"
                 }
-              >
-                <ContextBarTerminalIcon className="size-4" />
-              </TooltipTrigger>
-              <TooltipPopup side="top">
-                {!terminalAvailable
-                  ? "Terminal is unavailable until this thread has an active project."
-                  : terminalToggleShortcutLabel
-                    ? `Toggle terminal drawer (${terminalToggleShortcutLabel})`
-                    : "Toggle terminal drawer"}
-              </TooltipPopup>
-            </Tooltip>
-          ),
-        },
-      ];
-    }
-    if (actionId === "diff.toggle") {
+                gitCwd={gitCwd}
+                activeThreadRef={threadRef}
+                {...(draftId ? { draftId } : {})}
+              />
+            ),
+          },
+        ];
+      }
+      const editorId = editorIdFromContextQuickActionId(actionId);
+      if (editorId !== null) {
+        if (!showOpenInPicker || !availableEditors.includes(editorId)) return [];
+        return [
+          {
+            actionId,
+            node: (
+              <OpenInPicker
+                presentation="composer-bar"
+                keybindings={keybindings}
+                availableEditors={availableEditors}
+                openInCwd={openInCwd}
+                composerEditorId={editorId}
+              />
+            ),
+          },
+        ];
+      }
+      if (actionId === "terminal.toggle") {
+        return [
+          {
+            actionId,
+            node: (
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Toggle
+                      className={CONTEXT_BAR_ICON_TRIGGER_CLASS}
+                      pressed={terminalOpen}
+                      onPressedChange={onToggleTerminal}
+                      aria-label="Toggle terminal drawer"
+                      variant="outline"
+                      size="xs"
+                      disabled={!terminalAvailable}
+                    />
+                  }
+                >
+                  <ContextBarTerminalIcon className="size-4" />
+                </TooltipTrigger>
+                <TooltipPopup side="top">
+                  {!terminalAvailable
+                    ? "Terminal is unavailable until this thread has an active project."
+                    : terminalToggleShortcutLabel
+                      ? `Toggle terminal drawer (${terminalToggleShortcutLabel})`
+                      : "Toggle terminal drawer"}
+                </TooltipPopup>
+              </Tooltip>
+            ),
+          },
+        ];
+      }
+      if (actionId === "diff.toggle") {
+        return [
+          {
+            actionId,
+            node: (
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Toggle
+                      className={CONTEXT_BAR_ICON_TRIGGER_CLASS}
+                      pressed={diffOpen}
+                      onPressedChange={onToggleDiff}
+                      aria-label="Toggle diff panel"
+                      variant="outline"
+                      size="xs"
+                    />
+                  }
+                >
+                  <ContextBarDiffIcon className="size-4" />
+                </TooltipTrigger>
+                <TooltipPopup side="top">
+                  {diffToggleShortcutLabel
+                    ? `Toggle diff panel (${diffToggleShortcutLabel})`
+                    : "Toggle diff panel"}
+                </TooltipPopup>
+              </Tooltip>
+            ),
+          },
+        ];
+      }
+      return [];
+    },
+  );
+  const projectQuickActionNodes = (activeProjectScripts ?? []).flatMap<ContextQuickActionNode>(
+    (script) => {
+      if (!pinnedProjectScriptIds.has(script.id)) return [];
       return [
         {
-          actionId,
+          actionId: `project.${script.id}`,
           node: (
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Toggle
-                    className={CONTEXT_BAR_ICON_TRIGGER_CLASS}
-                    pressed={diffOpen}
-                    onPressedChange={onToggleDiff}
-                    aria-label="Toggle diff panel"
-                    variant="outline"
-                    size="xs"
-                  />
-                }
-              >
-                <ContextBarDiffIcon className="size-4" />
-              </TooltipTrigger>
-              <TooltipPopup side="top">
-                {diffToggleShortcutLabel
-                  ? `Toggle diff panel (${diffToggleShortcutLabel})`
-                  : "Toggle diff panel"}
-              </TooltipPopup>
-            </Tooltip>
+            <Button
+              size="xs"
+              variant="ghost"
+              className={`${CONTEXT_BAR_TEXT_TRIGGER_CLASS} max-w-36`}
+              title={`Run ${script.name}`}
+              onClick={() => onRunProjectScript(script)}
+            >
+              <span className="min-w-0 truncate">{script.name}</span>
+            </Button>
           ),
         },
       ];
-    }
-    return [];
-  });
+    },
+  );
+  const quickAccessNodes = [...projectQuickActionNodes, ...quickActionNodes];
 
   return (
     <div
@@ -513,14 +599,14 @@ export const BranchToolbar = memo(function BranchToolbar({
       </div>
 
       <div className="flex shrink-0 items-center justify-end gap-0 text-[rgba(186,185,186,0.7)]">
-        {quickActionNodes.map((entry, index) => (
+        {quickAccessNodes.map((entry, index) => (
           <Fragment key={entry.actionId}>
             {index > 0 ? <ContextBarSeparator /> : null}
             {entry.node}
           </Fragment>
         ))}
-        {quickActionNodes.length > 0 ? <ContextBarSeparator /> : null}
-        <Menu>
+        {quickAccessNodes.length > 0 ? <ContextBarSeparator /> : null}
+        <Menu open={moreMenuOpen} onOpenChange={setMoreMenuOpen}>
           <MenuTrigger
             render={
               <Button
@@ -533,7 +619,25 @@ export const BranchToolbar = memo(function BranchToolbar({
           >
             <ContextBarMoreIcon className="size-4" />
           </MenuTrigger>
-          <MenuPopup align="end" side="top" className="min-w-64">
+          <MenuPopup align="end" side="top" className="min-w-64" keepMounted>
+            {activeProjectScripts ? (
+              <ProjectScriptsControl
+                presentation="menu"
+                scripts={activeProjectScripts}
+                keybindings={keybindings}
+                preferredScriptId={preferredScriptId}
+                pinnedScriptIds={pinnedProjectScriptIds}
+                onRunScript={onRunProjectScript}
+                onRequestMenuClose={() => setMoreMenuOpen(false)}
+                onScriptPinnedChange={onProjectScriptPinnedChange}
+                onAddScript={onAddProjectScript}
+                onUpdateScript={onUpdateProjectScript}
+                onDeleteScript={onDeleteProjectScript}
+              />
+            ) : (
+              <MenuItem disabled>No project actions</MenuItem>
+            )}
+            <MenuSeparator />
             <GitActionsControl
               presentation="composer-menu"
               gitCwd={gitCwd}
@@ -579,21 +683,6 @@ export const BranchToolbar = memo(function BranchToolbar({
                 Diff
               </ContextActionMenuItem>
             </MenuGroup>
-            <MenuSeparator />
-            {activeProjectScripts ? (
-              <ProjectScriptsControl
-                presentation="menu"
-                scripts={activeProjectScripts}
-                keybindings={keybindings}
-                preferredScriptId={preferredScriptId}
-                onRunScript={onRunProjectScript}
-                onAddScript={onAddProjectScript}
-                onUpdateScript={onUpdateProjectScript}
-                onDeleteScript={onDeleteProjectScript}
-              />
-            ) : (
-              <MenuItem disabled>No project actions</MenuItem>
-            )}
           </MenuPopup>
         </Menu>
       </div>

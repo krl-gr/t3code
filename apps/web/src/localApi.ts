@@ -39,6 +39,10 @@ function createBrowserLocalApi(rpcClient?: WsRpcClient): LocalApi {
         if (!window.desktopBridge) return null;
         return window.desktopBridge.pickFolder(options);
       },
+      pickFileSystemEntries: async (options) => {
+        if (!window.desktopBridge?.pickFileSystemEntries) return null;
+        return window.desktopBridge.pickFileSystemEntries(options);
+      },
       confirm: async (message) => {
         if (window.desktopBridge) {
           return window.desktopBridge.confirm(message);
