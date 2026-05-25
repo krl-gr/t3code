@@ -165,13 +165,42 @@ describe("DesktopAppIdentity", () => {
         assert.equal(calls.setAboutPanelOptions[0]?.applicationName, "Up.computer (Alpha)");
         assert.equal(calls.setAboutPanelOptions[0]?.applicationVersion, "1.2.3");
         assert.equal(calls.setAboutPanelOptions[0]?.version, "0123456789ab");
-        assert.deepEqual(calls.setDockIcon, ["/icon.png"]);
+        assert.deepEqual(calls.setDockIcon, []);
       }),
       {
         calls,
         environment: {
           env: {
             T3CODE_COMMIT_HASH: "0123456789abcdef",
+          },
+        },
+        pngIconPath: Option.some("/icon.png"),
+      },
+    );
+  });
+
+  it.effect("keeps the PNG Dock icon override for development launches", () => {
+    const calls: ElectronAppCalls = {
+      setAboutPanelOptions: [],
+      setDockIcon: [],
+      setName: [],
+    };
+
+    return withIdentity(
+      Effect.gen(function* () {
+        const identity = yield* DesktopAppIdentity.DesktopAppIdentity;
+        yield* identity.configure;
+
+        assert.deepEqual(calls.setDockIcon, ["/icon.png"]);
+      }),
+      {
+        calls,
+        environment: {
+          isPackaged: false,
+          appPath: "/repo",
+          resourcesPath: "/repo/apps/desktop/resources",
+          env: {
+            VITE_DEV_SERVER_URL: "http://localhost:5173",
           },
         },
         pngIconPath: Option.some("/icon.png"),
