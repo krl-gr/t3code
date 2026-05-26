@@ -31,6 +31,11 @@
   --color-card: var(--card);
   --color-foreground: var(--foreground);
   --color-background: var(--background);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -112,6 +117,11 @@
   --success-foreground: var(--color-emerald-700);
   --warning: var(--color-amber-500);
   --warning-foreground: var(--color-amber-700);
+  --sidebar: --alpha(var(--color-white) / 50%);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-accent: --alpha(var(--color-black) / 5%);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: --alpha(var(--color-black) / 10%);
   --project-avatar-background-pink: #feeef8;
   --project-avatar-background-mint: #e1fbf4;
   --project-avatar-background-orange: #fff1e7;
@@ -153,6 +163,11 @@
     --success-foreground: var(--color-emerald-400);
     --warning: var(--color-amber-500);
     --warning-foreground: var(--color-amber-400);
+    --sidebar: color-mix(in srgb, var(--background) 67%, transparent);
+    --sidebar-foreground: var(--foreground);
+    --sidebar-accent: --alpha(var(--color-white) / 7%);
+    --sidebar-accent-foreground: var(--foreground);
+    --sidebar-border: --alpha(var(--color-white) / 10%);
     --project-avatar-background-pink: #501b3f;
     --project-avatar-background-mint: #033a34;
     --project-avatar-background-orange: #5f2a06;
@@ -191,6 +206,12 @@ body {
   overflow: hidden;
 }
 
+.electron,
+.electron body,
+.electron #root {
+  background: transparent !important;
+}
+
 #root {
   height: 100%;
   width: 100%;
@@ -211,6 +232,12 @@ body::after {
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   background-repeat: repeat;
   background-size: 256px 256px;
+}
+
+.t3-sidebar-glass {
+  background: var(--sidebar);
+  -webkit-backdrop-filter: blur(28px) saturate(1.25);
+  backdrop-filter: blur(28px) saturate(1.25);
 }
 
 pre,

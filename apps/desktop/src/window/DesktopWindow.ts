@@ -22,11 +22,18 @@ const TITLEBAR_HEIGHT = 40;
 const TITLEBAR_COLOR = "#01000000"; // #00000000 does not work correctly on Linux
 const TITLEBAR_LIGHT_SYMBOL_COLOR = "#1f2937";
 const TITLEBAR_DARK_SYMBOL_COLOR = "#f8fafc";
+const TRANSPARENT_WINDOW_BACKGROUND = "#00000000";
 
 type WindowTitleBarOptions = Pick<
   Electron.BrowserWindowConstructorOptions,
   "titleBarOverlay" | "titleBarStyle" | "trafficLightPosition"
 >;
+type WindowTransparencyOptions = Pick<
+  Electron.BrowserWindowConstructorOptions,
+  "transparent" | "vibrancy" | "visualEffectState"
+> & {
+  readonly backgroundColor: string;
+};
 
 type DesktopWindowRuntimeServices =
   | DesktopEnvironment.DesktopEnvironment
@@ -92,6 +99,21 @@ function getInitialWindowBackgroundColor(shouldUseDarkColors: boolean): string {
   return shouldUseDarkColors ? "#0a0a0a" : "#ffffff";
 }
 
+function getWindowTransparencyOptions(shouldUseDarkColors: boolean): WindowTransparencyOptions {
+  if (process.platform !== "darwin") {
+    return {
+      backgroundColor: getInitialWindowBackgroundColor(shouldUseDarkColors),
+    };
+  }
+
+  return {
+    backgroundColor: TRANSPARENT_WINDOW_BACKGROUND,
+    transparent: true,
+    vibrancy: "sidebar",
+    visualEffectState: "active",
+  };
+}
+
 function getWindowTitleBarOptions(shouldUseDarkColors: boolean): WindowTitleBarOptions {
   if (process.platform === "darwin") {
     return {
@@ -119,7 +141,7 @@ function syncWindowAppearance(
       return;
     }
 
-    window.setBackgroundColor(getInitialWindowBackgroundColor(shouldUseDarkColors));
+    window.setBackgroundColor(getWindowTransparencyOptions(shouldUseDarkColors).backgroundColor);
     const { titleBarOverlay } = getWindowTitleBarOptions(shouldUseDarkColors);
     if (typeof titleBarOverlay === "object") {
       window.setTitleBarOverlay(titleBarOverlay);
@@ -169,7 +191,7 @@ const make = Effect.gen(function* () {
       minHeight: 620,
       show: false,
       autoHideMenuBar: true,
-      backgroundColor: getInitialWindowBackgroundColor(shouldUseDarkColors),
+      ...getWindowTransparencyOptions(shouldUseDarkColors),
       ...iconOption,
       title: environment.displayName,
       ...getWindowTitleBarOptions(shouldUseDarkColors),
