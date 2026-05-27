@@ -219,6 +219,7 @@ describe("ProviderRuntimeIngestion", () => {
 
   async function createHarness(options?: { serverSettings?: Partial<ServerSettings> }) {
     const workspaceRoot = makeTempDir("t3-provider-project-");
+    const baseDir = makeTempDir("t3-provider-runtime-state-");
     fs.mkdirSync(path.join(workspaceRoot, ".git"));
     const provider = createProviderServiceHarness();
     const orchestrationLayer = OrchestrationEngineLive.pipe(
@@ -239,7 +240,7 @@ describe("ProviderRuntimeIngestion", () => {
       Layer.provideMerge(SqlitePersistenceMemory),
       Layer.provideMerge(Layer.succeed(ProviderService, provider.service)),
       Layer.provideMerge(makeTestServerSettingsLayer(options?.serverSettings)),
-      Layer.provideMerge(ServerConfig.layerTest(process.cwd(), process.cwd())),
+      Layer.provideMerge(ServerConfig.layerTest(process.cwd(), baseDir)),
       Layer.provideMerge(NodeServices.layer),
     );
     runtime = ManagedRuntime.make(layer);
@@ -315,6 +316,7 @@ describe("ProviderRuntimeIngestion", () => {
       emit: provider.emit,
       setProviderSession: provider.setSession,
       drain,
+      browserScreenshotsDir: path.join(baseDir, "userdata", "browser-screenshots"),
     };
   }
 
@@ -358,6 +360,51 @@ describe("ProviderRuntimeIngestion", () => {
     );
     expect(thread.session?.status).toBe("error");
     expect(thread.session?.lastError).toBe("turn failed");
+  });
+
+  it("persists browser screenshots into per-thread Finder folders", async () => {
+    const harness = await createHarness();
+    const screenshotBase64 = Buffer.from("fake png bytes").toString("base64");
+
+    harness.emit({
+      type: "item.completed",
+      eventId: asEventId("evt-browser-screenshot"),
+      provider: ProviderDriverKind.make("pi"),
+      threadId: asThreadId("thread-1"),
+      turnId: asTurnId("turn-1"),
+      itemId: asItemId("tool-browser-screenshot"),
+      createdAt: "2026-05-26T14:22:10.382Z",
+      payload: {
+        itemType: "dynamic_tool_call",
+        title: "Captured screenshot",
+        status: "completed",
+        detail: "Browser action completed: screenshot",
+        data: {
+          content: [
+            { type: "text", text: "Browser action completed: screenshot" },
+            { type: "image", data: screenshotBase64, mimeType: "image/png" },
+          ],
+          details: {
+            action: "screenshot",
+            blocked: false,
+            url: "https://x.com/krl_grn",
+            origin: "https://x.com",
+            screenshotBase64,
+            mimeType: "image/png",
+          },
+          isError: false,
+        },
+      },
+    });
+
+    await harness.drain();
+
+    const screenshotPath = path.join(
+      harness.browserScreenshotsDir,
+      "thread--thread-1",
+      "2026-05-26_14-22-10-382_x-com.png",
+    );
+    expect(fs.readFileSync(screenshotPath, "utf8")).toBe("fake png bytes");
   });
 
   it("applies provider session.state.changed transitions directly", async () => {

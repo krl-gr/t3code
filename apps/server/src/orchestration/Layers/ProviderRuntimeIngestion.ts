@@ -30,6 +30,7 @@ import { ProviderService } from "../../provider/Services/ProviderService.ts";
 import { ProjectionTurnRepository } from "../../persistence/Services/ProjectionTurns.ts";
 import { ProjectionTurnRepositoryLive } from "../../persistence/Layers/ProjectionTurns.ts";
 import { isGitRepository } from "../../git/Utils.ts";
+import { ServerConfig } from "../../config.ts";
 import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
 import { ProjectionSnapshotQuery } from "../Services/ProjectionSnapshotQuery.ts";
 import {
@@ -37,6 +38,10 @@ import {
   type ProviderRuntimeIngestionShape,
 } from "../Services/ProviderRuntimeIngestion.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
+import {
+  extractBrowserScreenshotPayload,
+  persistBrowserScreenshot,
+} from "../../browser/BrowserScreenshotStore.ts";
 
 const providerTurnKey = (threadId: ThreadId, turnId: TurnId) => `${threadId}:${turnId}`;
 const providerCommandId = (event: ProviderRuntimeEvent, tag: string): CommandId =>
@@ -612,6 +617,7 @@ const make = Effect.gen(function* () {
   const providerService = yield* ProviderService;
   const projectionTurnRepository = yield* ProjectionTurnRepository;
   const serverSettingsService = yield* ServerSettingsService;
+  const serverConfig = yield* ServerConfig;
 
   const turnMessageIdsByTurnKey = yield* Cache.make<string, Set<MessageId>>({
     capacity: TURN_MESSAGE_IDS_BY_TURN_CACHE_CAPACITY,
@@ -1194,6 +1200,36 @@ const make = Effect.gen(function* () {
       const now = event.createdAt;
       const eventTurnId = toTurnId(event.turnId);
       const activeTurnId = thread.session?.activeTurnId ?? null;
+
+      if (event.type === "item.completed") {
+        const screenshot = extractBrowserScreenshotPayload(event.payload.data);
+        if (screenshot) {
+          yield* persistBrowserScreenshot({
+            ...screenshot,
+            stateDir: serverConfig.stateDir,
+            threadId: thread.id,
+            threadTitle: thread.title,
+            createdAt: now,
+          }).pipe(
+            Effect.tap((saved) =>
+              saved
+                ? Effect.logInfo("saved browser screenshot", {
+                    threadId: thread.id,
+                    eventId: event.eventId,
+                    filePath: saved.filePath,
+                  })
+                : Effect.void,
+            ),
+            Effect.catchCause((cause) =>
+              Effect.logWarning("failed to save browser screenshot", {
+                threadId: thread.id,
+                eventId: event.eventId,
+                cause: Cause.pretty(cause),
+              }),
+            ),
+          );
+        }
+      }
 
       const conflictsWithActiveTurn =
         activeTurnId !== null && eventTurnId !== undefined && !sameId(activeTurnId, eventTurnId);
