@@ -362,35 +362,36 @@ describe("ProviderRuntimeIngestion", () => {
     expect(thread.session?.lastError).toBe("turn failed");
   });
 
-  it("persists browser screenshots into per-thread Finder folders", async () => {
+  it("persists browser action screenshots into per-thread Finder folders", async () => {
     const harness = await createHarness();
     const screenshotBase64 = Buffer.from("fake png bytes").toString("base64");
 
     harness.emit({
       type: "item.completed",
-      eventId: asEventId("evt-browser-screenshot"),
+      eventId: asEventId("evt-browser-search"),
       provider: ProviderDriverKind.make("pi"),
       threadId: asThreadId("thread-1"),
       turnId: asTurnId("turn-1"),
-      itemId: asItemId("tool-browser-screenshot"),
+      itemId: asItemId("tool-browser-search"),
       createdAt: "2026-05-26T14:22:10.382Z",
       payload: {
         itemType: "dynamic_tool_call",
-        title: "Captured screenshot",
+        title: "Searched browser",
         status: "completed",
-        detail: "Browser action completed: screenshot",
+        detail: "Browser action completed: search",
         data: {
-          content: [
-            { type: "text", text: "Browser action completed: screenshot" },
-            { type: "image", data: screenshotBase64, mimeType: "image/png" },
-          ],
+          content: [{ type: "text", text: "Browser action completed: search" }],
           details: {
-            action: "screenshot",
+            action: "search",
             blocked: false,
             url: "https://x.com/krl_grn",
             origin: "https://x.com",
-            screenshotBase64,
+          },
+          persistenceScreenshot: {
+            data: screenshotBase64,
             mimeType: "image/png",
+            origin: "https://x.com",
+            url: "https://x.com/krl_grn",
           },
           isError: false,
         },
@@ -405,6 +406,25 @@ describe("ProviderRuntimeIngestion", () => {
       "2026-05-26_14-22-10-382_x-com.png",
     );
     expect(fs.readFileSync(screenshotPath, "utf8")).toBe("fake png bytes");
+
+    const thread = await waitForThread(harness.readModel, (entry) =>
+      entry.activities.some((activity) => activity.id === "evt-browser-search"),
+    );
+    const activity = thread.activities.find((entry) => entry.id === "evt-browser-search");
+    expect(activity?.payload).toEqual({
+      itemType: "dynamic_tool_call",
+      detail: "Browser action completed: search",
+      data: {
+        content: [{ type: "text", text: "Browser action completed: search" }],
+        details: {
+          action: "search",
+          blocked: false,
+          url: "https://x.com/krl_grn",
+          origin: "https://x.com",
+        },
+        isError: false,
+      },
+    });
   });
 
   it("applies provider session.state.changed transitions directly", async () => {

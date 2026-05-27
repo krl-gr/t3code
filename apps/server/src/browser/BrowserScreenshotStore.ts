@@ -106,6 +106,25 @@ export function extractBrowserScreenshotPayload(value: unknown): BrowserScreensh
     return null;
   }
 
+  const persistenceScreenshot = isRecord(value.persistenceScreenshot)
+    ? value.persistenceScreenshot
+    : undefined;
+  if (
+    typeof persistenceScreenshot?.data === "string" &&
+    persistenceScreenshot.data.trim().length > 0 &&
+    typeof persistenceScreenshot.mimeType === "string" &&
+    persistenceScreenshot.mimeType.toLowerCase() === "image/png"
+  ) {
+    return {
+      screenshotBase64: persistenceScreenshot.data,
+      mimeType: "image/png",
+      ...(typeof persistenceScreenshot.origin === "string"
+        ? { origin: persistenceScreenshot.origin }
+        : {}),
+      ...(typeof persistenceScreenshot.url === "string" ? { url: persistenceScreenshot.url } : {}),
+    };
+  }
+
   const details = isRecord(value.details) ? value.details : undefined;
   if (details?.action !== "screenshot" || details.blocked === true) {
     return null;
@@ -142,6 +161,15 @@ export function extractBrowserScreenshotPayload(value: unknown): BrowserScreensh
     ...(typeof details.origin === "string" ? { origin: details.origin } : {}),
     ...(typeof details.url === "string" ? { url: details.url } : {}),
   };
+}
+
+export function stripBrowserScreenshotPersistence(value: unknown): unknown {
+  if (!isRecord(value) || !("persistenceScreenshot" in value)) {
+    return value;
+  }
+
+  const { persistenceScreenshot: _persistenceScreenshot, ...rest } = value;
+  return rest;
 }
 
 function existingThreadDirectoryName(

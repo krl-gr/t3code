@@ -12,6 +12,7 @@ import {
   browserScreenshotFileName,
   extractBrowserScreenshotPayload,
   persistBrowserScreenshot,
+  stripBrowserScreenshotPersistence,
 } from "./BrowserScreenshotStore.ts";
 
 describe("BrowserScreenshotStore", () => {
@@ -52,6 +53,47 @@ describe("BrowserScreenshotStore", () => {
       mimeType: "image/png",
       origin: "https://x.com",
       url: "https://x.com/krl_grn",
+    });
+  });
+
+  it("extracts persistence-only browser action screenshots", () => {
+    const payload = extractBrowserScreenshotPayload({
+      content: [{ type: "text", text: "Browser action completed: search" }],
+      details: {
+        action: "search",
+        blocked: false,
+        url: "https://x.com/krl_grn",
+        origin: "https://x.com",
+      },
+      persistenceScreenshot: {
+        data: "YWJj",
+        mimeType: "image/png",
+        origin: "https://x.com",
+        url: "https://x.com/krl_grn",
+      },
+      isError: false,
+    });
+
+    expect(payload).toEqual({
+      screenshotBase64: "YWJj",
+      mimeType: "image/png",
+      origin: "https://x.com",
+      url: "https://x.com/krl_grn",
+    });
+  });
+
+  it("strips persistence-only screenshots from activity payload data", () => {
+    expect(
+      stripBrowserScreenshotPersistence({
+        content: [{ type: "text", text: "Browser action completed: search" }],
+        details: { action: "search", blocked: false },
+        persistenceScreenshot: { data: "YWJj", mimeType: "image/png" },
+        isError: false,
+      }),
+    ).toEqual({
+      content: [{ type: "text", text: "Browser action completed: search" }],
+      details: { action: "search", blocked: false },
+      isError: false,
     });
   });
 

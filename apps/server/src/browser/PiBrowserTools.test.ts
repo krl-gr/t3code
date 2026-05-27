@@ -122,4 +122,55 @@ describe("PiBrowserTools", () => {
       mimeType: "image/png",
     });
   });
+
+  it("keeps automatic persistence screenshots out of model-visible content", async () => {
+    const browser = makeBrowserStub();
+    vi.mocked(browser.search).mockResolvedValueOnce({
+      action: "search",
+      blocked: false,
+      url: "https://x.com",
+      origin: "https://x.com",
+      persistenceScreenshotBase64: "abc",
+      persistenceScreenshotMimeType: "image/png",
+    });
+    const searchTool = createPiBrowserTools(browser).find((tool) => tool.name === "browser_search");
+    const result = await (
+      searchTool as unknown as {
+        execute: (
+          toolCallId: string,
+          params: unknown,
+          signal: AbortSignal | undefined,
+          onUpdate: undefined,
+          ctx: never,
+        ) => Promise<{
+          readonly content: ReadonlyArray<unknown>;
+          readonly details: unknown;
+          readonly persistenceScreenshot?: unknown;
+        }>;
+      }
+    ).execute("tool-call", { query: "ferrari" }, undefined, undefined, {} as never);
+
+    expect(result.content).toEqual([
+      {
+        type: "text",
+        text: [
+          "Browser action completed: search",
+          "URL: https://x.com",
+          "Origin: https://x.com",
+        ].join("\n"),
+      },
+    ]);
+    expect(result.details).toEqual({
+      action: "search",
+      blocked: false,
+      url: "https://x.com",
+      origin: "https://x.com",
+    });
+    expect(result.persistenceScreenshot).toEqual({
+      data: "abc",
+      mimeType: "image/png",
+      origin: "https://x.com",
+      url: "https://x.com",
+    });
+  });
 });

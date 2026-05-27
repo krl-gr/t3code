@@ -107,6 +107,8 @@ export interface BrowserToolResult {
   readonly text?: string;
   readonly screenshotBase64?: string;
   readonly mimeType?: string;
+  readonly persistenceScreenshotBase64?: string;
+  readonly persistenceScreenshotMimeType?: string;
 }
 
 export interface BrowserAutomationServiceShape {
@@ -165,6 +167,22 @@ function titleOf(page: Page): Promise<string | undefined> {
     .title()
     .then(trimText)
     .catch(() => undefined);
+}
+
+async function capturePersistenceScreenshot(
+  page: Page,
+): Promise<
+  Pick<BrowserToolResult, "persistenceScreenshotBase64" | "persistenceScreenshotMimeType">
+> {
+  try {
+    const bytes = await page.screenshot({ type: "png" });
+    return {
+      persistenceScreenshotBase64: bytes.toString("base64"),
+      persistenceScreenshotMimeType: "image/png",
+    };
+  } catch {
+    return {};
+  }
 }
 
 function candidatePath(
@@ -714,6 +732,14 @@ export function createBrowserAutomationService(
     };
   };
 
+  const summarizePageWithPersistenceScreenshot = async (
+    action: BrowserActionKind,
+    page: Page,
+  ): Promise<BrowserToolResult> => ({
+    ...(await summarizePage(action, page)),
+    ...(await capturePersistenceScreenshot(page)),
+  });
+
   return {
     snapshot,
     openLoginWindow: async (input) => {
@@ -749,7 +775,7 @@ export function createBrowserAutomationService(
       }
       const page = await getPage();
       await page.goto(targetUrl, { waitUntil: "domcontentloaded" });
-      return summarizePage("navigate", page);
+      return summarizePageWithPersistenceScreenshot("navigate", page);
     },
     search: async ({ query, url }) => {
       const normalizedQuery = trimText(query);
@@ -783,7 +809,7 @@ export function createBrowserAutomationService(
       await searchBox.fill(normalizedQuery);
       await searchBox.press("Enter");
       await page.waitForLoadState("domcontentloaded").catch(() => undefined);
-      return summarizePage("search", page);
+      return summarizePageWithPersistenceScreenshot("search", page);
     },
     click: async ({ selector, text }) => {
       const page = await getPage();
@@ -807,7 +833,7 @@ export function createBrowserAutomationService(
         });
       }
       await page.waitForLoadState("domcontentloaded").catch(() => undefined);
-      return summarizePage("click", page);
+      return summarizePageWithPersistenceScreenshot("click", page);
     },
     scroll: async (input) => {
       const page = await getPage();
@@ -817,7 +843,7 @@ export function createBrowserAutomationService(
       }
       const amount = Math.max(100, Math.min(3000, input?.amount ?? 750));
       await page.mouse.wheel(0, input?.direction === "up" ? -amount : amount);
-      return summarizePage("scroll", page);
+      return summarizePageWithPersistenceScreenshot("scroll", page);
     },
     extractText: async (input) => {
       const page = await getPage();
@@ -832,6 +858,7 @@ export function createBrowserAutomationService(
         .catch(() => "");
       return {
         ...(await summarizePage("extract_text", page)),
+        ...(await capturePersistenceScreenshot(page)),
         text: text.slice(0, maxChars),
       };
     },
@@ -842,10 +869,13 @@ export function createBrowserAutomationService(
         return policy.result;
       }
       const bytes = await page.screenshot({ type: "png" });
+      const screenshotBase64 = bytes.toString("base64");
       return {
         ...(await summarizePage("screenshot", page)),
-        screenshotBase64: bytes.toString("base64"),
+        screenshotBase64,
         mimeType: "image/png",
+        persistenceScreenshotBase64: screenshotBase64,
+        persistenceScreenshotMimeType: "image/png",
       };
     },
   } satisfies BrowserAutomationServiceShape;

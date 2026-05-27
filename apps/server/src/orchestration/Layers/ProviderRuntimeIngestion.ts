@@ -41,6 +41,7 @@ import { ServerSettingsService } from "../../serverSettings.ts";
 import {
   extractBrowserScreenshotPayload,
   persistBrowserScreenshot,
+  stripBrowserScreenshotPersistence,
 } from "../../browser/BrowserScreenshotStore.ts";
 
 const providerTurnKey = (threadId: ThreadId, turnId: TurnId) => `${threadId}:${turnId}`;
@@ -1647,7 +1648,17 @@ const make = Effect.gen(function* () {
         }
       }
 
-      const activities = runtimeEventToActivities(event);
+      const activityEvent =
+        event.type === "item.completed" && event.payload.data !== undefined
+          ? {
+              ...event,
+              payload: {
+                ...event.payload,
+                data: stripBrowserScreenshotPersistence(event.payload.data),
+              },
+            }
+          : event;
+      const activities = runtimeEventToActivities(activityEvent);
       yield* Effect.forEach(activities, (activity) =>
         orchestrationEngine.dispatch({
           type: "thread.activity.append",

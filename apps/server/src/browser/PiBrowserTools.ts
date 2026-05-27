@@ -44,9 +44,22 @@ function toToolResult(result: BrowserToolResult) {
       mimeType: result.mimeType,
     });
   }
+
+  const { persistenceScreenshotBase64, persistenceScreenshotMimeType, ...details } = result;
+
   return {
     content,
-    details: result,
+    details,
+    ...(persistenceScreenshotBase64 && persistenceScreenshotMimeType
+      ? {
+          persistenceScreenshot: {
+            data: persistenceScreenshotBase64,
+            mimeType: persistenceScreenshotMimeType,
+            ...(result.origin ? { origin: result.origin } : {}),
+            ...(result.url ? { url: result.url } : {}),
+          },
+        }
+      : {}),
     isError: false,
   };
 }
