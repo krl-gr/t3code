@@ -44,7 +44,14 @@ import { usePrimaryEnvironmentId } from "../environments/primary";
 import { readEnvironmentApi } from "../environmentApi";
 import { isElectron } from "../env";
 import { readLocalApi } from "../localApi";
-import { parseDiffRouteSearch, stripDiffSearchParams } from "../diffRouteSearch";
+import {
+  type DiffRouteSearch,
+  type DiffRouteSearchUpdater,
+  closedDiffRouteSearch,
+  diffRouteSearchForNavigation,
+  parseDiffRouteSearch,
+  stripDiffSearchParams,
+} from "../diffRouteSearch";
 import {
   collapseExpandedComposerCursor,
   parseStandaloneComposerSlashCommand,
@@ -152,7 +159,7 @@ import { PullRequestThreadDialog } from "./PullRequestThreadDialog";
 import { MessagesTimeline } from "./chat/MessagesTimeline";
 import { ChatHeader } from "./chat/ChatHeader";
 import { type ExpandedImagePreview } from "./chat/ExpandedImagePreview";
-import { NoActiveThreadState } from "./NoActiveThreadState";
+import { NoActiveThreadContent } from "./NoActiveThreadState";
 import { resolveEffectiveEnvMode, resolveEnvironmentOptionLabel } from "./BranchToolbar.logic";
 import { resolveSidebarNewThreadEnvMode } from "./Sidebar.logic";
 import { ProviderStatusBanner } from "./chat/ProviderStatusBanner";
@@ -340,23 +347,31 @@ function formatOutgoingPrompt(params: {
 const SCRIPT_TERMINAL_COLS = 120;
 const SCRIPT_TERMINAL_ROWS = 30;
 
+type SharedChatViewProps = {
+  onDiffPanelOpen?: () => void;
+  reserveTitleBarControlInset?: boolean;
+  workspaceActive?: boolean;
+  workspaceVisible?: boolean;
+  isolateTerminalMounting?: boolean;
+  forceInlineThreadPanels?: boolean;
+  showHeaderControls?: boolean;
+  diffSearch?: DiffRouteSearch;
+  onDiffSearchChange?: (next: DiffRouteSearchUpdater) => void;
+};
+
 type ChatViewProps =
-  | {
+  | (SharedChatViewProps & {
       environmentId: EnvironmentId;
       threadId: ThreadId;
-      onDiffPanelOpen?: () => void;
-      reserveTitleBarControlInset?: boolean;
       routeKind: "server";
       draftId?: never;
-    }
-  | {
+    })
+  | (SharedChatViewProps & {
       environmentId: EnvironmentId;
       threadId: ThreadId;
-      onDiffPanelOpen?: () => void;
-      reserveTitleBarControlInset?: boolean;
       routeKind: "draft";
       draftId: DraftId;
-    };
+    });
 
 interface TerminalLaunchContext {
   threadId: ThreadId;
@@ -775,6 +790,12 @@ export default function ChatView(props: ChatViewProps) {
     routeKind,
     onDiffPanelOpen,
     reserveTitleBarControlInset = true,
+    workspaceActive = true,
+    workspaceVisible = true,
+    isolateTerminalMounting = false,
+    forceInlineThreadPanels = false,
+    diffSearch: controlledDiffSearch,
+    onDiffSearchChange,
   } = props;
   const draftId = routeKind === "draft" ? props.draftId : null;
   const routeThreadRef = useMemo(
@@ -802,10 +823,11 @@ export default function ChatView(props: ChatViewProps) {
   const timestampFormat = settings.timestampFormat;
   const autoOpenPlanSidebar = settings.autoOpenPlanSidebar;
   const navigate = useNavigate();
-  const rawSearch = useSearch({
+  const routeDiffSearch = useSearch({
     strict: false,
     select: (params) => parseDiffRouteSearch(params),
   });
+  const rawSearch = controlledDiffSearch ?? routeDiffSearch;
   const { resolvedTheme } = useTheme();
   // Granular store selectors — avoid subscribing to prompt changes.
   const composerRuntimeMode = useComposerDraftStore(
@@ -847,7 +869,11 @@ export default function ChatView(props: ChatViewProps) {
   const composerImagesRef = useRef<ComposerImageAttachment[]>([]);
   const composerTerminalContextsRef = useRef<TerminalContextDraft[]>([]);
   const localComposerRef = useRef<ChatComposerHandle | null>(null);
-  const composerRef = useComposerHandleContext() ?? localComposerRef;
+  const sharedComposerRef = useComposerHandleContext();
+  const composerRef =
+    workspaceActive && workspaceVisible
+      ? (sharedComposerRef ?? localComposerRef)
+      : localComposerRef;
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [expandedImage, setExpandedImage] = useState<ExpandedImagePreview | null>(null);
   const [optimisticUserMessages, setOptimisticUserMessages] = useState<ChatMessage[]>([]);
@@ -868,7 +894,9 @@ export default function ChatView(props: ChatViewProps) {
   const [pendingUserInputQuestionIndexByRequestId, setPendingUserInputQuestionIndexByRequestId] =
     useState<Record<string, number>>({});
   const [planSidebarOpen, setPlanSidebarOpen] = useState(false);
-  const shouldUsePlanSidebarSheet = useMediaQuery(RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY);
+  const shouldUsePlanSidebarSheetForViewport = useMediaQuery(RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY);
+  const shouldUsePlanSidebarSheet =
+    !forceInlineThreadPanels && shouldUsePlanSidebarSheetForViewport;
   // Tracks whether the user explicitly dismissed the sidebar for the active turn.
   const planSidebarDismissedForTurnRef = useRef<string | null>(null);
   // When set, the thread-change reset effect will open the sidebar instead of closing it.
@@ -971,6 +999,30 @@ export default function ChatView(props: ChatViewProps) {
   const isLocalDraftThread = !isServerThread && localDraftThread !== undefined;
   const canCheckoutPullRequestIntoThread = isLocalDraftThread;
   const diffOpen = rawSearch.diff === "1";
+  const updateDiffSearch = useCallback(
+    (next: DiffRouteSearchUpdater, options?: { replace?: boolean }) => {
+      if (onDiffSearchChange) {
+        onDiffSearchChange(next);
+        return;
+      }
+
+      void navigate({
+        to: "/$environmentId/$threadId",
+        params: {
+          environmentId,
+          threadId,
+        },
+        ...(options?.replace === undefined ? {} : { replace: options.replace }),
+        search: (previous) => {
+          const previousDiffSearch = parseDiffRouteSearch(previous);
+          const nextDiffSearch = typeof next === "function" ? next(previousDiffSearch) : next;
+          const rest = stripDiffSearchParams(previous);
+          return { ...rest, ...diffRouteSearchForNavigation(nextDiffSearch) };
+        },
+      });
+    },
+    [environmentId, navigate, onDiffSearchChange, threadId],
+  );
   const activeThreadId = activeThread?.id ?? null;
   const runningTerminalIds = useThreadRunningTerminalIds({
     environmentId: activeThread?.environmentId ?? null,
@@ -1027,9 +1079,19 @@ export default function ChatView(props: ChatViewProps) {
   ]);
 
   const existingOpenTerminalThreadKeys = useMemo(() => {
+    if (isolateTerminalMounting) {
+      return activeThreadKey && terminalUiState.terminalOpen ? [activeThreadKey] : [];
+    }
     const existingThreadKeys = new Set<string>([...serverThreadKeys, ...draftThreadKeys]);
     return openTerminalThreadKeys.filter((nextThreadKey) => existingThreadKeys.has(nextThreadKey));
-  }, [draftThreadKeys, openTerminalThreadKeys, serverThreadKeys]);
+  }, [
+    activeThreadKey,
+    draftThreadKeys,
+    isolateTerminalMounting,
+    openTerminalThreadKeys,
+    serverThreadKeys,
+    terminalUiState.terminalOpen,
+  ]);
   const activeLatestTurn = activeThread?.latestTurn ?? null;
   const threadPlanCatalog = useThreadPlanCatalog(
     useMemo(() => {
@@ -1068,11 +1130,11 @@ export default function ChatView(props: ChatViewProps) {
   );
 
   useEffect(() => {
-    if (routeKind !== "server") {
+    if (!workspaceVisible || routeKind !== "server") {
       return;
     }
     return retainThreadDetailSubscription(environmentId, threadId);
-  }, [environmentId, routeKind, threadId]);
+  }, [environmentId, routeKind, threadId, workspaceVisible]);
 
   // Compute the list of environments this logical project spans, used to
   // drive the environment picker in BranchToolbar.
@@ -1307,6 +1369,7 @@ export default function ChatView(props: ChatViewProps) {
   );
 
   useEffect(() => {
+    if (!workspaceVisible) return;
     if (!serverThread?.id) return;
     if (!latestTurnSettled) return;
     if (!activeLatestTurn?.completedAt) return;
@@ -1326,6 +1389,7 @@ export default function ChatView(props: ChatViewProps) {
     markThreadVisited,
     serverThread?.environmentId,
     serverThread?.id,
+    workspaceVisible,
   ]);
 
   const selectedProviderByThreadId = composerActiveProvider ?? null;
@@ -1941,19 +2005,10 @@ export default function ChatView(props: ChatViewProps) {
     if (!diffOpen) {
       onDiffPanelOpen?.();
     }
-    void navigate({
-      to: "/$environmentId/$threadId",
-      params: {
-        environmentId,
-        threadId,
-      },
+    updateDiffSearch(() => (diffOpen ? closedDiffRouteSearch() : { diff: "1" }), {
       replace: true,
-      search: (previous) => {
-        const rest = stripDiffSearchParams(previous);
-        return diffOpen ? { ...rest, diff: undefined } : { ...rest, diff: "1" };
-      },
     });
-  }, [diffOpen, environmentId, isServerThread, navigate, onDiffPanelOpen, threadId]);
+  }, [diffOpen, isServerThread, onDiffPanelOpen, updateDiffSearch]);
 
   const envLocked = Boolean(
     activeThread &&
@@ -2017,15 +2072,18 @@ export default function ChatView(props: ChatViewProps) {
 
   const focusComposer = useCallback(() => {
     composerRef.current?.focusAtEnd();
-  }, []);
+  }, [composerRef]);
   const scheduleComposerFocus = useCallback(() => {
     window.requestAnimationFrame(() => {
       focusComposer();
     });
   }, [focusComposer]);
-  const addTerminalContextToDraft = useCallback((selection: TerminalContextSelection) => {
-    composerRef.current?.addTerminalContext(selection);
-  }, []);
+  const addTerminalContextToDraft = useCallback(
+    (selection: TerminalContextSelection) => {
+      composerRef.current?.addTerminalContext(selection);
+    },
+    [composerRef],
+  );
   const setTerminalOpen = useCallback(
     (open: boolean) => {
       if (!activeThreadRef) return;
@@ -2714,6 +2772,9 @@ export default function ChatView(props: ChatViewProps) {
   }, [activeThreadKey, focusComposer, terminalUiState.terminalOpen]);
 
   useEffect(() => {
+    if (!workspaceActive) {
+      return;
+    }
     const handler = (event: globalThis.KeyboardEvent) => {
       if (!activeThreadId || useCommandPaletteStore.getState().open || event.defaultPrevented) {
         return;
@@ -2801,6 +2862,8 @@ export default function ChatView(props: ChatViewProps) {
     keybindings,
     onToggleDiff,
     toggleTerminalVisibility,
+    workspaceActive,
+    composerRef,
   ]);
 
   const onRevertToTurnCount = useCallback(
@@ -3275,7 +3338,7 @@ export default function ChatView(props: ChatViewProps) {
       promptRef.current = "";
       composerRef.current?.resetCursorState({ cursor: 0 });
     },
-    [activePendingProgress?.activeQuestion, activePendingUserInput],
+    [activePendingProgress?.activeQuestion, activePendingUserInput, composerRef],
   );
 
   const onChangeActivePendingUserInputCustomAnswer = useCallback(
@@ -3309,7 +3372,7 @@ export default function ChatView(props: ChatViewProps) {
         composerRef.current?.focusAt(nextCursor);
       }
     },
-    [activePendingUserInput],
+    [activePendingUserInput, composerRef],
   );
 
   const onAdvanceActivePendingUserInput = useCallback(() => {
@@ -3480,6 +3543,7 @@ export default function ChatView(props: ChatViewProps) {
       setComposerDraftInteractionMode,
       setThreadError,
       autoOpenPlanSidebar,
+      composerRef,
       environmentId,
     ],
   );
@@ -3617,6 +3681,7 @@ export default function ChatView(props: ChatViewProps) {
     resetLocalDispatch,
     runtimeMode,
     autoOpenPlanSidebar,
+    composerRef,
     environmentId,
   ]);
 
@@ -3715,21 +3780,13 @@ export default function ChatView(props: ChatViewProps) {
         return;
       }
       onDiffPanelOpen?.();
-      void navigate({
-        to: "/$environmentId/$threadId",
-        params: {
-          environmentId,
-          threadId,
-        },
-        search: (previous) => {
-          const rest = stripDiffSearchParams(previous);
-          return filePath
-            ? { ...rest, diff: "1", diffTurnId: turnId, diffFilePath: filePath }
-            : { ...rest, diff: "1", diffTurnId: turnId };
-        },
-      });
+      updateDiffSearch(
+        filePath
+          ? { diff: "1", diffTurnId: turnId, diffFilePath: filePath }
+          : { diff: "1", diffTurnId: turnId },
+      );
     },
-    [environmentId, isServerThread, navigate, onDiffPanelOpen, threadId],
+    [isServerThread, onDiffPanelOpen, updateDiffSearch],
   );
   // Both the Map and the revert handler are read from refs at call-time so
   // the callback reference is fully stable and never busts context identity.
@@ -3812,29 +3869,31 @@ export default function ChatView(props: ChatViewProps) {
 
   // Empty state: no active thread
   if (!activeThread) {
-    return <NoActiveThreadState />;
+    return <NoActiveThreadContent />;
   }
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden bg-background">
       {/* Top bar */}
-      <header
-        className={cn(
-          "border-b border-transparent",
-          isElectron
-            ? cn(
-                "drag-region flex h-[52px] items-center px-3 sm:px-5 wco:h-[env(titlebar-area-height)]",
-                reserveTitleBarControlInset &&
-                  "wco:pr-[calc(100vw-env(titlebar-area-width)-env(titlebar-area-x)+1em)]",
-              )
-            : "pb-2 pl-[calc(env(safe-area-inset-left)+0.75rem)] pr-[calc(env(safe-area-inset-right)+0.75rem)] pt-2 sm:pb-3 sm:pl-[calc(env(safe-area-inset-left)+1.25rem)] sm:pr-[calc(env(safe-area-inset-right)+1.25rem)] sm:pt-3",
-        )}
-      >
-        <ChatHeader
-          newThreadShortcutLabel={newThreadShortcutLabel}
-          onNewThread={handleNewThreadAction}
-        />
-      </header>
+      {props.showHeaderControls !== false ? (
+        <header
+          className={cn(
+            "border-b border-transparent",
+            isElectron
+              ? cn(
+                  "drag-region flex h-[52px] items-center px-3 sm:px-5 wco:h-[env(titlebar-area-height)]",
+                  reserveTitleBarControlInset &&
+                    "wco:pr-[calc(100vw-env(titlebar-area-width)-env(titlebar-area-x)+1em)]",
+                )
+              : "pb-2 pl-[calc(env(safe-area-inset-left)+0.75rem)] pr-[calc(env(safe-area-inset-right)+0.75rem)] pt-2 sm:pb-3 sm:pl-[calc(env(safe-area-inset-left)+1.25rem)] sm:pr-[calc(env(safe-area-inset-right)+1.25rem)] sm:pt-3",
+          )}
+        >
+          <ChatHeader
+            newThreadShortcutLabel={newThreadShortcutLabel}
+            onNewThread={handleNewThreadAction}
+          />
+        </header>
+      ) : null}
 
       {/* Error banner */}
       <ProviderStatusBanner status={activeProviderStatus} />
@@ -3893,14 +3952,7 @@ export default function ChatView(props: ChatViewProps) {
           </div>
 
           {/* Input bar */}
-          <div
-            className={cn(
-              "pl-[calc(env(safe-area-inset-left)+0.75rem)] pr-[calc(env(safe-area-inset-right)+0.75rem)] pt-1.5 sm:pl-[calc(env(safe-area-inset-left)+1.25rem)] sm:pr-[calc(env(safe-area-inset-right)+1.25rem)] sm:pt-2",
-              isGitRepo
-                ? "pb-[calc(env(safe-area-inset-bottom)+0.25rem)]"
-                : "pb-[calc(env(safe-area-inset-bottom)+0.75rem)] sm:pb-[calc(env(safe-area-inset-bottom)+1rem)]",
-            )}
-          >
+          <div className="pl-[calc(env(safe-area-inset-left)+0.75rem)] pr-[calc(env(safe-area-inset-right)+0.75rem)] sm:pl-[calc(env(safe-area-inset-left)+1.25rem)] sm:pr-[calc(env(safe-area-inset-right)+1.25rem)]">
             <div className="relative isolate">
               <ComposerBannerStack className="relative z-0" items={composerBannerItems} />
               <div className="relative z-10">

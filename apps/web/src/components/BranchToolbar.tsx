@@ -500,7 +500,7 @@ export const BranchToolbar = memo(function BranchToolbar({
   return (
     <div
       ref={toolbarRef}
-      className="mx-auto flex w-full max-w-208 min-w-0 items-center justify-between gap-2 pb-3 pl-3 pr-4 pt-1 drop-shadow-[0_4px_2px_rgba(0,0,0,0.25)]"
+      className="mx-auto flex w-full max-w-208 min-w-0 items-center justify-between gap-2 pb-2 pl-3 pr-4 pt-1 drop-shadow-[0_4px_2px_rgba(0,0,0,0.25)]"
       data-chat-context-bar="true"
     >
       <div

@@ -92,6 +92,18 @@ export default defineConfig({
     host,
     port,
     strictPort: true,
+    watch: {
+      ignored: [
+        "**/.git/**",
+        "**/.turbo/**",
+        "**/.astro/**",
+        "**/coverage/**",
+        "**/dist/**",
+        "**/dist-electron/**",
+        "**/node_modules/**",
+        "**/tsconfig.tsbuildinfo",
+      ],
+    },
     ...(devProxyTarget
       ? {
           proxy: {

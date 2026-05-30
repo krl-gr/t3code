@@ -1,11 +1,11 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo } from "react";
-import ChatView from "../components/ChatView";
+
+import { ChatWorkspace } from "../components/workspace/ChatWorkspace";
 import { threadHasStarted } from "../components/ChatView.logic";
-import { useComposerDraftStore, DraftId } from "../composerDraftStore";
-import { SidebarInset } from "../components/ui/sidebar";
-import { createThreadSelectorAcrossEnvironments } from "../storeSelectors";
+import { DraftId, useComposerDraftStore } from "../composerDraftStore";
 import { useStore } from "../store";
+import { createThreadSelectorAcrossEnvironments } from "../storeSelectors";
 import { buildThreadRouteParams } from "../threadRoutes";
 
 function DraftChatThreadRouteView() {
@@ -55,29 +55,36 @@ function DraftChatThreadRouteView() {
 
   if (canonicalThreadRef) {
     return (
-      <SidebarInset className="h-svh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground md:h-dvh">
-        <ChatView
-          environmentId={canonicalThreadRef.environmentId}
-          threadId={canonicalThreadRef.threadId}
-          routeKind="server"
-        />
-      </SidebarInset>
+      <ChatWorkspace
+        routeTarget={{
+          target: {
+            kind: "thread",
+            ref: canonicalThreadRef,
+          },
+          diffSearch: {},
+        }}
+      />
     );
   }
 
   if (!draftSession) {
-    return null;
+    return <ChatWorkspace />;
   }
 
   return (
-    <SidebarInset className="h-svh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground md:h-dvh">
-      <ChatView
-        draftId={draftId}
-        environmentId={draftSession.environmentId}
-        threadId={draftSession.threadId}
-        routeKind="draft"
-      />
-    </SidebarInset>
+    <ChatWorkspace
+      routeTarget={{
+        target: {
+          kind: "draft",
+          draftId,
+          ref: {
+            environmentId: draftSession.environmentId,
+            threadId: draftSession.threadId,
+          },
+        },
+        diffSearch: {},
+      }}
+    />
   );
 }
 

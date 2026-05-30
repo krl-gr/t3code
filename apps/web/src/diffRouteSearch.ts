@@ -6,6 +6,18 @@ export interface DiffRouteSearch {
   diffFilePath?: string | undefined;
 }
 
+export type DiffRouteSearchUpdater =
+  | DiffRouteSearch
+  | ((previous: DiffRouteSearch) => DiffRouteSearch);
+
+export function closedDiffRouteSearch(): DiffRouteSearch {
+  return {
+    diff: undefined,
+    diffTurnId: undefined,
+    diffFilePath: undefined,
+  };
+}
+
 function isDiffOpenValue(value: unknown): boolean {
   return value === "1" || value === 1 || value === true;
 }
@@ -35,5 +47,17 @@ export function parseDiffRouteSearch(search: Record<string, unknown>): DiffRoute
     ...(diff ? { diff } : {}),
     ...(diffTurnId ? { diffTurnId } : {}),
     ...(diffFilePath ? { diffFilePath } : {}),
+  };
+}
+
+export function diffRouteSearchForNavigation(search: DiffRouteSearch): DiffRouteSearch {
+  const parsed = parseDiffRouteSearch({ ...search });
+  if (parsed.diff !== "1") {
+    return closedDiffRouteSearch();
+  }
+  return {
+    diff: "1",
+    diffTurnId: parsed.diffTurnId,
+    diffFilePath: parsed.diffFilePath,
   };
 }

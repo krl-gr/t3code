@@ -54,7 +54,7 @@ interface StartThreadActionOptions {
   readonly forceNewDraft?: boolean;
 }
 
-function buildContextualThreadOptions(
+export function buildContextualThreadOptions(
   context: ChatThreadActionContext,
   options?: StartThreadActionOptions,
 ): NewThreadOptions {

@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { LinkIcon, PlusIcon } from "lucide-react";
 
-import { NoActiveThreadState } from "../components/NoActiveThreadState";
+import { ChatWorkspace } from "../components/workspace/ChatWorkspace";
 import { Button } from "../components/ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "../components/ui/empty";
 import { SidebarInset, SidebarTrigger } from "../components/ui/sidebar";
@@ -18,7 +18,7 @@ function ChatIndexRouteView() {
     return <HostedStaticOnboardingState />;
   }
 
-  return <NoActiveThreadState />;
+  return <ChatWorkspace />;
 }
 
 export const Route = createFileRoute("/_chat/")({
