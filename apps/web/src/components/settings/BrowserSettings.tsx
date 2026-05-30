@@ -6,6 +6,7 @@ import { APP_BASE_NAME } from "../../branding";
 import { useSettings, useUpdateSettings } from "../../hooks/useSettings";
 import { ensureLocalApi } from "../../localApi";
 import { Button } from "../ui/button";
+import { Switch } from "../ui/switch";
 import { Textarea } from "../ui/textarea";
 import { toastManager } from "../ui/toast";
 import { SettingsPageContainer, SettingsRow, SettingsSection } from "./settingsLayout";
@@ -66,6 +67,10 @@ export function BrowserSettingsPanel() {
     }
     return snapshot.status === "open" ? "Browser open" : "Browser closed";
   }, [snapshot]);
+  const browserAccessStatus =
+    (snapshot?.allowAllHttpsOrigins ?? browserSettings.allowAllHttpsOrigins)
+      ? "HTTPS-wide access enabled"
+      : "Allowed origins only";
 
   return (
     <SettingsPageContainer>
@@ -122,7 +127,8 @@ export function BrowserSettingsPanel() {
 
         <SettingsRow
           title="Allowed origins"
-          description="Agents can navigate, search, read, scroll, click inert controls, and screenshot only these origins."
+          description="Agents can use browser tools on these origins. When HTTPS-wide access is enabled, this list still permits non-loopback HTTP origins."
+          status={browserAccessStatus}
         >
           <div className="mt-3 space-y-3 pb-4">
             <Textarea
@@ -138,6 +144,7 @@ export function BrowserSettingsPanel() {
                   updateSettings({
                     browser: {
                       allowedOrigins: parseOrigins(originDraft),
+                      allowAllHttpsOrigins: browserSettings.allowAllHttpsOrigins,
                     },
                   })
                 }
@@ -147,6 +154,25 @@ export function BrowserSettingsPanel() {
             </div>
           </div>
         </SettingsRow>
+
+        <SettingsRow
+          title="Allow all HTTPS websites"
+          description="Agents can use browser tools on any HTTPS website and local HTTP dev server. Other HTTP sites still require an allowed origin."
+          control={
+            <Switch
+              checked={browserSettings.allowAllHttpsOrigins}
+              onCheckedChange={(checked) =>
+                updateSettings({
+                  browser: {
+                    allowedOrigins: parseOrigins(originDraft),
+                    allowAllHttpsOrigins: Boolean(checked),
+                  },
+                })
+              }
+              aria-label="Allow all HTTPS websites"
+            />
+          }
+        />
 
         <SettingsRow
           title="Session controls"

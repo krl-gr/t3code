@@ -10,6 +10,7 @@ export const BrowserSettings = Schema.Struct({
   allowedOrigins: Schema.Array(BrowserAllowedOrigin).pipe(
     Schema.withDecodingDefault(Effect.succeed([])),
   ),
+  allowAllHttpsOrigins: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
 });
 export type BrowserSettings = typeof BrowserSettings.Type;
 
@@ -23,6 +24,7 @@ export const BrowserProfileSnapshot = Schema.Struct({
   currentUrl: Schema.optional(Schema.String),
   currentTitle: Schema.optional(Schema.String),
   allowedOrigins: Schema.Array(Schema.String),
+  allowAllHttpsOrigins: Schema.Boolean,
 });
 export type BrowserProfileSnapshot = typeof BrowserProfileSnapshot.Type;
 

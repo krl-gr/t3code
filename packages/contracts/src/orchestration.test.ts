@@ -253,7 +253,9 @@ it.effect("accepts ask interaction mode in thread.create commands", () =>
       worktreePath: null,
       createdAt: "2026-01-01T00:00:00.000Z",
     });
-    assert.strictEqual(parsed.type, "thread.create");
+    if (parsed.type !== "thread.create") {
+      throw new Error(`Expected thread.create command, received ${parsed.type}`);
+    }
     assert.strictEqual(parsed.interactionMode, "ask");
   }),
 );
@@ -267,7 +269,9 @@ it.effect("accepts ask interaction mode in thread interaction mode commands", ()
       interactionMode: "ask",
       createdAt: "2026-01-01T00:00:00.000Z",
     });
-    assert.strictEqual(parsed.type, "thread.interaction-mode.set");
+    if (parsed.type !== "thread.interaction-mode.set") {
+      throw new Error(`Expected thread.interaction-mode.set command, received ${parsed.type}`);
+    }
     assert.strictEqual(parsed.interactionMode, "ask");
   }),
 );
@@ -728,10 +732,14 @@ it.effect("decodes thread context binding commands", () =>
       createdAt: "2026-01-01T00:00:02.000Z",
     });
 
-    assert.strictEqual(add.type, "thread.context-binding.add");
+    if (add.type !== "thread.context-binding.add") {
+      throw new Error(`Expected thread.context-binding.add command, received ${add.type}`);
+    }
     assert.strictEqual(add.mode, "snapshot");
     assert.strictEqual(remove.type, "thread.context-binding.remove");
-    assert.strictEqual(fork.type, "thread.context-fork.create");
+    if (fork.type !== "thread.context-fork.create") {
+      throw new Error(`Expected thread.context-fork.create command, received ${fork.type}`);
+    }
     assert.strictEqual(fork.sourceMessageId, "message-1");
   }),
 );
@@ -781,7 +789,9 @@ it.effect("decodes thread context binding events and turn context blocks", () =>
       createdAt: "2026-01-01T00:00:02.000Z",
     });
 
-    assert.strictEqual(added.type, "thread.context-binding-added");
+    if (added.type !== "thread.context-binding-added") {
+      throw new Error(`Expected thread.context-binding-added event, received ${added.type}`);
+    }
     assert.strictEqual(added.payload.binding.mode, "snapshot");
     assert.strictEqual(turnStart.contextBlocks?.[0]?.sourceThreadTitle, "Source");
   }),

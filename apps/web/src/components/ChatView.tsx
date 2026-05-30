@@ -3992,7 +3992,7 @@ export default function ChatView(props: ChatViewProps) {
                   activeProject ? (lastInvokedScriptByProjectId[activeProject.id] ?? null) : null
                 }
                 terminalAvailable={activeProject !== undefined}
-                terminalOpen={Boolean(terminalState.terminalOpen)}
+                terminalOpen={Boolean(terminalUiState.terminalOpen)}
                 terminalToggleShortcutLabel={terminalToggleShortcutLabel}
                 onEnvModeChange={onEnvModeChange}
                 onAddProjectScript={saveProjectScript}

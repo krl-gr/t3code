@@ -1,5 +1,6 @@
 // @effect-diagnostics nodeBuiltinImport:off
 // @effect-diagnostics globalDate:off
+// @effect-diagnostics globalFetch:off
 // @effect-diagnostics globalTimers:off
 import { spawn, type ChildProcess } from "node:child_process";
 import { promises as fs } from "node:fs";
@@ -95,6 +96,7 @@ export interface BrowserProfileSnapshot {
   readonly currentUrl?: string;
   readonly currentTitle?: string;
   readonly allowedOrigins: ReadonlyArray<string>;
+  readonly allowAllHttpsOrigins: boolean;
 }
 
 export interface BrowserToolResult {
@@ -518,22 +520,28 @@ export function createBrowserAutomationService(
   let context: BrowserContext | null = null;
   let activePage: Page | null = null;
 
-  const readAllowedOrigins = async () => {
+  const readBrowserSettings = async () => {
     const raw = await readFile(serverConfig.settingsPath).catch(() => "");
     if (!raw.trim()) {
-      return [] as string[];
+      return { allowedOrigins: [] as string[], allowAllHttpsOrigins: false };
     }
     try {
       const parsed = JSON.parse(raw) as {
-        readonly browser?: { readonly allowedOrigins?: unknown };
+        readonly browser?: {
+          readonly allowedOrigins?: unknown;
+          readonly allowAllHttpsOrigins?: unknown;
+        };
       };
-      return Array.isArray(parsed.browser?.allowedOrigins)
-        ? parsed.browser.allowedOrigins.filter(
-            (entry): entry is string => typeof entry === "string",
-          )
-        : [];
+      return {
+        allowedOrigins: Array.isArray(parsed.browser?.allowedOrigins)
+          ? parsed.browser.allowedOrigins.filter(
+              (entry): entry is string => typeof entry === "string",
+            )
+          : [],
+        allowAllHttpsOrigins: parsed.browser?.allowAllHttpsOrigins === true,
+      };
     } catch {
-      return [];
+      return { allowedOrigins: [] as string[], allowAllHttpsOrigins: false };
     }
   };
 
@@ -673,11 +681,13 @@ export function createBrowserAutomationService(
       (recoveredMetadata && recoveredProbe?.ok
         ? metadataToRecoveredProcessHandle(recoveredMetadata)
         : null);
+    const browserSettings = await readBrowserSettings();
     return {
       profileId: "default",
       profilePath: profilePaths.defaultProfileDir,
       status: context || recoveredProbe?.ok ? "open" : "closed",
-      allowedOrigins: await readAllowedOrigins(),
+      allowedOrigins: browserSettings.allowedOrigins,
+      allowAllHttpsOrigins: browserSettings.allowAllHttpsOrigins,
       ...(snapshotProcess
         ? {
             launchMode: "cdp-attached" as const,
@@ -699,10 +709,12 @@ export function createBrowserAutomationService(
       readonly text?: string;
     },
   ) => {
+    const browserSettings = await readBrowserSettings();
     const decision = evaluateBrowserPolicy({
       action,
       ...input,
-      allowedOrigins: await readAllowedOrigins(),
+      allowedOrigins: browserSettings.allowedOrigins,
+      allowAllHttpsOrigins: browserSettings.allowAllHttpsOrigins,
     });
     return decision.allowed
       ? { allowed: true as const, origin: decision.origin }

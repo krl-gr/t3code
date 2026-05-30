@@ -38,6 +38,10 @@ function makeDefaultProfilePath(): string {
 function makeMemoryFileDependencies(input?: {
   readonly files?: Map<string, string>;
   readonly events?: string[];
+  readonly browserSettings?: {
+    readonly allowedOrigins?: readonly string[];
+    readonly allowAllHttpsOrigins?: boolean;
+  };
 }) {
   const files = new Map(
     [...(input?.files ?? new Map<string, string>()).entries()].map(([key, value]) => [
@@ -51,7 +55,12 @@ function makeMemoryFileDependencies(input?: {
     readFile: async (filePath: string) => {
       const normalizedPath = normalizeSeparators(filePath);
       if (normalizedPath === makeSettingsPath()) {
-        return JSON.stringify({ browser: { allowedOrigins: [] } });
+        return JSON.stringify({
+          browser: {
+            allowedOrigins: input?.browserSettings?.allowedOrigins ?? [],
+            allowAllHttpsOrigins: input?.browserSettings?.allowAllHttpsOrigins ?? false,
+          },
+        });
       }
       const value = files.get(normalizedPath);
       if (value === undefined) {
@@ -87,13 +96,18 @@ function fakeLaunchedBrowser(
   events: string[],
   input?: { readonly port?: number },
 ): LaunchedCdpBrowser {
+  let currentUrl = "about:blank";
   const page = {
     isClosed: () => false,
-    url: () => "about:blank",
+    url: () => currentUrl,
     title: async () => "",
     bringToFront: async () => undefined,
     waitForLoadState: async () => undefined,
-    goto: async () => undefined,
+    goto: async (url: string) => {
+      currentUrl = url;
+      return undefined;
+    },
+    screenshot: async () => Buffer.from("fake-screenshot"),
   };
   const browser = {
     on: vi.fn(),
@@ -335,7 +349,11 @@ describe("BrowserAutomationService", () => {
     const events: string[] = [];
     const files = new Map([[makeMetadataPath(), runtimeMetadata({ port: 55127 })]]);
     const service = createBrowserAutomationService(makeServerConfig(), {
-      ...makeMemoryFileDependencies({ files, events }),
+      ...makeMemoryFileDependencies({
+        files,
+        events,
+        browserSettings: { allowAllHttpsOrigins: true },
+      }),
       probeCdpEndpoint: async (port) => {
         events.push(`probe:${port}`);
         return { ok: true };
@@ -351,9 +369,63 @@ describe("BrowserAutomationService", () => {
       launchMode: "cdp-attached",
       browserName: "chrome",
       debuggingPort: 55127,
+      allowAllHttpsOrigins: true,
     });
     expect(events).toContain("probe:55127");
     expect(events).not.toContain("connect");
+  });
+
+  it("allows HTTPS navigation without configured origins when HTTPS-wide access is enabled", async () => {
+    const events: string[] = [];
+    const service = createBrowserAutomationService(makeServerConfig(), {
+      ...makeMemoryFileDependencies({
+        events,
+        browserSettings: { allowAllHttpsOrigins: true },
+      }),
+      makeDirectory: async () => undefined,
+      launchCdpBrowser: async () => fakeLaunchedBrowser(events),
+    });
+
+    await expect(service.navigate({ url: "https://example.com/path" })).resolves.toMatchObject({
+      blocked: false,
+      url: "https://example.com/path",
+      origin: "https://example.com",
+    });
+  });
+
+  it("blocks non-loopback HTTP navigation when HTTPS-wide access is enabled", async () => {
+    const events: string[] = [];
+    const service = createBrowserAutomationService(makeServerConfig(), {
+      ...makeMemoryFileDependencies({
+        events,
+        browserSettings: { allowAllHttpsOrigins: true },
+      }),
+      makeDirectory: async () => undefined,
+      launchCdpBrowser: async () => fakeLaunchedBrowser(events),
+    });
+
+    await expect(service.navigate({ url: "http://example.com/path" })).resolves.toMatchObject({
+      blocked: true,
+      origin: "http://example.com",
+    });
+  });
+
+  it("allows local HTTP navigation when HTTPS-wide access is enabled", async () => {
+    const events: string[] = [];
+    const service = createBrowserAutomationService(makeServerConfig(), {
+      ...makeMemoryFileDependencies({
+        events,
+        browserSettings: { allowAllHttpsOrigins: true },
+      }),
+      makeDirectory: async () => undefined,
+      launchCdpBrowser: async () => fakeLaunchedBrowser(events),
+    });
+
+    await expect(service.navigate({ url: "http://localhost:3000/path" })).resolves.toMatchObject({
+      blocked: false,
+      url: "http://localhost:3000/path",
+      origin: "http://localhost:3000",
+    });
   });
 
   it("closes a recovered browser and removes runtime metadata", async () => {

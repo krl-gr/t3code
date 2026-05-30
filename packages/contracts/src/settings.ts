@@ -474,6 +474,7 @@ const OpenCodeSettingsPatch = Schema.Struct({
 
 const BrowserSettingsPatch = Schema.Struct({
   allowedOrigins: Schema.optionalKey(Schema.Array(TrimmedString)),
+  allowAllHttpsOrigins: Schema.optionalKey(Schema.Boolean),
 });
 
 export const ServerSettingsPatch = Schema.Struct({

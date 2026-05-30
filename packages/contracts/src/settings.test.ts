@@ -20,6 +20,7 @@ describe("ServerSettings.providerInstances (slice-2 invariant)", () => {
     // so existing call sites keep working through the migration.
     expect(decoded.providers.codex.enabled).toBe(true);
     expect(decoded.providers.pi).toEqual({ enabled: true, customModels: [] });
+    expect(decoded.browser.allowAllHttpsOrigins).toBe(false);
   });
 
   it("decodes a multi-instance map mixing first-party and fork drivers", () => {
@@ -92,6 +93,16 @@ describe("ServerSettingsPatch.providerInstances", () => {
     });
     const ollamaId = ProviderInstanceId.make("ollama_local");
     expect(patch.providerInstances?.[ollamaId]?.driver).toBe("ollama");
+  });
+});
+
+describe("ServerSettingsPatch.browser", () => {
+  it("accepts HTTPS-wide browser access patches", () => {
+    const patch = decodeServerSettingsPatch({
+      browser: { allowAllHttpsOrigins: true },
+    });
+
+    expect(patch.browser?.allowAllHttpsOrigins).toBe(true);
   });
 });
 

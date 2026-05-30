@@ -1,4 +1,3 @@
-// @effect-diagnostics globalDate:off
 import {
   PI_DEFAULT_MODEL,
   PI_THINKING_LEVEL_OPTIONS,
@@ -11,6 +10,7 @@ import {
   type ServerProviderModel,
   type ProviderRuntimeEvent,
 } from "@t3tools/contracts";
+import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as PubSub from "effect/PubSub";
@@ -160,7 +160,7 @@ function makePendingPiProvider(settings: PiSettings): ServerProviderDraft {
       showInteractionModeToggle: true,
     },
     enabled: settings.enabled,
-    checkedAt: new Date().toISOString(),
+    checkedAt: DateTime.formatIso(DateTime.nowUnsafe()),
     models: [
       {
         slug: PI_DEFAULT_MODEL,
@@ -180,7 +180,7 @@ function makePendingPiProvider(settings: PiSettings): ServerProviderDraft {
 }
 
 function checkPiProviderStatus(settings: PiSettings): Effect.Effect<ServerProviderDraft, never> {
-  return Effect.sync(() => {
+  return Effect.map(DateTime.now, (checkedAt) => {
     const snapshot = createPiHarnessCatalogSnapshot();
     const models = buildPiModels(settings, snapshot);
     const issueMessages = normalizeIssueMessages(snapshot);
@@ -192,7 +192,7 @@ function checkPiProviderStatus(settings: PiSettings): Effect.Effect<ServerProvid
         showInteractionModeToggle: true,
       },
       enabled: settings.enabled,
-      checkedAt: new Date().toISOString(),
+      checkedAt: DateTime.formatIso(checkedAt),
       models,
       probe:
         availableCount > 0

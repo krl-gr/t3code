@@ -15,6 +15,7 @@ export interface BrowserPolicyInput {
   readonly selector?: string | undefined;
   readonly text?: string | undefined;
   readonly allowedOrigins: ReadonlyArray<string>;
+  readonly allowAllHttpsOrigins: boolean;
 }
 
 export interface BrowserPolicyDecision {
@@ -84,6 +85,42 @@ export function isBrowserOriginAllowed(
   return allowedOrigins.some((entry) => normalizeBrowserOrigin(entry) === origin);
 }
 
+function normalizeBrowserUrlForPolicy(value: string | null | undefined): URL | null {
+  const raw = value?.trim();
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    return new URL(raw.includes("://") ? raw : `https://${raw}`);
+  } catch {
+    return null;
+  }
+}
+
+function isLoopbackHostname(hostname: string): boolean {
+  const normalized = hostname.toLowerCase();
+  return (
+    normalized === "localhost" ||
+    normalized === "::1" ||
+    normalized === "[::1]" ||
+    /^127(?:\.\d{1,3}){3}$/u.test(normalized)
+  );
+}
+
+export function isBrowserUrlAllowedByHttpsAccessMode(value: string | null | undefined): boolean {
+  const parsed = normalizeBrowserUrlForPolicy(value);
+  if (!parsed) {
+    return false;
+  }
+
+  if (parsed.protocol === "https:") {
+    return true;
+  }
+
+  return parsed.protocol === "http:" && isLoopbackHostname(parsed.hostname);
+}
+
 function inputContainsBlockedAction(input: BrowserPolicyInput): boolean {
   const searchable = [input.selector, input.text].filter(Boolean).join(" ").toLowerCase();
   return BLOCKED_ACTION_PATTERNS.some((pattern) => pattern.test(searchable));
@@ -113,6 +150,13 @@ export function evaluateBrowserPolicy(input: BrowserPolicyInput): BrowserPolicyD
       allowed: false,
       reason: "Blocked browser action: target page origin is unknown.",
     };
+  }
+
+  if (input.allowAllHttpsOrigins) {
+    const targetUrl = input.url ?? input.currentUrl;
+    if (isBrowserUrlAllowedByHttpsAccessMode(targetUrl)) {
+      return { allowed: true, origin };
+    }
   }
 
   if (!isBrowserOriginAllowed(origin, input.allowedOrigins)) {
