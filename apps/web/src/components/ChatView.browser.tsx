@@ -12,6 +12,7 @@ import {
   ProviderDriverKind,
   ProviderInstanceId,
   type ServerConfig,
+  type TerminalMetadataStreamEvent,
   type ServerLifecycleWelcomePayload,
   type ThreadId,
   type TurnId,
@@ -19,6 +20,7 @@ import {
   WS_METHODS,
   OrchestrationSessionStatus,
   DEFAULT_SERVER_SETTINGS,
+  DEFAULT_TERMINAL_ID,
   ServerConfig as ServerConfigSchema,
 } from "@t3tools/contracts";
 import { scopedThreadKey, scopeThreadRef } from "@t3tools/client-runtime";
@@ -56,7 +58,8 @@ import { getServerConfig } from "../rpc/serverState";
 import { getRouter } from "../router";
 import { deriveLogicalProjectKeyFromSettings } from "../logicalProject";
 import { selectBootstrapCompleteForActiveEnvironment, useStore } from "../store";
-import { useTerminalStateStore } from "../terminalStateStore";
+import { terminalSessionManager } from "../terminalSessionState";
+import { useTerminalUiStateStore } from "../terminalUiStateStore";
 import { useUiStateStore } from "../uiStateStore";
 import { createAuthenticatedSessionHandlers } from "../../test/authHttpHandlers";
 import { BrowserWsRpcHarness, type NormalizedWsRpcRequestBody } from "../../test/wsRpcHarness";
@@ -67,16 +70,22 @@ const gitStatusMockState = vi.hoisted(() => ({
   data: null as VcsStatusResult | null,
 }));
 
-vi.mock("../lib/gitStatusState", () => ({
-  useGitStatus: () => ({
+vi.mock("../lib/vcsStatusState", () => ({
+  getVcsStatusSnapshot: () => ({
     data: gitStatusMockState.data,
     error: null,
     cause: null,
     isPending: false,
   }),
-  useGitStatuses: () => new Map(),
-  refreshGitStatus: () => Promise.resolve(gitStatusMockState.data),
-  resetGitStatusStateForTests: () => {
+  useVcsStatus: () => ({
+    data: gitStatusMockState.data,
+    error: null,
+    cause: null,
+    isPending: false,
+  }),
+  useVcsStatuses: () => new Map(),
+  refreshVcsStatus: () => Promise.resolve(gitStatusMockState.data),
+  resetVcsStatusStateForTests: () => {
     gitStatusMockState.data = null;
   },
 }));
@@ -133,6 +142,7 @@ interface TestFixture {
   snapshot: OrchestrationReadModel;
   serverConfig: ServerConfig;
   welcome: ServerLifecycleWelcomePayload;
+  terminalMetadataEvents: ReadonlyArray<TerminalMetadataStreamEvent>;
 }
 
 let fixture: TestFixture;
@@ -245,6 +255,7 @@ function createMockEnvironmentApi(input: {
     sourceControl: {} as EnvironmentApi["sourceControl"],
     vcs: {} as EnvironmentApi["vcs"],
     git: {} as EnvironmentApi["git"],
+    review: {} as EnvironmentApi["review"],
     orchestration: {
       dispatchCommand: input.dispatchCommand,
       getTurnDiff: (() => {
@@ -430,6 +441,7 @@ function buildFixture(snapshot: OrchestrationReadModel): TestFixture {
       bootstrapProjectId: PROJECT_ID,
       bootstrapThreadId: THREAD_ID,
     },
+    terminalMetadataEvents: [],
   };
 }
 
@@ -1100,6 +1112,7 @@ function resolveWsRpc(body: NormalizedWsRpcRequestBody): unknown {
       history: "",
       exitCode: null,
       exitSignal: null,
+      label: "Terminal 1",
       updatedAt: NOW_ISO,
     };
   }
@@ -1757,6 +1770,9 @@ describe("ChatView timeline estimator parity (full app)", () => {
               ]
             : [];
         }
+        if (request._tag === WS_METHODS.subscribeTerminalMetadata) {
+          return fixture.terminalMetadataEvents;
+        }
         return [];
       },
     });
@@ -1791,12 +1807,9 @@ describe("ChatView timeline estimator parity (full app)", () => {
       projectOrder: [],
       threadLastVisitedAtById: {},
     });
-    useTerminalStateStore.persist.clearStorage();
-    useTerminalStateStore.setState({
-      terminalStateByThreadKey: {},
-      terminalLaunchContextByThreadKey: {},
-      terminalEventEntriesByKey: {},
-      nextTerminalEventId: 1,
+    useTerminalUiStateStore.persist.clearStorage();
+    useTerminalUiStateStore.setState({
+      terminalUiStateByThreadKey: {},
     });
   });
 
@@ -2312,22 +2325,15 @@ describe("ChatView timeline estimator parity (full app)", () => {
       });
     }
 
-    useTerminalStateStore.setState({
-      terminalStateByThreadKey: {
+    useTerminalUiStateStore.setState({
+      terminalUiStateByThreadKey: {
         [THREAD_KEY]: {
           terminalOpen: true,
           terminalHeight: 280,
           terminalIds: ["default"],
-          runningTerminalIds: [],
           activeTerminalId: "default",
           terminalGroups: [{ id: "group-default", terminalIds: ["default"] }],
           activeTerminalGroupId: "group-default",
-        },
-      },
-      terminalLaunchContextByThreadKey: {
-        [THREAD_KEY]: {
-          cwd: "/repo/project",
-          worktreePath: null,
         },
       },
     });
@@ -2335,14 +2341,34 @@ describe("ChatView timeline estimator parity (full app)", () => {
     const mounted = await mountChatView({
       viewport: DEFAULT_VIEWPORT,
       snapshot,
+      configureFixture: (nextFixture) => {
+        nextFixture.terminalMetadataEvents = [
+          {
+            type: "upsert",
+            terminal: {
+              threadId: THREAD_ID,
+              terminalId: DEFAULT_TERMINAL_ID,
+              cwd: "/repo/project",
+              worktreePath: null,
+              status: "running",
+              pid: 123,
+              exitCode: null,
+              exitSignal: null,
+              hasRunningSubprocess: false,
+              label: "Terminal 1",
+              updatedAt: isoAt(0),
+            },
+          },
+        ];
+      },
     });
 
     try {
       await vi.waitFor(
         () => {
-          const openRequest = wsRequests.find(
-            (request) => request._tag === WS_METHODS.terminalOpen,
-          ) as
+          const attachRequest = wsRequests
+            .toReversed()
+            .find((request) => request._tag === WS_METHODS.terminalAttach) as
             | {
                 _tag: string;
                 cwd?: string;
@@ -2350,15 +2376,51 @@ describe("ChatView timeline estimator parity (full app)", () => {
                 env?: Record<string, string>;
               }
             | undefined;
-          expect(openRequest).toMatchObject({
-            _tag: WS_METHODS.terminalOpen,
+          expect(attachRequest).toMatchObject({
+            _tag: WS_METHODS.terminalAttach,
             cwd: "/repo/project",
             worktreePath: null,
             env: {
               T3CODE_PROJECT_ROOT: "/repo/project",
             },
           });
-          expect(openRequest?.env?.T3CODE_WORKTREE_PATH).toBeUndefined();
+          expect(attachRequest?.env?.T3CODE_WORKTREE_PATH).toBeUndefined();
+        },
+        { timeout: 8_000, interval: 16 },
+      );
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("attaches the default terminal when opening an empty terminal drawer", async () => {
+    const mounted = await mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      snapshot: createSnapshotForTargetUser({
+        targetMessageId: "msg-user-open-empty-terminal-drawer" as MessageId,
+        targetText: "open empty terminal drawer",
+      }),
+    });
+
+    try {
+      const toggle = await waitForElement(
+        () =>
+          document.querySelector<HTMLButtonElement>('button[aria-label="Toggle terminal drawer"]'),
+        "Unable to find terminal drawer toggle.",
+      );
+      toggle.click();
+
+      await vi.waitFor(
+        () => {
+          const attachRequest = wsRequests.find(
+            (request) => request._tag === WS_METHODS.terminalAttach,
+          );
+          expect(attachRequest).toMatchObject({
+            _tag: WS_METHODS.terminalAttach,
+            threadId: THREAD_ID,
+            terminalId: DEFAULT_TERMINAL_ID,
+            cwd: "/repo/project",
+          });
         },
         { timeout: 8_000, interval: 16 },
       );
@@ -2889,8 +2951,8 @@ describe("ChatView timeline estimator parity (full app)", () => {
   });
 
   it("sends bootstrap turn-starts and waits for server setup on first-send worktree drafts", async () => {
-    useTerminalStateStore.setState({
-      terminalStateByThreadKey: {},
+    useTerminalUiStateStore.setState({
+      terminalUiStateByThreadKey: {},
     });
     useComposerDraftStore.setState({
       draftThreadsByThreadKey: {
@@ -3393,8 +3455,8 @@ describe("ChatView timeline estimator parity (full app)", () => {
   });
 
   it("shows the send state once bootstrap dispatch is in flight", async () => {
-    useTerminalStateStore.setState({
-      terminalStateByThreadKey: {},
+    useTerminalUiStateStore.setState({
+      terminalUiStateByThreadKey: {},
     });
     useComposerDraftStore.setState({
       draftThreadsByThreadKey: {
@@ -4211,6 +4273,68 @@ describe("ChatView timeline estimator parity (full app)", () => {
           const tooltip = document.querySelector<HTMLElement>('[data-slot="tooltip-popup"]');
           expect(tooltip).not.toBeNull();
           expect(tooltip?.textContent).toContain(THREAD_TITLE);
+        },
+        { timeout: 8_000, interval: 16 },
+      );
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("shows the sidebar terminal indicator from terminal metadata activity", async () => {
+    const mounted = await mountChatView({
+      viewport: DEFAULT_VIEWPORT,
+      snapshot: createSnapshotForTargetUser({
+        targetMessageId: "msg-user-terminal-metadata-indicator" as MessageId,
+        targetText: "terminal metadata indicator target",
+      }),
+      configureFixture: (nextFixture) => {
+        nextFixture.terminalMetadataEvents = [
+          {
+            type: "upsert",
+            terminal: {
+              threadId: THREAD_ID,
+              terminalId: DEFAULT_TERMINAL_ID,
+              cwd: "/repo/project",
+              worktreePath: null,
+              status: "running",
+              pid: 123,
+              exitCode: null,
+              exitSignal: null,
+              hasRunningSubprocess: true,
+              label: "Terminal 1",
+              updatedAt: isoAt(1_200),
+            },
+          },
+        ];
+      },
+    });
+
+    try {
+      await vi.waitFor(
+        () => {
+          expect(
+            terminalSessionManager.listSessions({
+              environmentId: LOCAL_ENVIRONMENT_ID,
+              threadId: THREAD_ID,
+            }),
+          ).toMatchObject([
+            {
+              state: {
+                hasRunningSubprocess: true,
+              },
+            },
+          ]);
+        },
+        { timeout: 8_000, interval: 16 },
+      );
+
+      await vi.waitFor(
+        () => {
+          const terminalIndicator = document.querySelector<HTMLElement>(
+            '[aria-label="Terminal process running"]',
+          );
+          expect(terminalIndicator).not.toBeNull();
         },
         { timeout: 8_000, interval: 16 },
       );

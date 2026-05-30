@@ -17,6 +17,7 @@ import {
   type DesktopServerExposureState,
   type EnvironmentId,
 } from "@t3tools/contracts";
+import { WsRpcClient } from "@t3tools/client-runtime";
 import * as DateTime from "effect/DateTime";
 
 import { APP_BASE_NAME } from "../../branding";
@@ -83,7 +84,6 @@ import {
   type ServerClientSessionRecord,
   type ServerPairingLinkRecord,
 } from "~/environments/primary";
-import type { WsRpcClient } from "~/rpc/wsRpcClient";
 import {
   type SavedEnvironmentRecord,
   type SavedEnvironmentRuntimeState,
@@ -535,21 +535,27 @@ const PairingLinkListRow = memo(function PairingLinkListRow({
     const endpoint = selectPairingEndpoint(endpoints, defaultEndpointKey);
     return endpoint ? resolveAdvertisedEndpointPairingUrl(endpoint, pairingLink.credential) : null;
   }, [defaultEndpointKey, endpoints, pairingLink.credential]);
-  const endpointCopyOptions = useMemo(
-    () =>
-      endpoints
-        .filter((endpoint) => endpoint.status !== "unavailable")
-        .map((endpoint) => {
-          const url = resolveAdvertisedEndpointPairingUrl(endpoint, pairingLink.credential);
-          return {
-            key: endpointDefaultPreferenceKey(endpoint),
-            label: endpoint.label,
-            url,
-            detail: isHostedAppPairingUrl(url) ? "Hosted app link" : "Backend pairing URL",
-          };
-        }),
-    [endpoints, pairingLink.credential],
-  );
+  const endpointCopyOptions = useMemo(() => {
+    const options: Array<{
+      readonly key: string;
+      readonly label: string;
+      readonly url: string;
+      readonly detail: string;
+    }> = [];
+    for (const endpoint of endpoints) {
+      if (endpoint.status === "unavailable") {
+        continue;
+      }
+      const url = resolveAdvertisedEndpointPairingUrl(endpoint, pairingLink.credential);
+      options.push({
+        key: endpointDefaultPreferenceKey(endpoint),
+        label: endpoint.label,
+        url,
+        detail: isHostedAppPairingUrl(url) ? "Hosted app link" : "Backend pairing URL",
+      });
+    }
+    return options;
+  }, [endpoints, pairingLink.credential]);
   const shareablePairingUrl =
     endpointPairingUrl ??
     (endpointUrl != null && endpointUrl !== ""

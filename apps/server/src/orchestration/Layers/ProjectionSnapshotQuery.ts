@@ -25,9 +25,11 @@ import {
   ProjectId,
   ThreadId,
 } from "@t3tools/contracts";
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Struct from "effect/Struct";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
@@ -1691,15 +1693,16 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
 
               const snapshot = {
                 snapshotSequence: computeSnapshotSequence(stateRows),
-                projects: projectRows
-                  .filter((row) => row.deletedAt === null)
-                  .map((row) =>
-                    mapProjectShellRow(row, repositoryIdentities.get(row.projectId) ?? null),
-                  ),
-                threads: threadRows
-                  .filter((row) => row.deletedAt === null)
-                  .map(
-                    (row): OrchestrationThreadShell => ({
+                projects: Arr.filterMap(projectRows, (row) =>
+                  row.deletedAt === null
+                    ? Result.succeed(
+                        mapProjectShellRow(row, repositoryIdentities.get(row.projectId) ?? null),
+                      )
+                    : Result.failVoid,
+                ),
+                threads: Arr.filterMap(threadRows, (row) =>
+                  row.deletedAt === null
+                    ? Result.succeed({
                       id: row.threadId,
                       projectId: row.projectId,
                       title: row.title,
@@ -1718,8 +1721,9 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
                       hasPendingUserInput: row.pendingUserInputCount > 0,
                       hasActionableProposedPlan: row.hasActionableProposedPlan > 0,
                       contextBindingCount: contextBindingCountByThread.get(row.threadId) ?? 0,
-                    }),
-                  ),
+                    } satisfies OrchestrationThreadShell)
+                    : Result.failVoid,
+                ),
                 updatedAt: updatedAt ?? "1970-01-01T00:00:00.000Z",
               };
 
@@ -1849,11 +1853,13 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
 
               const snapshot = {
                 snapshotSequence: computeSnapshotSequence(stateRows),
-                projects: projectRows
-                  .filter((row) => row.deletedAt === null && activeProjectIds.has(row.projectId))
-                  .map((row) =>
-                    mapProjectShellRow(row, repositoryIdentities.get(row.projectId) ?? null),
-                  ),
+                projects: Arr.filterMap(projectRows, (row) =>
+                  row.deletedAt === null && activeProjectIds.has(row.projectId)
+                    ? Result.succeed(
+                        mapProjectShellRow(row, repositoryIdentities.get(row.projectId) ?? null),
+                      )
+                    : Result.failVoid,
+                ),
                 threads: threadRows.map(
                   (row): OrchestrationThreadShell => ({
                     id: row.threadId,

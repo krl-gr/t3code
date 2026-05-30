@@ -18,6 +18,8 @@ import {
   type VcsCreateRefResult,
   type VcsCreateWorktreeInput,
   type VcsCreateWorktreeResult,
+  type ReviewDiffPreviewInput,
+  type ReviewDiffPreviewResult,
   type VcsInitInput,
   type VcsListRefsInput,
   type VcsListRefsResult,
@@ -180,6 +182,9 @@ export interface GitVcsDriverShape {
     cwd: string,
     baseRef: string,
   ) => Effect.Effect<GitRangeContext, GitCommandError>;
+  readonly getReviewDiffPreview: (
+    input: ReviewDiffPreviewInput,
+  ) => Effect.Effect<ReviewDiffPreviewResult, GitCommandError>;
   readonly readConfigValue: (
     cwd: string,
     key: string,

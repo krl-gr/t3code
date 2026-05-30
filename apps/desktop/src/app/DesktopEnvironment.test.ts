@@ -32,9 +32,7 @@ const makeEnvironment = (
   overrides: Partial<DesktopEnvironment.MakeDesktopEnvironmentInput> = {},
   env: Record<string, string | undefined> = {},
 ) =>
-  Effect.gen(function* () {
-    return yield* DesktopEnvironment.DesktopEnvironment;
-  }).pipe(Effect.provide(makeEnvironmentLayer(overrides, env)));
+  DesktopEnvironment.DesktopEnvironment.pipe(Effect.provide(makeEnvironmentLayer(overrides, env)));
 
 const normalizePath = (value: string) =>
   value.replaceAll("\\", "/").replace(/^[A-Za-z]:(?=\/)/, "");
