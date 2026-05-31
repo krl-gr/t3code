@@ -47,7 +47,6 @@ import { readLocalApi } from "../localApi";
 import {
   type DiffRouteSearch,
   type DiffRouteSearchUpdater,
-  closedDiffRouteSearch,
   diffRouteSearchForNavigation,
   parseDiffRouteSearch,
   stripDiffSearchParams,
@@ -181,7 +180,9 @@ import {
   deriveLockedProvider,
   readFileAsDataUrl,
   reconcileMountedTerminalThreadIds,
+  resolveDiffPanelSearchToggle,
   resolveSendEnvMode,
+  resolveTurnDiffSearchToggle,
   revokeBlobPreviewUrl,
   revokeUserMessagePreviewUrls,
   shouldWriteThreadErrorToCurrentServerThread,
@@ -1001,11 +1002,14 @@ export default function ChatView(props: ChatViewProps) {
   const diffOpen = rawSearch.diff === "1";
   const updateDiffSearch = useCallback(
     (next: DiffRouteSearchUpdater, options?: { replace?: boolean }) => {
+      const nextDiffSearch = typeof next === "function" ? next(rawSearch) : next;
       if (onDiffSearchChange) {
-        onDiffSearchChange(next);
-        return;
+        onDiffSearchChange(nextDiffSearch);
       }
 
+      if (onDiffSearchChange && routeKind !== "server") {
+        return;
+      }
       void navigate({
         to: "/$environmentId/$threadId",
         params: {
@@ -1014,14 +1018,12 @@ export default function ChatView(props: ChatViewProps) {
         },
         ...(options?.replace === undefined ? {} : { replace: options.replace }),
         search: (previous) => {
-          const previousDiffSearch = parseDiffRouteSearch(previous);
-          const nextDiffSearch = typeof next === "function" ? next(previousDiffSearch) : next;
           const rest = stripDiffSearchParams(previous);
           return { ...rest, ...diffRouteSearchForNavigation(nextDiffSearch) };
         },
       });
     },
-    [environmentId, navigate, onDiffSearchChange, threadId],
+    [environmentId, navigate, onDiffSearchChange, rawSearch, routeKind, threadId],
   );
   const activeThreadId = activeThread?.id ?? null;
   const runningTerminalIds = useThreadRunningTerminalIds({
@@ -2005,7 +2007,7 @@ export default function ChatView(props: ChatViewProps) {
     if (!diffOpen) {
       onDiffPanelOpen?.();
     }
-    updateDiffSearch(() => (diffOpen ? closedDiffRouteSearch() : { diff: "1" }), {
+    updateDiffSearch(resolveDiffPanelSearchToggle, {
       replace: true,
     });
   }, [diffOpen, isServerThread, onDiffPanelOpen, updateDiffSearch]);
@@ -3779,14 +3781,17 @@ export default function ChatView(props: ChatViewProps) {
       if (!isServerThread) {
         return;
       }
-      onDiffPanelOpen?.();
-      updateDiffSearch(
-        filePath
-          ? { diff: "1", diffTurnId: turnId, diffFilePath: filePath }
-          : { diff: "1", diffTurnId: turnId },
-      );
+      const nextDiffSearch = resolveTurnDiffSearchToggle({
+        current: rawSearch,
+        turnId,
+        filePath,
+      });
+      if (nextDiffSearch.diff === "1") {
+        onDiffPanelOpen?.();
+      }
+      updateDiffSearch(nextDiffSearch, nextDiffSearch.diff === "1" ? undefined : { replace: true });
     },
-    [isServerThread, onDiffPanelOpen, updateDiffSearch],
+    [isServerThread, onDiffPanelOpen, rawSearch, updateDiffSearch],
   );
   // Both the Map and the revert handler are read from refs at call-time so
   // the callback reference is fully stable and never busts context identity.

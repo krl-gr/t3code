@@ -18,6 +18,7 @@ import {
   type TerminalContextDraft,
 } from "../lib/terminalContext";
 import type { DraftThreadEnvMode } from "../composerDraftStore";
+import { closedDiffRouteSearch, type DiffRouteSearch } from "../diffRouteSearch";
 
 export const LAST_INVOKED_SCRIPT_BY_PROJECT_KEY = "t3code:last-invoked-script-by-project";
 export const MAX_HIDDEN_MOUNTED_TERMINAL_THREADS = 10;
@@ -72,6 +73,31 @@ export function shouldWriteThreadErrorToCurrentServerThread(input: {
     input.serverThread.environmentId === input.routeThreadRef.environmentId &&
     input.serverThread.id === input.targetThreadId,
   );
+}
+
+export function resolveTurnDiffSearchToggle(input: {
+  current: DiffRouteSearch;
+  turnId: TurnId;
+  filePath?: string | undefined;
+}): DiffRouteSearch {
+  const requestedFilePath = input.filePath;
+  const currentFilePath = input.current.diffFilePath;
+  const sameOpenTarget =
+    input.current.diff === "1" &&
+    input.current.diffTurnId === input.turnId &&
+    currentFilePath === requestedFilePath;
+
+  if (sameOpenTarget) {
+    return closedDiffRouteSearch();
+  }
+
+  return requestedFilePath
+    ? { diff: "1", diffTurnId: input.turnId, diffFilePath: requestedFilePath }
+    : { diff: "1", diffTurnId: input.turnId };
+}
+
+export function resolveDiffPanelSearchToggle(current: DiffRouteSearch): DiffRouteSearch {
+  return current.diff === "1" ? closedDiffRouteSearch() : { diff: "1" };
 }
 
 export function reconcileMountedTerminalThreadIds(input: {

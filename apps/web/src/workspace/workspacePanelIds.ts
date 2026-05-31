@@ -34,6 +34,18 @@ export interface ChatWorkspaceRouteTarget {
   diffSearch: DiffRouteSearch;
 }
 
+export function getChatWorkspaceRouteTargetKey(target: ChatWorkspaceRouteTarget): string {
+  return JSON.stringify([
+    target.target.kind,
+    target.target.ref.environmentId,
+    target.target.ref.threadId,
+    target.target.kind === "draft" ? target.target.draftId : null,
+    target.diffSearch.diff ?? null,
+    target.diffSearch.diffTurnId ?? null,
+    target.diffSearch.diffFilePath ?? null,
+  ]);
+}
+
 export function isChatWorkspacePanelId(value: string): value is ChatWorkspacePanelId {
   return value.startsWith("workspace:") && value.length > "workspace:".length;
 }

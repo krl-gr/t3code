@@ -50,6 +50,7 @@ import {
 } from "../../workspace/workspacePersistence";
 import {
   createChatWorkspacePanelId,
+  getChatWorkspaceRouteTargetKey,
   isChatWorkspacePanelId,
   type ChatWorkspacePanelId,
   type ChatWorkspacePanelState,
@@ -363,6 +364,7 @@ export function ChatWorkspace({ children, routeTarget = null }: ChatWorkspacePro
   const apiRef = useRef<DockviewApi | null>(null);
   const restoredRef = useRef(false);
   const persistTimerRef = useRef<number | null>(null);
+  const lastAppliedRouteTargetKeyRef = useRef<string | null>(null);
   const lastRouteSyncRef = useRef<string | null>(null);
   const pendingRoutePanelIdRef = useRef<ChatWorkspacePanelId | null>(null);
   const pendingDraftPanelIdRef = useRef<ChatWorkspacePanelId | null>(null);
@@ -898,10 +900,18 @@ export function ChatWorkspace({ children, routeTarget = null }: ChatWorkspacePro
 
   useEffect(() => {
     if (!api || !routeTarget || !restoredRef.current) {
+      if (!routeTarget) {
+        lastAppliedRouteTargetKeyRef.current = null;
+      }
+      return;
+    }
+    const routeTargetKey = getChatWorkspaceRouteTargetKey(routeTarget);
+    if (lastAppliedRouteTargetKeyRef.current === routeTargetKey) {
       return;
     }
     const panelId = applyRouteTargetToActivePanel(routeTarget.target, routeTarget.diffSearch);
     if (panelId) {
+      lastAppliedRouteTargetKeyRef.current = routeTargetKey;
       pendingRoutePanelIdRef.current = panelId;
       lastRouteSyncRef.current = null;
     }

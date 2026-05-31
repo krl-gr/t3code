@@ -18,6 +18,8 @@ import {
   deriveComposerSendState,
   hasServerAcknowledgedLocalDispatch,
   reconcileMountedTerminalThreadIds,
+  resolveDiffPanelSearchToggle,
+  resolveTurnDiffSearchToggle,
   resolveSendEnvMode,
   shouldWriteThreadErrorToCurrentServerThread,
   waitForStartedServerThread,
@@ -86,6 +88,78 @@ describe("buildExpiredTerminalContextToastCopy", () => {
     expect(buildExpiredTerminalContextToastCopy(2, "omitted")).toEqual({
       title: "Expired terminal contexts omitted from message",
       description: "Re-add it if you want that terminal output included.",
+    });
+  });
+});
+
+describe("resolveDiffPanelSearchToggle", () => {
+  it("opens the diff panel from the latest closed state", () => {
+    expect(resolveDiffPanelSearchToggle({})).toEqual({ diff: "1" });
+  });
+
+  it("closes the diff panel from the latest open state", () => {
+    expect(resolveDiffPanelSearchToggle({ diff: "1" })).toEqual({
+      diff: undefined,
+      diffTurnId: undefined,
+      diffFilePath: undefined,
+    });
+  });
+});
+
+describe("resolveTurnDiffSearchToggle", () => {
+  it("opens the requested turn diff when the diff panel is closed", () => {
+    const turnId = TurnId.make("turn-one");
+
+    expect(
+      resolveTurnDiffSearchToggle({
+        current: {},
+        turnId,
+        filePath: "src/App.tsx",
+      }),
+    ).toEqual({
+      diff: "1",
+      diffTurnId: turnId,
+      diffFilePath: "src/App.tsx",
+    });
+  });
+
+  it("closes the diff panel when the requested turn and file are already selected", () => {
+    const turnId = TurnId.make("turn-one");
+
+    expect(
+      resolveTurnDiffSearchToggle({
+        current: {
+          diff: "1",
+          diffTurnId: turnId,
+          diffFilePath: "src/App.tsx",
+        },
+        turnId,
+        filePath: "src/App.tsx",
+      }),
+    ).toEqual({
+      diff: undefined,
+      diffTurnId: undefined,
+      diffFilePath: undefined,
+    });
+  });
+
+  it("switches files instead of closing when a different file is requested", () => {
+    const turnId = TurnId.make("turn-one");
+
+    expect(
+      resolveTurnDiffSearchToggle({
+        current: {
+          diff: "1",
+          diffTurnId: turnId,
+          diffFilePath: "src/App.tsx",
+        },
+        turnId,
+        filePath: "src/Other.tsx",
+      }),
+    ).toEqual({
+      diff: "1",
+      diffTurnId: turnId,
+      diffFilePath: "src/Other.tsx",
     });
   });
 });
