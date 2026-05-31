@@ -780,6 +780,7 @@ interface ThreadTerminalDrawerProps {
   worktreePath?: string | null;
   runtimeEnv?: Record<string, string>;
   visible?: boolean;
+  presentation?: "drawer" | "floating";
   height: number;
   terminalIds: string[];
   activeTerminalId: string;
@@ -838,6 +839,7 @@ export default function ThreadTerminalDrawer({
   worktreePath,
   runtimeEnv,
   visible = true,
+  presentation = "drawer",
   height,
   terminalIds,
   activeTerminalId,
@@ -1111,7 +1113,7 @@ export default function ThreadTerminalDrawer({
       return;
     }
     setResizeEpoch((value) => value + 1);
-  }, [visible]);
+  }, [presentation, visible]);
 
   useEffect(() => {
     return () => {
@@ -1122,16 +1124,20 @@ export default function ThreadTerminalDrawer({
   if (normalizedTerminalIds.length === 0) {
     return (
       <aside
-        className="thread-terminal-drawer relative flex min-w-0 shrink-0 flex-col overflow-hidden border-t border-border/80 bg-background"
-        style={{ height: `${drawerHeight}px` }}
+        className={`thread-terminal-drawer relative flex min-w-0 shrink-0 flex-col overflow-hidden bg-background ${
+          presentation === "drawer" ? "border-t border-border/80" : "h-full"
+        }`}
+        style={presentation === "drawer" ? { height: `${drawerHeight}px` } : undefined}
       >
-        <div
-          className="absolute inset-x-0 top-0 z-20 h-1.5 cursor-row-resize"
-          onPointerDown={handleResizePointerDown}
-          onPointerMove={handleResizePointerMove}
-          onPointerUp={handleResizePointerEnd}
-          onPointerCancel={handleResizePointerEnd}
-        />
+        {presentation === "drawer" ? (
+          <div
+            className="absolute inset-x-0 top-0 z-20 h-1.5 cursor-row-resize"
+            onPointerDown={handleResizePointerDown}
+            onPointerMove={handleResizePointerMove}
+            onPointerUp={handleResizePointerEnd}
+            onPointerCancel={handleResizePointerEnd}
+          />
+        ) : null}
         <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-4 py-6 text-center text-sm text-muted-foreground">
           <p>No terminal sessions for this thread yet.</p>
           <button
@@ -1150,16 +1156,20 @@ export default function ThreadTerminalDrawer({
 
   return (
     <aside
-      className="thread-terminal-drawer relative flex min-w-0 shrink-0 flex-col overflow-hidden border-t border-border/80 bg-background"
-      style={{ height: `${drawerHeight}px` }}
+      className={`thread-terminal-drawer relative flex min-w-0 shrink-0 flex-col overflow-hidden bg-background ${
+        presentation === "drawer" ? "border-t border-border/80" : "h-full"
+      }`}
+      style={presentation === "drawer" ? { height: `${drawerHeight}px` } : undefined}
     >
-      <div
-        className="absolute inset-x-0 top-0 z-20 h-1.5 cursor-row-resize"
-        onPointerDown={handleResizePointerDown}
-        onPointerMove={handleResizePointerMove}
-        onPointerUp={handleResizePointerEnd}
-        onPointerCancel={handleResizePointerEnd}
-      />
+      {presentation === "drawer" ? (
+        <div
+          className="absolute inset-x-0 top-0 z-20 h-1.5 cursor-row-resize"
+          onPointerDown={handleResizePointerDown}
+          onPointerMove={handleResizePointerMove}
+          onPointerUp={handleResizePointerEnd}
+          onPointerCancel={handleResizePointerEnd}
+        />
+      ) : null}
 
       {!hasTerminalSidebar && (
         <div className="pointer-events-none absolute right-2 top-2 z-20">
