@@ -10,6 +10,10 @@ import {
   setSavedEnvironmentSecret,
 } from "./methods/savedEnvironments.ts";
 import {
+  getThreadPromptDrafts,
+  setThreadPromptDrafts,
+} from "./methods/threadPromptDrafts.ts";
+import {
   getAdvertisedEndpoints,
   getServerExposureState,
   setServerExposureMode,
@@ -56,6 +60,8 @@ export const installDesktopIpcHandlers = Effect.gen(function* () {
   yield* ipc.handle(getSavedEnvironmentSecret);
   yield* ipc.handle(setSavedEnvironmentSecret);
   yield* ipc.handle(removeSavedEnvironmentSecret);
+  yield* ipc.handle(getThreadPromptDrafts);
+  yield* ipc.handle(setThreadPromptDrafts);
 
   yield* ipc.handle(discoverSshHosts);
   yield* ipc.handle(ensureSshEnvironment);

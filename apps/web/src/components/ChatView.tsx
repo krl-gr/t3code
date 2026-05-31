@@ -159,6 +159,7 @@ import { PullRequestThreadDialog } from "./PullRequestThreadDialog";
 import { MessagesTimeline } from "./chat/MessagesTimeline";
 import { ChatHeader } from "./chat/ChatHeader";
 import { ThreadFloatingPanelShell } from "./ThreadFloatingPanelShell";
+import { ThreadPromptDraftsPanel } from "./ThreadPromptDraftsPanel";
 import { type ExpandedImagePreview } from "./chat/ExpandedImagePreview";
 import { NoActiveThreadContent } from "./NoActiveThreadState";
 import { resolveEffectiveEnvMode, resolveEnvironmentOptionLabel } from "./BranchToolbar.logic";
@@ -900,6 +901,7 @@ export default function ChatView(props: ChatViewProps) {
   const [pendingUserInputQuestionIndexByRequestId, setPendingUserInputQuestionIndexByRequestId] =
     useState<Record<string, number>>({});
   const [planSidebarOpen, setPlanSidebarOpen] = useState(false);
+  const [draftsPanelOpen, setDraftsPanelOpen] = useState(false);
   const shouldUsePlanSidebarSheetForViewport = useMediaQuery(RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY);
   const shouldUsePlanSidebarSheet =
     !forceInlineThreadPanels && shouldUsePlanSidebarSheetForViewport;
@@ -2102,6 +2104,12 @@ export default function ChatView(props: ChatViewProps) {
     if (!activeThreadRef) return;
     setTerminalOpen(!terminalUiState.terminalOpen);
   }, [activeThreadRef, setTerminalOpen, terminalUiState.terminalOpen]);
+  const toggleDraftsPanel = useCallback(() => {
+    setDraftsPanelOpen((open) => !open);
+  }, []);
+  const closeDraftsPanel = useCallback(() => {
+    setDraftsPanelOpen(false);
+  }, []);
   const splitTerminal = useCallback(() => {
     if (!activeThreadRef || hasReachedSplitLimit || !activeThreadId || !activeProject) {
       return;
@@ -3235,6 +3243,34 @@ export default function ChatView(props: ChatViewProps) {
     }
   };
 
+  const sendPromptDraft = useCallback(
+    (prompt: string) => {
+      clearComposerDraftContent(composerDraftTarget);
+      promptRef.current = prompt;
+      composerImagesRef.current = [];
+      composerTerminalContextsRef.current = [];
+      setComposerDraftPrompt(composerDraftTarget, prompt);
+      composerRef.current?.resetCursorState({
+        cursor: collapseExpandedComposerCursor(prompt, prompt.length),
+        prompt,
+        detectTrigger: true,
+      });
+      window.requestAnimationFrame(() => {
+        void onSend();
+      });
+    },
+    [
+      clearComposerDraftContent,
+      composerDraftTarget,
+      composerImagesRef,
+      composerRef,
+      composerTerminalContextsRef,
+      onSend,
+      promptRef,
+      setComposerDraftPrompt,
+    ],
+  );
+
   const onInterrupt = async () => {
     const api = readEnvironmentApi(environmentId);
     if (!api || !activeThread) return;
@@ -4064,6 +4100,7 @@ export default function ChatView(props: ChatViewProps) {
                 availableEditors={availableEditors}
                 diffOpen={diffOpen}
                 diffToggleShortcutLabel={diffPanelShortcutLabel}
+                draftsOpen={draftsPanelOpen}
                 gitCwd={gitCwd}
                 keybindings={keybindings}
                 openInCwd={gitCwd}
@@ -4077,6 +4114,7 @@ export default function ChatView(props: ChatViewProps) {
                 onAddProjectScript={saveProjectScript}
                 onDeleteProjectScript={deleteProjectScript}
                 onRunProjectScript={runProjectScript}
+                onToggleDrafts={toggleDraftsPanel}
                 onToggleDiff={onToggleDiff}
                 onToggleTerminal={toggleTerminalVisibility}
                 onUpdateProjectScript={updateProjectScript}
@@ -4137,6 +4175,16 @@ export default function ChatView(props: ChatViewProps) {
             mode="floating"
             onClose={closePlanSidebar}
           />
+        </ThreadFloatingPanelShell>
+      ) : null}
+
+      {draftsPanelOpen && activeThreadRef ? (
+        <ThreadFloatingPanelShell
+          label="Drafts panel"
+          onClose={closeDraftsPanel}
+          panelClassName="w-[min(320px,calc(100%-24px))] border-[#2f2f2f] bg-[rgba(26,26,26,0.8)] backdrop-blur-[66px]"
+        >
+          <ThreadPromptDraftsPanel threadRef={activeThreadRef} onSendPrompt={sendPromptDraft} />
         </ThreadFloatingPanelShell>
       ) : null}
 

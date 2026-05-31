@@ -65,6 +65,7 @@ import {
 import { Toggle } from "./ui/toggle";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 import { OpenInPicker, shouldShowOpenInPicker } from "./chat/OpenInPicker";
+import { NotebookPenIcon } from "lucide-react";
 
 interface BranchToolbarProps {
   environmentId: EnvironmentId;
@@ -74,6 +75,7 @@ interface BranchToolbarProps {
   availableEditors: ReadonlyArray<EditorId>;
   diffOpen: boolean;
   diffToggleShortcutLabel: string | null;
+  draftsOpen: boolean;
   gitCwd: string | null;
   keybindings: ResolvedKeybindingsConfig;
   openInCwd: string | null;
@@ -85,6 +87,7 @@ interface BranchToolbarProps {
   onAddProjectScript: (input: NewProjectScriptInput) => Promise<void>;
   onDeleteProjectScript: (scriptId: string) => Promise<void>;
   onRunProjectScript: (script: ProjectScript) => void;
+  onToggleDrafts: () => void;
   onToggleDiff: () => void;
   onToggleTerminal: () => void;
   onUpdateProjectScript: (scriptId: string, input: NewProjectScriptInput) => Promise<void>;
@@ -136,6 +139,7 @@ export const BranchToolbar = memo(function BranchToolbar({
   availableEditors,
   diffOpen,
   diffToggleShortcutLabel,
+  draftsOpen,
   gitCwd,
   keybindings,
   openInCwd,
@@ -147,6 +151,7 @@ export const BranchToolbar = memo(function BranchToolbar({
   onAddProjectScript,
   onDeleteProjectScript,
   onRunProjectScript,
+  onToggleDrafts,
   onToggleDiff,
   onToggleTerminal,
   onUpdateProjectScript,
@@ -495,7 +500,41 @@ export const BranchToolbar = memo(function BranchToolbar({
       ];
     },
   );
-  const quickAccessNodes = [...projectQuickActionNodes, ...quickActionNodes];
+  const draftsQuickActionNode: ContextQuickActionNode = {
+    actionId: "drafts.toggle",
+    node: (
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Toggle
+              className={CONTEXT_BAR_ICON_TRIGGER_CLASS}
+              pressed={draftsOpen}
+              onPressedChange={onToggleDrafts}
+              aria-label="Toggle drafts panel"
+              variant="outline"
+              size="xs"
+            />
+          }
+        >
+          <NotebookPenIcon className="size-4" />
+        </TooltipTrigger>
+        <TooltipPopup side="top">Drafts</TooltipPopup>
+      </Tooltip>
+    ),
+  };
+  const quickActionNodesWithDrafts: ContextQuickActionNode[] = [];
+  let insertedDraftsQuickAction = false;
+  for (const node of quickActionNodes) {
+    if (!insertedDraftsQuickAction && node.actionId === "terminal.toggle") {
+      quickActionNodesWithDrafts.push(draftsQuickActionNode);
+      insertedDraftsQuickAction = true;
+    }
+    quickActionNodesWithDrafts.push(node);
+  }
+  if (!insertedDraftsQuickAction) {
+    quickActionNodesWithDrafts.push(draftsQuickActionNode);
+  }
+  const quickAccessNodes = [...projectQuickActionNodes, ...quickActionNodesWithDrafts];
 
   return (
     <div
@@ -626,6 +665,12 @@ export const BranchToolbar = memo(function BranchToolbar({
               ) : null}
               <MenuGroup>
                 <MenuGroupLabel>View</MenuGroupLabel>
+                <ContextActionMenuItem
+                  icon={<NotebookPenIcon className="size-4" />}
+                  onSelect={onToggleDrafts}
+                >
+                  Drafts
+                </ContextActionMenuItem>
                 <ContextActionMenuItem
                   actionId="terminal.toggle"
                   checked={pinnedContextActionIds.has("terminal.toggle")}

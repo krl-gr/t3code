@@ -1,9 +1,12 @@
 import {
   ClientSettingsSchema,
   EnvironmentId,
+  ThreadPromptDraftSchema,
   type ClientSettings,
   type EnvironmentId as EnvironmentIdValue,
   type PersistedSavedEnvironmentRecord,
+  type ThreadId as ThreadIdValue,
+  type ThreadPromptDraft,
 } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 
@@ -11,6 +14,7 @@ import { getLocalStorageItem, setLocalStorageItem } from "./hooks/useLocalStorag
 
 export const CLIENT_SETTINGS_STORAGE_KEY = "t3code:client-settings:v1";
 export const SAVED_ENVIRONMENT_REGISTRY_STORAGE_KEY = "t3code:saved-environment-registry:v1";
+export const THREAD_PROMPT_DRAFTS_STORAGE_KEY = "t3code:thread-prompt-drafts:v1";
 
 const BrowserSavedEnvironmentRecordSchema = Schema.Struct({
   environmentId: EnvironmentId,
@@ -37,6 +41,12 @@ const BrowserSavedEnvironmentRegistryDocumentSchema = Schema.Struct({
 });
 type BrowserSavedEnvironmentRegistryDocument =
   typeof BrowserSavedEnvironmentRegistryDocumentSchema.Type;
+
+const BrowserThreadPromptDraftsDocumentSchema = Schema.Struct({
+  version: Schema.optionalKey(Schema.Number),
+  drafts: Schema.optionalKey(Schema.Array(ThreadPromptDraftSchema)),
+});
+type BrowserThreadPromptDraftsDocument = typeof BrowserThreadPromptDraftsDocumentSchema.Type;
 
 function hasWindow(): boolean {
   return typeof window !== "undefined";
@@ -201,5 +211,70 @@ export function removeBrowserSavedEnvironmentSecret(environmentId: EnvironmentId
       }
       return toPersistedSavedEnvironmentRecord(record);
     }),
+  });
+}
+
+function readBrowserThreadPromptDraftsDocument(): BrowserThreadPromptDraftsDocument {
+  if (!hasWindow()) {
+    return {};
+  }
+
+  try {
+    return (
+      getLocalStorageItem(THREAD_PROMPT_DRAFTS_STORAGE_KEY, BrowserThreadPromptDraftsDocumentSchema) ??
+      {}
+    );
+  } catch {
+    return {};
+  }
+}
+
+function writeBrowserThreadPromptDraftsDocument(document: BrowserThreadPromptDraftsDocument): void {
+  if (!hasWindow()) {
+    return;
+  }
+
+  setLocalStorageItem(
+    THREAD_PROMPT_DRAFTS_STORAGE_KEY,
+    document,
+    BrowserThreadPromptDraftsDocumentSchema,
+  );
+}
+
+function draftBelongsToThread(
+  draft: ThreadPromptDraft,
+  environmentId: EnvironmentIdValue,
+  threadId: ThreadIdValue,
+): boolean {
+  return draft.environmentId === environmentId && draft.threadId === threadId;
+}
+
+export function readBrowserThreadPromptDrafts(
+  environmentId: EnvironmentIdValue,
+  threadId: ThreadIdValue,
+): readonly ThreadPromptDraft[] {
+  return (readBrowserThreadPromptDraftsDocument().drafts ?? []).filter((draft) =>
+    draftBelongsToThread(draft, environmentId, threadId),
+  );
+}
+
+export function writeBrowserThreadPromptDrafts(
+  environmentId: EnvironmentIdValue,
+  threadId: ThreadIdValue,
+  drafts: readonly ThreadPromptDraft[],
+): void {
+  const document = readBrowserThreadPromptDraftsDocument();
+  writeBrowserThreadPromptDraftsDocument({
+    version: document.version ?? 1,
+    drafts: [
+      ...(document.drafts ?? []).filter(
+        (draft) => !draftBelongsToThread(draft, environmentId, threadId),
+      ),
+      ...drafts.map((draft) => ({
+        ...draft,
+        environmentId,
+        threadId,
+      })),
+    ],
   });
 }

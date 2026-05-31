@@ -66,7 +66,7 @@ import type {
   OrchestrationSubscribeThreadInput,
   OrchestrationThreadStreamItem,
 } from "./orchestration.ts";
-import { EnvironmentId } from "./baseSchemas.ts";
+import { EnvironmentId, IsoDateTime, ThreadId } from "./baseSchemas.ts";
 import { AuthBearerBootstrapResult, AuthSessionState, AuthWebSocketTokenResult } from "./auth.ts";
 import { AdvertisedEndpoint } from "./remoteAccess.ts";
 import { EditorId } from "./editor.ts";
@@ -381,6 +381,19 @@ export const PickFileSystemEntriesOptionsSchema = Schema.Struct({
   initialPath: Schema.optionalKey(Schema.NullOr(Schema.String)),
 });
 
+export const ThreadPromptDraftId = Schema.String.pipe(Schema.brand("ThreadPromptDraftId"));
+export type ThreadPromptDraftId = typeof ThreadPromptDraftId.Type;
+
+export const ThreadPromptDraftSchema = Schema.Struct({
+  id: ThreadPromptDraftId,
+  environmentId: EnvironmentId,
+  threadId: ThreadId,
+  body: Schema.String,
+  createdAt: IsoDateTime,
+  updatedAt: IsoDateTime,
+});
+export type ThreadPromptDraft = typeof ThreadPromptDraftSchema.Type;
+
 export interface DesktopBridge {
   getAppBranding: () => DesktopAppBranding | null;
   getLocalEnvironmentBootstrap: () => DesktopEnvironmentBootstrap | null;
@@ -393,6 +406,15 @@ export interface DesktopBridge {
   getSavedEnvironmentSecret: (environmentId: EnvironmentId) => Promise<string | null>;
   setSavedEnvironmentSecret: (environmentId: EnvironmentId, secret: string) => Promise<boolean>;
   removeSavedEnvironmentSecret: (environmentId: EnvironmentId) => Promise<void>;
+  getThreadPromptDrafts: (
+    environmentId: EnvironmentId,
+    threadId: ThreadId,
+  ) => Promise<readonly ThreadPromptDraft[]>;
+  setThreadPromptDrafts: (
+    environmentId: EnvironmentId,
+    threadId: ThreadId,
+    drafts: readonly ThreadPromptDraft[],
+  ) => Promise<void>;
   discoverSshHosts: () => Promise<readonly DesktopDiscoveredSshHost[]>;
   ensureSshEnvironment: (
     target: DesktopSshEnvironmentTarget,
@@ -476,6 +498,15 @@ export interface LocalApi {
     getSavedEnvironmentSecret: (environmentId: EnvironmentId) => Promise<string | null>;
     setSavedEnvironmentSecret: (environmentId: EnvironmentId, secret: string) => Promise<boolean>;
     removeSavedEnvironmentSecret: (environmentId: EnvironmentId) => Promise<void>;
+    getThreadPromptDrafts: (
+      environmentId: EnvironmentId,
+      threadId: ThreadId,
+    ) => Promise<readonly ThreadPromptDraft[]>;
+    setThreadPromptDrafts: (
+      environmentId: EnvironmentId,
+      threadId: ThreadId,
+      drafts: readonly ThreadPromptDraft[],
+    ) => Promise<void>;
   };
   server: {
     getConfig: () => Promise<ServerConfig>;

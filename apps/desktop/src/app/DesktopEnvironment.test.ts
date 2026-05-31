@@ -73,6 +73,10 @@ describe("DesktopEnvironment", () => {
         normalizePath(environment.savedEnvironmentRegistryPath),
         "/tmp/t3/dev/saved-environments.json",
       );
+      assert.equal(
+        normalizePath(environment.threadPromptDraftsPath),
+        "/tmp/t3/dev/thread-prompt-drafts.json",
+      );
       assert.equal(normalizePath(environment.serverSettingsPath), "/tmp/t3/dev/settings.json");
       assert.equal(normalizePath(environment.logDir), "/tmp/t3/dev/logs");
       assert.equal(normalizePath(environment.rootDir), "/repo");
