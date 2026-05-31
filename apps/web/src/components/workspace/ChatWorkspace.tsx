@@ -1,5 +1,5 @@
 import { useNavigate, useRouter } from "@tanstack/react-router";
-import { PlusIcon, XIcon } from "lucide-react";
+import { EllipsisIcon, PlusIcon, XIcon } from "lucide-react";
 import {
   DockviewReact,
   type DockviewApi,
@@ -16,6 +16,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -65,6 +66,7 @@ import {
 import { threadHasStarted } from "../ChatView.logic";
 import { NoActiveThreadContent } from "../NoActiveThreadState";
 import { resolveSidebarNewThreadEnvMode } from "../Sidebar.logic";
+import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
 import { SidebarInset, SidebarTrigger, useSidebar } from "../ui/sidebar";
 import { ChatWorkspacePanel } from "./ChatWorkspacePanel";
 
@@ -243,9 +245,171 @@ function DockviewPrefixHeaderActions(props: IDockviewHeaderActionsProps) {
 
 function DockviewRightHeaderActions(props: IDockviewHeaderActionsProps) {
   const { newThreadShortcutLabel, onCreateDraftPanel } = useChatWorkspaceContext();
+  const actionsRef = useRef<HTMLDivElement | null>(null);
+  const [overflowMenuItems, setOverflowMenuItems] = useState<
+    Array<{ id: string; title: string; isActive: boolean }>
+  >([]);
+  const panelIdsKey = props.panels.map((panel) => panel.id).join("\0");
+
+  const updateOverflowMenuItems = useCallback(() => {
+    const actionsElement = actionsRef.current;
+    const headerElement = actionsElement?.closest(".dv-tabs-and-actions-container");
+    const tabsContainer = headerElement?.querySelector(".dv-tabs-container");
+    if (!(tabsContainer instanceof HTMLElement)) {
+      setOverflowMenuItems([]);
+      return;
+    }
+
+    const tabElements = Array.from(tabsContainer.children).filter(
+      (element): element is HTMLElement =>
+        element instanceof HTMLElement && element.classList.contains("dv-tab"),
+    );
+    const containerRect = tabsContainer.getBoundingClientRect();
+    const groupPanels = props.group.panels.length > 0 ? props.group.panels : props.panels;
+    const nextItems: Array<{ id: string; title: string; isActive: boolean }> = [];
+    const visibilityTolerancePx = 1;
+
+    for (const [index, tabElement] of tabElements.entries()) {
+      const panel = groupPanels[index];
+      if (!panel) {
+        continue;
+      }
+
+      const tabRect = tabElement.getBoundingClientRect();
+      const isHidden =
+        tabRect.left < containerRect.left - visibilityTolerancePx ||
+        tabRect.right > containerRect.right + visibilityTolerancePx;
+      if (isHidden) {
+        nextItems.push({
+          id: panel.id,
+          title: panel.title?.trim() || "Thread",
+          isActive: panel.api.isActive,
+        });
+      }
+    }
+
+    setOverflowMenuItems((previous) => {
+      if (
+        previous.length === nextItems.length &&
+        previous.every(
+          (item, index) =>
+            item.id === nextItems[index]?.id &&
+            item.title === nextItems[index]?.title &&
+            item.isActive === nextItems[index]?.isActive,
+        )
+      ) {
+        return previous;
+      }
+      return nextItems;
+    });
+  }, [props.group, props.panels]);
+
+  useLayoutEffect(() => {
+    let animationFrameId: number | null = null;
+    const scheduleUpdate = () => {
+      if (animationFrameId !== null) {
+        window.cancelAnimationFrame(animationFrameId);
+      }
+      animationFrameId = window.requestAnimationFrame(() => {
+        animationFrameId = null;
+        updateOverflowMenuItems();
+      });
+    };
+
+    scheduleUpdate();
+
+    const actionsElement = actionsRef.current;
+    const headerElement = actionsElement?.closest(".dv-tabs-and-actions-container");
+    const tabsContainer = headerElement?.querySelector(".dv-tabs-container");
+    const resizeObserver = new ResizeObserver(scheduleUpdate);
+    if (headerElement instanceof HTMLElement) {
+      resizeObserver.observe(headerElement);
+    }
+    if (tabsContainer instanceof HTMLElement) {
+      resizeObserver.observe(tabsContainer);
+    }
+
+    const mutationObserver = new MutationObserver(scheduleUpdate);
+    if (tabsContainer instanceof HTMLElement) {
+      mutationObserver.observe(tabsContainer, {
+        attributeFilter: ["class", "style"],
+        attributes: true,
+        childList: true,
+        subtree: true,
+      });
+    }
+
+    const disposables = [
+      props.containerApi.onDidLayoutChange(scheduleUpdate),
+      props.containerApi.onDidActivePanelChange(scheduleUpdate),
+      props.containerApi.onDidAddPanel(scheduleUpdate),
+      props.containerApi.onDidRemovePanel(scheduleUpdate),
+      ...props.panels.flatMap((panel) => [
+        panel.api.onDidActiveChange(scheduleUpdate),
+        panel.api.onDidTitleChange(scheduleUpdate),
+      ]),
+    ];
+
+    return () => {
+      if (animationFrameId !== null) {
+        window.cancelAnimationFrame(animationFrameId);
+      }
+      resizeObserver.disconnect();
+      mutationObserver.disconnect();
+      for (const disposable of disposables) {
+        disposable.dispose();
+      }
+    };
+  }, [
+    panelIdsKey,
+    props.containerApi,
+    props.panels,
+    updateOverflowMenuItems,
+  ]);
 
   return (
-    <div className="flex h-full items-start px-2 pt-2">
+    <div ref={actionsRef} className="flex h-full items-start gap-1 px-2 pt-2">
+      {overflowMenuItems.length > 0 ? (
+        <Menu>
+          <MenuTrigger
+            render={
+              <button
+                aria-label="More workspace tabs"
+                className="inline-flex size-8 items-center justify-center rounded-full text-[#7a7a7a] transition-colors hover:bg-white/[0.05] hover:text-[#bab9ba] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#3a3a3a]"
+                onPointerDown={(event) => {
+                  event.stopPropagation();
+                }}
+                title="More workspace tabs"
+                type="button"
+              />
+            }
+          >
+            <EllipsisIcon className="size-4" />
+          </MenuTrigger>
+          <MenuPopup align="end" className="min-w-56 max-w-80" side="bottom">
+            {overflowMenuItems.map((item) => (
+              <MenuItem
+                key={item.id}
+                className="max-w-72"
+                onClick={() => {
+                  props.group.panels.find((panel) => panel.id === item.id)?.api.setActive();
+                }}
+              >
+                <span
+                  aria-hidden="true"
+                  className={cn(
+                    "size-1.5 shrink-0 rounded-full",
+                    item.isActive ? "bg-foreground" : "bg-transparent",
+                  )}
+                />
+                <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
+                  {item.title}
+                </span>
+              </MenuItem>
+            ))}
+          </MenuPopup>
+        </Menu>
+      ) : null}
       <DockviewHeaderIconButton
         aria-label="New workspace tab"
         onClick={() => {
@@ -999,6 +1163,7 @@ export function ChatWorkspace({ children, routeTarget = null }: ChatWorkspacePro
           defaultRenderer="onlyWhenVisible"
           defaultTabComponent={DockviewChatTab}
           disableFloatingGroups
+          disableTabsOverflowList
           getTabContextMenuItems={() => ["close", "closeOthers", "closeAll"]}
           onReady={onReady}
           onWillDrop={(event) => {

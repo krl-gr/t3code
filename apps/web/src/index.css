@@ -302,9 +302,18 @@ body::after {
   padding-left: 8px;
 }
 
+.t3code-dockview-theme .dv-scrollable .dv-scrollbar-horizontal {
+  display: none;
+}
+
 .t3code-dockview-theme .dv-tabs-container {
   align-items: flex-start;
   overflow: hidden;
+  scrollbar-width: none;
+}
+
+.t3code-dockview-theme .dv-tabs-container::-webkit-scrollbar {
+  display: none;
 }
 
 .t3code-dockview-theme .dv-tab {
