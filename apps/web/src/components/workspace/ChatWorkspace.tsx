@@ -286,8 +286,8 @@ function DockviewChatTab(props: IDockviewPanelHeaderProps) {
   return (
     <div
       className={cn(
-        "t3-workspace-tab flex h-8 w-full items-center gap-1 overflow-hidden rounded-lg px-2 py-[7px] text-[14px] font-medium leading-[18px] tracking-normal text-[#bab9ba]",
-        isActive && "border border-[#282828] bg-white/[0.03]",
+        "t3-workspace-tab flex h-8 w-full items-center gap-1 overflow-hidden rounded-lg border border-transparent px-2 py-[7px] text-[14px] font-medium leading-[18px] tracking-normal text-[#bab9ba]",
+        isActive && "bg-white/[0.03] shadow-[inset_0_0_0_1px_#282828]",
       )}
       title={title}
     >

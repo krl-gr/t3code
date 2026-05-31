@@ -309,13 +309,14 @@ body::after {
 
 .t3code-dockview-theme .dv-tab {
   box-sizing: border-box;
+  flex: 1 1 160px;
   height: 48px;
   letter-spacing: 0;
   max-width: 200px;
-  min-width: 0;
+  min-width: 96px;
   overflow: visible;
   padding: 8px 0;
-  width: 200px;
+  width: auto;
 }
 
 .t3code-dockview-theme .dv-tab.dv-active-tab {
