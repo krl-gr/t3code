@@ -53,8 +53,8 @@ import {
   refreshSourceControlDiscovery,
 } from "../lib/sourceControlDiscoveryState";
 import {
-  startNewThreadInProjectFromContext,
-  startNewThreadFromContext,
+  startNewThreadInProjectWorkspacePanelFromContext,
+  startNewThreadInWorkspacePanelFromContext,
 } from "../lib/chatThreadActions";
 import {
   appendBrowsePathSegment,
@@ -673,7 +673,7 @@ function OpenCommandPaletteDialog() {
           />
         ),
         runProject: async (project) => {
-          await startNewThreadInProjectFromContext(
+          await startNewThreadInProjectWorkspacePanelFromContext(
             {
               activeDraftThread,
               activeThread,
@@ -1003,7 +1003,7 @@ function OpenCommandPaletteDialog() {
         icon: <SquarePenIcon className={ITEM_ICON_CLASS} />,
         shortcutCommand: "chat.new",
         run: async () => {
-          await startNewThreadFromContext({
+          await startNewThreadInWorkspacePanelFromContext({
             activeDraftThread,
             activeThread,
             defaultProjectRef,

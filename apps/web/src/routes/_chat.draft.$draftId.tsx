@@ -1,7 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo } from "react";
 
-import { ChatWorkspace } from "../components/workspace/ChatWorkspace";
 import { threadHasStarted } from "../components/ChatView.logic";
 import { DraftId, useComposerDraftStore } from "../composerDraftStore";
 import { useStore } from "../store";
@@ -53,39 +52,7 @@ function DraftChatThreadRouteView() {
     void navigate({ to: "/", replace: true });
   }, [canonicalThreadRef, draftSession, navigate]);
 
-  if (canonicalThreadRef) {
-    return (
-      <ChatWorkspace
-        routeTarget={{
-          target: {
-            kind: "thread",
-            ref: canonicalThreadRef,
-          },
-          diffSearch: {},
-        }}
-      />
-    );
-  }
-
-  if (!draftSession) {
-    return <ChatWorkspace />;
-  }
-
-  return (
-    <ChatWorkspace
-      routeTarget={{
-        target: {
-          kind: "draft",
-          draftId,
-          ref: {
-            environmentId: draftSession.environmentId,
-            threadId: draftSession.threadId,
-          },
-        },
-        diffSearch: {},
-      }}
-    />
-  );
+  return null;
 }
 
 export const Route = createFileRoute("/_chat/draft/$draftId")({

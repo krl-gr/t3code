@@ -110,7 +110,8 @@ import { RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY } from "../rightPanelLayout";
 import { BranchToolbar } from "./BranchToolbar";
 import { resolveShortcutCommand, shortcutLabelForCommand } from "../keybindings";
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
-import { startNewThreadFromContext } from "../lib/chatThreadActions";
+import { startNewThreadInWorkspacePanelFromContext } from "../lib/chatThreadActions";
+import { openChatWorkspaceTarget } from "../workspace/chatWorkspaceController";
 import PlanSidebar from "./PlanSidebar";
 import ThreadTerminalDrawer from "./ThreadTerminalDrawer";
 import { ChevronDownIcon, TriangleAlertIcon, WifiOffIcon } from "lucide-react";
@@ -1981,7 +1982,7 @@ export default function ChatView(props: ChatViewProps) {
     [keybindings],
   );
   const handleNewThreadAction = useCallback(() => {
-    void startNewThreadFromContext(
+    void startNewThreadInWorkspacePanelFromContext(
       {
         activeDraftThread: newThreadActiveDraftThread,
         activeThread: newThreadActiveThread,
@@ -3641,12 +3642,20 @@ export default function ChatView(props: ChatViewProps) {
       .then(() => {
         // Signal that the plan sidebar should open on the new thread when enabled.
         planSidebarOpenOnNextThreadRef.current = autoOpenPlanSidebar;
+        const nextThreadRef = scopeThreadRef(activeThread.environmentId, nextThreadId);
+        const openedPanelId = openChatWorkspaceTarget({
+          disposition: "new-panel",
+          target: {
+            kind: "thread",
+            ref: nextThreadRef,
+          },
+        });
+        if (openedPanelId) {
+          return;
+        }
         return navigate({
           to: "/$environmentId/$threadId",
-          params: {
-            environmentId: activeThread.environmentId,
-            threadId: nextThreadId,
-          },
+          params: buildThreadRouteParams(nextThreadRef),
         });
       })
       .catch(async (err: unknown) => {
@@ -3846,10 +3855,19 @@ export default function ChatView(props: ChatViewProps) {
             sourceMessageId,
             createdAt: new Date().toISOString(),
           });
-          await navigate({
-            to: "/$environmentId/$threadId",
-            params: buildThreadRouteParams(nextThreadRef),
+          const openedPanelId = openChatWorkspaceTarget({
+            disposition: "new-panel",
+            target: {
+              kind: "thread",
+              ref: nextThreadRef,
+            },
           });
+          if (!openedPanelId) {
+            await navigate({
+              to: "/$environmentId/$threadId",
+              params: buildThreadRouteParams(nextThreadRef),
+            });
+          }
         } catch (error) {
           toastManager.add(
             stackedThreadToast({

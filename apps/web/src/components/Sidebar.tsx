@@ -95,6 +95,7 @@ import { useVcsStatus } from "../lib/vcsStatusState";
 import { readLocalApi } from "../localApi";
 import { useComposerDraftStore } from "../composerDraftStore";
 import { useNewThreadHandler } from "../hooks/useHandleNewThread";
+import { startNewThreadInActiveWorkspacePanel } from "../lib/chatThreadActions";
 import { retainThreadDetailSubscription } from "../environments/runtime/service";
 
 import { useThreadActions } from "../hooks/useThreadActions";
@@ -1800,12 +1801,16 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       if (isMobile) {
         setOpenMobile(false);
       }
-      void handleNewThread(scopeProjectRef(member.environmentId, member.id), {
-        ...(seedContext.branch !== undefined ? { branch: seedContext.branch } : {}),
-        ...(seedContext.worktreePath !== undefined
-          ? { worktreePath: seedContext.worktreePath }
-          : {}),
-        envMode: seedContext.envMode,
+      void startNewThreadInActiveWorkspacePanel({
+        handleNewThread,
+        projectRef: scopeProjectRef(member.environmentId, member.id),
+        options: {
+          ...(seedContext.branch !== undefined ? { branch: seedContext.branch } : {}),
+          ...(seedContext.worktreePath !== undefined
+            ? { worktreePath: seedContext.worktreePath }
+            : {}),
+          envMode: seedContext.envMode,
+        },
       });
     },
     [defaultThreadEnvMode, handleNewThread, isMobile, router, setOpenMobile],
@@ -2788,7 +2793,10 @@ const FocusedSidebarProjectView = memo(function FocusedSidebarProjectView(
       if (isMobile) {
         setOpenMobile(false);
       }
-      void handleNewThread(scopeProjectRef(targetMember.environmentId, targetMember.id));
+      void startNewThreadInActiveWorkspacePanel({
+        handleNewThread,
+        projectRef: scopeProjectRef(targetMember.environmentId, targetMember.id),
+      });
     },
     [handleNewThread, isMobile, selectedProject?.memberProjects, setOpenMobile],
   );

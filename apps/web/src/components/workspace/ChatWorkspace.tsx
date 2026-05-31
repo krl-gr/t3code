@@ -1,4 +1,4 @@
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, useRouter } from "@tanstack/react-router";
 import { PlusIcon, XIcon } from "lucide-react";
 import {
   DockviewReact,
@@ -49,6 +49,12 @@ import {
   type PersistedChatWorkspaceStateV1,
 } from "../../workspace/workspacePersistence";
 import {
+  resolveWorkspacePanelIdForOpenRequest,
+  useChatWorkspaceControllerStore,
+  type ChatWorkspaceDraftThreadRequest,
+  type ChatWorkspaceOpenRequest,
+} from "../../workspace/chatWorkspaceController";
+import {
   createChatWorkspacePanelId,
   getChatWorkspaceRouteTargetKey,
   isChatWorkspacePanelId,
@@ -64,10 +70,6 @@ import { ChatWorkspacePanel } from "./ChatWorkspacePanel";
 
 const CHAT_PANEL_COMPONENT_ID = "chatContainer";
 const WORKSPACE_PERSIST_DEBOUNCE_MS = 250;
-
-// Leaf chat routes remount ChatWorkspace when a new draft route opens.
-// Keep the reserved tab id outside the component so the draft route can fill it.
-let pendingDraftRoutePanelId: ChatWorkspacePanelId | null = null;
 
 export interface ChatWorkspaceRouteTarget {
   target: ChatWorkspacePanelTarget;
@@ -137,6 +139,18 @@ function samePanelState(left: ChatWorkspacePanelState, right: ChatWorkspacePanel
   return (
     samePanelTarget(left.target, right.target) && sameDiffSearch(left.diffSearch, right.diffSearch)
   );
+}
+
+function routeSyncKeyForPanelTarget(
+  target: ChatWorkspacePanelTarget,
+  diffSearch: DiffRouteSearch,
+): string {
+  if (target.kind === "draft") {
+    return `draft:${target.draftId}`;
+  }
+
+  const normalizedDiffSearch = parseDiffRouteSearch({ ...diffSearch });
+  return `thread:${target.ref.environmentId}:${target.ref.threadId}:${normalizedDiffSearch.diff ?? ""}:${normalizedDiffSearch.diffTurnId ?? ""}:${normalizedDiffSearch.diffFilePath ?? ""}`;
 }
 
 function nextDiffSearch(previous: DiffRouteSearch, next: DiffRouteSearchUpdater): DiffRouteSearch {
@@ -357,6 +371,7 @@ export interface ChatWorkspaceProps {
 
 export function ChatWorkspace({ children, routeTarget = null }: ChatWorkspaceProps) {
   const navigate = useNavigate();
+  const router = useRouter();
   const keybindings = useServerKeybindings();
   const settings = useSettings();
   const { activeDraftThread, activeThread, createDraftThread, defaultProjectRef, handleNewThread } =
@@ -367,7 +382,6 @@ export function ChatWorkspace({ children, routeTarget = null }: ChatWorkspacePro
   const lastAppliedRouteTargetKeyRef = useRef<string | null>(null);
   const lastRouteSyncRef = useRef<string | null>(null);
   const pendingRoutePanelIdRef = useRef<ChatWorkspacePanelId | null>(null);
-  const pendingDraftPanelIdRef = useRef<ChatWorkspacePanelId | null>(null);
   const panelsByIdRef = useRef<Record<ChatWorkspacePanelId, ChatWorkspacePanelState>>({});
   const activePanelIdRef = useRef<ChatWorkspacePanelId | null>(null);
   const [api, setApi] = useState<DockviewApi | null>(null);
@@ -375,6 +389,12 @@ export function ChatWorkspace({ children, routeTarget = null }: ChatWorkspacePro
     Record<ChatWorkspacePanelId, ChatWorkspacePanelState>
   >({});
   const [activePanelId, setActivePanelId] = useState<ChatWorkspacePanelId | null>(null);
+  const registerWorkspaceController = useChatWorkspaceControllerStore(
+    (state) => state.registerController,
+  );
+  const setWorkspaceControllerActivePanelId = useChatWorkspaceControllerStore(
+    (state) => state.setActivePanelId,
+  );
   const newThreadShortcutLabel = useMemo(
     () => shortcutLabelForCommand(keybindings, "chat.new"),
     [keybindings],
@@ -386,7 +406,8 @@ export function ChatWorkspace({ children, routeTarget = null }: ChatWorkspacePro
 
   useEffect(() => {
     activePanelIdRef.current = activePanelId;
-  }, [activePanelId]);
+    setWorkspaceControllerActivePanelId(activePanelId);
+  }, [activePanelId, setWorkspaceControllerActivePanelId]);
 
   const persistNow = useCallback(() => {
     if (!restoredRef.current) {
@@ -429,63 +450,72 @@ export function ChatWorkspace({ children, routeTarget = null }: ChatWorkspacePro
     };
   }, [persistNow]);
 
-  const resolveRouteTargetPanelId = useCallback((currentApi: DockviewApi): ChatWorkspacePanelId => {
-    const activePanelIdFromState = activePanelIdRef.current;
-    if (activePanelIdFromState && currentApi.getPanel(activePanelIdFromState)) {
-      return activePanelIdFromState;
-    }
+  const ensureDockviewPanel = useCallback(
+    (
+      currentApi: DockviewApi,
+      panelId: ChatWorkspacePanelId,
+      panelState: ChatWorkspacePanelState,
+      referenceGroupId?: string,
+    ) => {
+      const existingPanel = currentApi.getPanel(panelId);
+      if (existingPanel) {
+        return existingPanel;
+      }
 
-    const activePanelIdFromDockview = normalizePanelId(currentApi.activePanel?.id ?? "");
-    if (activePanelIdFromDockview && currentApi.getPanel(activePanelIdFromDockview)) {
-      return activePanelIdFromDockview;
-    }
+      const panelOptions = {
+        id: panelId,
+        component: CHAT_PANEL_COMPONENT_ID,
+        title: fallbackPanelTitle(panelState),
+        params: { panelId },
+        renderer: "onlyWhenVisible" as const,
+      };
 
-    return createChatWorkspacePanelId();
-  }, []);
-
-  const createEmptyPanel = useCallback((referenceGroupId?: string): ChatWorkspacePanelId | null => {
-    const currentApi = apiRef.current;
-    if (!currentApi) {
-      return null;
-    }
-
-    const panelId = createChatWorkspacePanelId();
-    const nextState: ChatWorkspacePanelState = { kind: "empty" };
-    const nextPanelsById = {
-      ...panelsByIdRef.current,
-      [panelId]: nextState,
-    };
-    panelsByIdRef.current = nextPanelsById;
-    setPanelsById(nextPanelsById);
-
-    const panelOptions = {
-      id: panelId,
-      component: CHAT_PANEL_COMPONENT_ID,
-      title: fallbackPanelTitle(nextState),
-      params: { panelId },
-      renderer: "onlyWhenVisible" as const,
-    };
-    const panel =
-      referenceGroupId && currentApi.getGroup(referenceGroupId)
+      return referenceGroupId && currentApi.getGroup(referenceGroupId)
         ? currentApi.addPanel({
             ...panelOptions,
             position: {
               referenceGroup: referenceGroupId,
-              direction: "within",
+              direction: "within" as const,
             },
           })
         : currentApi.addPanel(panelOptions);
-    panel.api.setActive();
-    activePanelIdRef.current = panelId;
-    setActivePanelId(panelId);
-    return panelId;
-  }, []);
+    },
+    [],
+  );
+
+  const setPanelEmptyTarget = useCallback(
+    (panelId: ChatWorkspacePanelId, referenceGroupId?: string): boolean => {
+      const currentApi = apiRef.current;
+      if (!currentApi) {
+        return false;
+      }
+
+      const nextState: ChatWorkspacePanelState = { kind: "empty" };
+      const previousState = panelsByIdRef.current[panelId];
+      if (!previousState || !samePanelState(previousState, nextState)) {
+        const nextPanelsById = {
+          ...panelsByIdRef.current,
+          [panelId]: nextState,
+        };
+        panelsByIdRef.current = nextPanelsById;
+        setPanelsById(nextPanelsById);
+      }
+
+      const panel = ensureDockviewPanel(currentApi, panelId, nextState, referenceGroupId);
+      panel.api.setActive();
+      activePanelIdRef.current = panelId;
+      setActivePanelId(panelId);
+      return true;
+    },
+    [ensureDockviewPanel],
+  );
 
   const setPanelChatTarget = useCallback(
     (
       panelId: ChatWorkspacePanelId,
       target: ChatWorkspacePanelTarget,
       diffSearch: DiffRouteSearch,
+      referenceGroupId?: string,
     ): boolean => {
       const currentApi = apiRef.current;
       if (!currentApi) {
@@ -507,42 +537,101 @@ export function ChatWorkspace({ children, routeTarget = null }: ChatWorkspacePro
         setPanelsById(nextPanelsById);
       }
 
-      let panel = currentApi.getPanel(panelId);
-      if (!panel) {
-        panel = currentApi.addPanel({
-          id: panelId,
-          component: CHAT_PANEL_COMPONENT_ID,
-          title: fallbackPanelTitle(nextState),
-          params: { panelId },
-          renderer: "onlyWhenVisible",
-        });
-      }
+      const panel = ensureDockviewPanel(currentApi, panelId, nextState, referenceGroupId);
       panel.api.setActive();
       activePanelIdRef.current = panelId;
       setActivePanelId(panelId);
       return true;
     },
-    [],
+    [ensureDockviewPanel],
+  );
+
+  const openWorkspaceTarget = useCallback(
+    (request: ChatWorkspaceOpenRequest): ChatWorkspacePanelId | null => {
+      const currentApi = apiRef.current;
+      if (!currentApi) {
+        return null;
+      }
+
+      const panelId = resolveWorkspacePanelIdForOpenRequest({
+        activePanelId: activePanelIdRef.current,
+        createPanelId: createChatWorkspacePanelId,
+        hasPanel: (candidatePanelId) => currentApi.getPanel(candidatePanelId) !== undefined,
+        request,
+      });
+
+      const didOpen =
+        request.target.kind === "empty"
+          ? setPanelEmptyTarget(panelId, request.referenceGroupId)
+          : setPanelChatTarget(
+              panelId,
+              request.target.kind === "thread"
+                ? {
+                    kind: "thread",
+                    ref: request.target.ref,
+                  }
+                : {
+                    kind: "draft",
+                    draftId: request.target.draftId,
+                    ref: request.target.ref,
+                  },
+              request.target.diffSearch ?? {},
+              request.referenceGroupId,
+            );
+
+      return didOpen ? panelId : null;
+    },
+    [setPanelChatTarget, setPanelEmptyTarget],
+  );
+
+  const createDraftPanelForProject = useCallback(
+    (request: ChatWorkspaceDraftThreadRequest) => {
+      const context = {
+        activeDraftThread,
+        activeThread,
+        defaultProjectRef,
+        defaultThreadEnvMode: resolveSidebarNewThreadEnvMode({
+          defaultEnvMode: settings.defaultThreadEnvMode,
+        }),
+        handleNewThread,
+      };
+      const createdDraftThread = createDraftThread(request.projectRef, {
+        ...buildContextualThreadOptions(context, { forceNewDraft: true }),
+        ...request.options,
+        forceNewDraft: true,
+      });
+
+      const panelId = openWorkspaceTarget({
+        disposition: request.disposition,
+        ...(request.referenceGroupId ? { referenceGroupId: request.referenceGroupId } : {}),
+        target: {
+          kind: "draft",
+          draftId: createdDraftThread.draftId,
+          ref: createdDraftThread.ref,
+        },
+      });
+      if (!panelId) {
+        useComposerDraftStore.getState().clearDraftThread(createdDraftThread.draftId);
+        return null;
+      }
+
+      persistNow();
+      return createdDraftThread;
+    },
+    [
+      activeDraftThread,
+      activeThread,
+      createDraftThread,
+      defaultProjectRef,
+      handleNewThread,
+      openWorkspaceTarget,
+      persistNow,
+      settings.defaultThreadEnvMode,
+    ],
   );
 
   const createDraftPanel = useCallback(
     (referenceGroupId?: string) => {
-      const placeholderPanelId = createEmptyPanel(referenceGroupId);
-      if (!placeholderPanelId) {
-        return;
-      }
-
-      const removePlaceholderPanel = () => {
-        const currentApi = apiRef.current;
-        const panel = currentApi?.getPanel(placeholderPanelId);
-        if (currentApi && panel) {
-          currentApi.removePanel(panel);
-        }
-        const nextPanelsById = removePanelState(panelsByIdRef.current, placeholderPanelId);
-        panelsByIdRef.current = nextPanelsById;
-        setPanelsById(nextPanelsById);
-      };
-
       const context = {
         activeDraftThread,
         activeThread,
@@ -554,82 +643,32 @@ export function ChatWorkspace({ children, routeTarget = null }: ChatWorkspacePro
       };
       const projectRef = resolveThreadActionProjectRef(context);
       if (!projectRef) {
-        removePlaceholderPanel();
         return;
       }
 
-      const createdDraftThread = createDraftThread(
+      createDraftPanelForProject({
         projectRef,
-        buildContextualThreadOptions(context, { forceNewDraft: true }),
-      );
-      const didApply = setPanelChatTarget(
-        placeholderPanelId,
-        {
-          kind: "draft",
-          draftId: createdDraftThread.draftId,
-          ref: createdDraftThread.ref,
-        },
-        {},
-      );
-      if (!didApply) {
-        removePlaceholderPanel();
-        return;
-      }
-      persistNow();
+        disposition: "new-panel",
+        ...(referenceGroupId ? { referenceGroupId } : {}),
+      });
     },
     [
       activeDraftThread,
       activeThread,
-      createEmptyPanel,
-      createDraftThread,
+      createDraftPanelForProject,
       defaultProjectRef,
       handleNewThread,
-      persistNow,
-      setPanelChatTarget,
       settings.defaultThreadEnvMode,
     ],
   );
 
-  const applyRouteTargetToActivePanel = useCallback(
-    (target: ChatWorkspacePanelTarget, diffSearch: DiffRouteSearch) => {
-      const currentApi = apiRef.current;
-      if (!currentApi) {
-        return null;
-      }
-      const pendingDraftPanelId = pendingDraftPanelIdRef.current ?? pendingDraftRoutePanelId;
-      const pendingDraftPanel = pendingDraftPanelId
-        ? currentApi.getPanel(pendingDraftPanelId)
-        : null;
-      if (pendingDraftPanelId && !pendingDraftPanel) {
-        if (pendingDraftPanelIdRef.current === pendingDraftPanelId) {
-          pendingDraftPanelIdRef.current = null;
-        }
-        if (pendingDraftRoutePanelId === pendingDraftPanelId) {
-          pendingDraftRoutePanelId = null;
-        }
-      }
-      if (pendingDraftPanelId && pendingDraftPanel && target.kind !== "draft") {
-        const pendingState = panelsByIdRef.current[pendingDraftPanelId];
-        if (activePanelIdRef.current === pendingDraftPanelId && pendingState?.kind === "empty") {
-          return null;
-        }
-      }
-      const panelId =
-        target.kind === "draft" && pendingDraftPanelId && pendingDraftPanel
-          ? pendingDraftPanelId
-          : resolveRouteTargetPanelId(currentApi);
-      if (!setPanelChatTarget(panelId, target, diffSearch)) {
-        return null;
-      }
-      if (pendingDraftPanelIdRef.current === panelId) {
-        pendingDraftPanelIdRef.current = null;
-      }
-      if (pendingDraftRoutePanelId === panelId) {
-        pendingDraftRoutePanelId = null;
-      }
-      return panelId;
-    },
-    [resolveRouteTargetPanelId, setPanelChatTarget],
+  useEffect(
+    () =>
+      registerWorkspaceController({
+        createDraftThreadPanel: createDraftPanelForProject,
+        openWorkspaceTarget,
+      }),
+    [createDraftPanelForProject, openWorkspaceTarget, registerWorkspaceController],
   );
 
   const closePanel = useCallback((panelId: ChatWorkspacePanelId) => {
@@ -643,12 +682,6 @@ export function ChatWorkspace({ children, routeTarget = null }: ChatWorkspacePro
       panelsByIdRef.current = next;
       return next;
     });
-    if (pendingDraftPanelIdRef.current === panelId) {
-      pendingDraftPanelIdRef.current = null;
-    }
-    if (pendingDraftRoutePanelId === panelId) {
-      pendingDraftRoutePanelId = null;
-    }
     if (activePanelIdRef.current === panelId) {
       const nextPanelId = currentApi?.activePanel
         ? normalizePanelId(currentApi.activePanel.id)
@@ -674,9 +707,6 @@ export function ChatWorkspace({ children, routeTarget = null }: ChatWorkspacePro
       }
 
       if (panelState.kind === "empty") {
-        if (pendingDraftPanelIdRef.current === panelId || pendingDraftRoutePanelId === panelId) {
-          return;
-        }
         if (lastRouteSyncRef.current !== "index") {
           lastRouteSyncRef.current = "index";
           void navigate({ to: "/", replace: true });
@@ -685,7 +715,7 @@ export function ChatWorkspace({ children, routeTarget = null }: ChatWorkspacePro
       }
 
       if (panelState.target.kind === "draft") {
-        const key = `draft:${panelState.target.draftId}`;
+        const key = routeSyncKeyForPanelTarget(panelState.target, panelState.diffSearch);
         if (lastRouteSyncRef.current === key) {
           return;
         }
@@ -698,13 +728,20 @@ export function ChatWorkspace({ children, routeTarget = null }: ChatWorkspacePro
         return;
       }
 
-      const normalizedDiffSearch = parseDiffRouteSearch({ ...panelState.diffSearch });
       const routeDiffSearch = diffRouteSearchForNavigation(panelState.diffSearch);
-      const key = `thread:${panelState.target.ref.environmentId}:${panelState.target.ref.threadId}:${normalizedDiffSearch.diff ?? ""}:${normalizedDiffSearch.diffTurnId ?? ""}:${normalizedDiffSearch.diffFilePath ?? ""}`;
+      const key = routeSyncKeyForPanelTarget(panelState.target, panelState.diffSearch);
       if (lastRouteSyncRef.current === key) {
         return;
       }
       lastRouteSyncRef.current = key;
+      if (routeDiffSearch.diff !== "1") {
+        router.history.replace(
+          `/${encodeURIComponent(panelState.target.ref.environmentId)}/${encodeURIComponent(
+            panelState.target.ref.threadId,
+          )}`,
+        );
+        return;
+      }
       void navigate({
         to: "/$environmentId/$threadId",
         params: buildThreadRouteParams(panelState.target.ref),
@@ -712,32 +749,32 @@ export function ChatWorkspace({ children, routeTarget = null }: ChatWorkspacePro
         replace: true,
       });
     },
-    [navigate],
+    [navigate, router],
   );
 
   const updatePanelDiffSearch = useCallback(
     (panelId: ChatWorkspacePanelId, next: DiffRouteSearchUpdater) => {
-      setPanelsById((previous) => {
-        const panelState = previous[panelId];
-        if (!panelState || panelState.kind === "empty") {
-          return previous;
-        }
-        const diffSearch = nextDiffSearch(panelState.diffSearch, next);
-        if (sameDiffSearch(panelState.diffSearch, diffSearch)) {
-          return previous;
-        }
-        const nextPanelsById = {
-          ...previous,
-          [panelId]: {
-            ...panelState,
-            diffSearch,
-          },
-        };
-        panelsByIdRef.current = nextPanelsById;
-        return nextPanelsById;
-      });
+      const panelState = panelsByIdRef.current[panelId];
+      if (!panelState || panelState.kind === "empty") {
+        return;
+      }
+      const diffSearch = nextDiffSearch(panelState.diffSearch, next);
+      if (sameDiffSearch(panelState.diffSearch, diffSearch)) {
+        return;
+      }
+      const nextPanelsById = {
+        ...panelsByIdRef.current,
+        [panelId]: {
+          ...panelState,
+          diffSearch,
+        },
+      };
+      panelsByIdRef.current = nextPanelsById;
+      setPanelsById(nextPanelsById);
+      lastRouteSyncRef.current = null;
+      syncActivePanelRoute(panelId);
     },
-    [],
+    [syncActivePanelRoute],
   );
 
   const cleanupStalePanels = useCallback(() => {
@@ -836,17 +873,7 @@ export function ChatWorkspace({ children, routeTarget = null }: ChatWorkspacePro
           : (normalizePanelId(currentApi.activePanel?.id ?? "") ??
             (Object.keys(restoredState.panelsById)[0] as ChatWorkspacePanelId | undefined) ??
             null);
-      const pendingRestoredPanelId =
-        pendingDraftRoutePanelId && currentApi.getPanel(pendingDraftRoutePanelId)
-          ? pendingDraftRoutePanelId
-          : null;
-      if (pendingDraftRoutePanelId && !pendingRestoredPanelId) {
-        pendingDraftRoutePanelId = null;
-      }
-      if (pendingRestoredPanelId) {
-        pendingDraftPanelIdRef.current = pendingRestoredPanelId;
-      }
-      const nextActivePanelId = pendingRestoredPanelId ?? persistedActivePanelId;
+      const nextActivePanelId = persistedActivePanelId;
 
       if (nextActivePanelId) {
         currentApi.getPanel(nextActivePanelId)?.api.setActive();
@@ -872,12 +899,6 @@ export function ChatWorkspace({ children, routeTarget = null }: ChatWorkspacePro
       const panelId = normalizePanelId(panel.id);
       if (!panelId) {
         return;
-      }
-      if (pendingDraftPanelIdRef.current === panelId) {
-        pendingDraftPanelIdRef.current = null;
-      }
-      if (pendingDraftRoutePanelId === panelId) {
-        pendingDraftRoutePanelId = null;
       }
       setPanelsById((previous) => {
         const next = removePanelState(previous, panelId);
@@ -909,13 +930,31 @@ export function ChatWorkspace({ children, routeTarget = null }: ChatWorkspacePro
     if (lastAppliedRouteTargetKeyRef.current === routeTargetKey) {
       return;
     }
-    const panelId = applyRouteTargetToActivePanel(routeTarget.target, routeTarget.diffSearch);
+    const panelId = openWorkspaceTarget({
+      disposition: "active-panel",
+      target:
+        routeTarget.target.kind === "thread"
+          ? {
+              kind: "thread",
+              ref: routeTarget.target.ref,
+              diffSearch: routeTarget.diffSearch,
+            }
+          : {
+              kind: "draft",
+              draftId: routeTarget.target.draftId,
+              ref: routeTarget.target.ref,
+              diffSearch: routeTarget.diffSearch,
+            },
+    });
     if (panelId) {
       lastAppliedRouteTargetKeyRef.current = routeTargetKey;
       pendingRoutePanelIdRef.current = panelId;
-      lastRouteSyncRef.current = null;
+      lastRouteSyncRef.current = routeSyncKeyForPanelTarget(
+        routeTarget.target,
+        routeTarget.diffSearch,
+      );
     }
-  }, [api, applyRouteTargetToActivePanel, routeTarget]);
+  }, [api, openWorkspaceTarget, routeTarget]);
 
   useEffect(() => {
     if (!api || !restoredRef.current) {

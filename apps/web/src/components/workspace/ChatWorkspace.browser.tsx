@@ -11,6 +11,8 @@ import {
   createRouter,
   retainSearchParams,
   stripSearchParams,
+  useParams,
+  useSearch,
 } from "@tanstack/react-router";
 import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -22,7 +24,10 @@ import {
   parseDiffRouteSearch,
 } from "../../diffRouteSearch";
 import { DraftId } from "../../composerDraftStore";
-import { CHAT_WORKSPACE_STORAGE_KEY } from "../../workspace/workspacePersistence";
+import {
+  CHAT_WORKSPACE_STORAGE_KEY,
+  readPersistedChatWorkspaceState,
+} from "../../workspace/workspacePersistence";
 import { SidebarProvider } from "../ui/sidebar";
 import { ChatWorkspace } from "./ChatWorkspace";
 
@@ -92,14 +97,56 @@ const threadTwoId = ThreadId.make("thread-two");
 const draftOneId = DraftId.make("draft-one");
 const draftOneThreadId = ThreadId.make("thread-draft-one");
 
+function readPersistedPanelThreadIds(): string[] {
+  return Object.values(readPersistedChatWorkspaceState().panelsById).flatMap((panelState) =>
+    panelState.kind === "chat" ? [String(panelState.target.ref.threadId)] : [],
+  );
+}
+
+function WorkspaceRouteShell() {
+  const params = useParams({ strict: false }) as Partial<
+    Record<"environmentId" | "threadId" | "draftId", string>
+  >;
+  const search = useSearch({
+    strict: false,
+    select: (value) => parseDiffRouteSearch(value),
+  });
+
+  const routeTarget =
+    params.environmentId && params.threadId
+      ? {
+          target: {
+            kind: "thread" as const,
+            ref: scopeThreadRef(params.environmentId as EnvironmentId, params.threadId as ThreadId),
+          },
+          diffSearch: search,
+        }
+      : params.draftId
+        ? {
+            target: {
+              kind: "draft" as const,
+              draftId: DraftId.make(params.draftId),
+              ref: scopeThreadRef(environmentId, draftOneThreadId),
+            },
+            diffSearch: {},
+          }
+        : null;
+
+  return (
+    <ChatWorkspace routeTarget={routeTarget}>
+      <Outlet />
+    </ChatWorkspace>
+  );
+}
+
 function createWorkspaceRouter(initialEntry: string) {
   const rootRoute = createRootRoute({
-    component: () => <Outlet />,
+    component: WorkspaceRouteShell,
   });
   const indexRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: "/",
-    component: () => <ChatWorkspace />,
+    component: () => null,
   });
   const threadRoute = createRoute({
     getParentRoute: () => rootRoute,
@@ -115,48 +162,12 @@ function createWorkspaceRouter(initialEntry: string) {
         }),
       ],
     },
-    component: function ThreadWorkspaceRoute() {
-      const params = threadRoute.useParams() as unknown as {
-        environmentId: string;
-        threadId: string;
-      };
-      const search = threadRoute.useSearch();
-      return (
-        <ChatWorkspace
-          routeTarget={{
-            target: {
-              kind: "thread",
-              ref: scopeThreadRef(
-                params.environmentId as EnvironmentId,
-                params.threadId as ThreadId,
-              ),
-            },
-            diffSearch: search,
-          }}
-        />
-      );
-    },
+    component: () => null,
   });
   const draftRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: "draft/$draftId",
-    component: function DraftWorkspaceRoute() {
-      const params = draftRoute.useParams() as unknown as {
-        draftId: string;
-      };
-      return (
-        <ChatWorkspace
-          routeTarget={{
-            target: {
-              kind: "draft",
-              draftId: DraftId.make(params.draftId),
-              ref: scopeThreadRef(environmentId, draftOneThreadId),
-            },
-            diffSearch: {},
-          }}
-        />
-      );
-    },
+    component: () => null,
   });
   const routeTree = rootRoute.addChildren([indexRoute, threadRoute, draftRoute]);
   return createRouter({
@@ -258,25 +269,19 @@ describe("ChatWorkspace", () => {
       await page.getByRole("button", { name: "New workspace tab" }).click();
 
       await vi.waitFor(() => {
-        const panels = Array.from(
-          document.querySelectorAll<HTMLElement>("[data-testid^='workspace-panel-']"),
-        );
-        expect(panels).toHaveLength(2);
-        expect(panels.filter((panel) => panel.textContent?.includes(threadOneId))).toHaveLength(1);
-        expect(
-          panels.filter((panel) => panel.textContent?.includes(draftOneThreadId)),
-        ).toHaveLength(1);
-        expect(panels.find((panel) => panel.dataset.active === "true")?.textContent).toContain(
-          draftOneThreadId,
+        expect(document.querySelectorAll(".dv-tab")).toHaveLength(2);
+        expect(readPersistedPanelThreadIds().toSorted()).toEqual(
+          [String(threadOneId), String(draftOneThreadId)].toSorted(),
         );
       });
+      await expect.element(page.getByText(draftOneThreadId)).toBeVisible();
       expect(createDraftThreadMock).toHaveBeenCalledTimes(1);
     } finally {
       await mounted.cleanup();
     }
   });
 
-  it("opens a routed new draft inside the reserved new tab", async () => {
+  it("keeps the created draft in the new tab after URL sync", async () => {
     const mounted = await renderWorkspace(`/${environmentId}/${threadOneId}`);
 
     try {
@@ -285,18 +290,12 @@ describe("ChatWorkspace", () => {
       await page.getByRole("button", { name: "New workspace tab" }).click();
 
       await vi.waitFor(() => {
-        const panels = Array.from(
-          document.querySelectorAll<HTMLElement>("[data-testid^='workspace-panel-']"),
-        );
-        expect(panels).toHaveLength(2);
-        expect(panels.filter((panel) => panel.textContent?.includes(threadOneId))).toHaveLength(1);
-        expect(
-          panels.filter((panel) => panel.textContent?.includes(draftOneThreadId)),
-        ).toHaveLength(1);
-        expect(panels.find((panel) => panel.dataset.active === "true")?.textContent).toContain(
-          draftOneThreadId,
+        expect(document.querySelectorAll(".dv-tab")).toHaveLength(2);
+        expect(readPersistedPanelThreadIds().toSorted()).toEqual(
+          [String(threadOneId), String(draftOneThreadId)].toSorted(),
         );
       });
+      await expect.element(page.getByText(draftOneThreadId)).toBeVisible();
       expect(createDraftThreadMock).toHaveBeenCalledTimes(1);
     } finally {
       await mounted.cleanup();

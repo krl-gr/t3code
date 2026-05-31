@@ -6,7 +6,6 @@ import {
 } from "@tanstack/react-router";
 import { useEffect, useMemo } from "react";
 
-import { ChatWorkspace } from "../components/workspace/ChatWorkspace";
 import { threadHasStarted } from "../components/ChatView.logic";
 import { finalizePromotedDraftThreadByRef, useComposerDraftStore } from "../composerDraftStore";
 import { type DiffRouteSearch, parseDiffRouteSearch } from "../diffRouteSearch";
@@ -19,7 +18,6 @@ function ChatThreadRouteView() {
   const threadRef = Route.useParams({
     select: (params) => resolveThreadRouteRef(params),
   });
-  const search = Route.useSearch();
   const bootstrapComplete = useStore(
     (store) => selectEnvironmentState(store, threadRef?.environmentId ?? null).bootstrapComplete,
   );
@@ -61,21 +59,7 @@ function ChatThreadRouteView() {
     finalizePromotedDraftThreadByRef(threadRef);
   }, [draftThread?.promotedTo, serverThreadStarted, threadRef]);
 
-  if (!threadRef || !bootstrapComplete || !routeThreadExists) {
-    return <ChatWorkspace />;
-  }
-
-  return (
-    <ChatWorkspace
-      routeTarget={{
-        target: {
-          kind: "thread",
-          ref: threadRef,
-        },
-        diffSearch: search,
-      }}
-    />
-  );
+  return null;
 }
 
 export const Route = createFileRoute("/_chat/$environmentId/$threadId")({
