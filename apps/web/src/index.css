@@ -336,6 +336,12 @@ body::after {
   background: transparent;
   border-color: transparent;
   border-radius: 0;
+  box-shadow: none;
+}
+
+.t3code-dockview-theme .dv-tabs-and-actions-container.dv-single-tab .dv-tab:focus::after,
+.t3code-dockview-theme .dv-tabs-and-actions-container.dv-single-tab .dv-tab:focus-within::after {
+  display: none;
 }
 
 .t3code-dockview-theme .dv-tabs-and-actions-container.dv-single-tab .t3-workspace-tab-close {

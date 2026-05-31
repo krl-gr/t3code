@@ -250,6 +250,8 @@ function DockviewRightHeaderActions(props: IDockviewHeaderActionsProps) {
     Array<{ id: string; title: string; isActive: boolean }>
   >([]);
   const panelIdsKey = props.panels.map((panel) => panel.id).join("\0");
+  const canCloseWorkspaceGroup =
+    props.containerApi.groups.length > 1 && props.group.panels.length === 1;
 
   const updateOverflowMenuItems = useCallback(() => {
     const actionsElement = actionsRef.current;
@@ -423,6 +425,17 @@ function DockviewRightHeaderActions(props: IDockviewHeaderActionsProps) {
       >
         <PlusIcon className="size-4" />
       </DockviewHeaderIconButton>
+      {canCloseWorkspaceGroup ? (
+        <DockviewHeaderIconButton
+          aria-label="Close workspace split"
+          onClick={() => {
+            props.api.close();
+          }}
+          title="Close workspace split"
+        >
+          <XIcon className="size-4" />
+        </DockviewHeaderIconButton>
+      ) : null}
     </div>
   );
 }
