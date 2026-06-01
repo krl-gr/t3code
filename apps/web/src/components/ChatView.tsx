@@ -877,10 +877,10 @@ export default function ChatView(props: ChatViewProps) {
   const composerTerminalContextsRef = useRef<TerminalContextDraft[]>([]);
   const localComposerRef = useRef<ChatComposerHandle | null>(null);
   const sharedComposerRef = useComposerHandleContext();
-  const composerRef =
-    workspaceActive && workspaceVisible
-      ? (sharedComposerRef ?? localComposerRef)
-      : localComposerRef;
+  const workspaceCanOwnInput = workspaceActive && workspaceVisible;
+  const composerRef = workspaceCanOwnInput
+    ? (sharedComposerRef ?? localComposerRef)
+    : localComposerRef;
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [expandedImage, setExpandedImage] = useState<ExpandedImagePreview | null>(null);
   const [optimisticUserMessages, setOptimisticUserMessages] = useState<ChatMessage[]>([]);
@@ -2080,13 +2080,19 @@ export default function ChatView(props: ChatViewProps) {
   );
 
   const focusComposer = useCallback(() => {
+    if (!workspaceCanOwnInput) {
+      return;
+    }
     composerRef.current?.focusAtEnd();
-  }, [composerRef]);
+  }, [composerRef, workspaceCanOwnInput]);
   const scheduleComposerFocus = useCallback(() => {
+    if (!workspaceCanOwnInput) {
+      return;
+    }
     window.requestAnimationFrame(() => {
       focusComposer();
     });
-  }, [focusComposer]);
+  }, [focusComposer, workspaceCanOwnInput]);
   const addTerminalContextToDraft = useCallback(
     (selection: TerminalContextSelection) => {
       composerRef.current?.addTerminalContext(selection);
@@ -2631,14 +2637,14 @@ export default function ChatView(props: ChatViewProps) {
   }, [activeThread?.id]);
 
   useEffect(() => {
-    if (!activeThread?.id || terminalUiState.terminalOpen) return;
+    if (!workspaceCanOwnInput || !activeThread?.id || terminalUiState.terminalOpen) return;
     const frame = window.requestAnimationFrame(() => {
       focusComposer();
     });
     return () => {
       window.cancelAnimationFrame(frame);
     };
-  }, [activeThread?.id, focusComposer, terminalUiState.terminalOpen]);
+  }, [activeThread?.id, focusComposer, terminalUiState.terminalOpen, workspaceCanOwnInput]);
 
   useEffect(() => {
     if (!activeThread?.id) return;
@@ -2768,6 +2774,10 @@ export default function ChatView(props: ChatViewProps) {
     if (!activeThreadKey) return;
     const previous = terminalUiOpenByThreadRef.current[activeThreadKey] ?? false;
     const current = Boolean(terminalUiState.terminalOpen);
+    if (!workspaceCanOwnInput) {
+      terminalUiOpenByThreadRef.current[activeThreadKey] = current;
+      return;
+    }
 
     if (!previous && current) {
       terminalUiOpenByThreadRef.current[activeThreadKey] = current;
@@ -2784,10 +2794,10 @@ export default function ChatView(props: ChatViewProps) {
     }
 
     terminalUiOpenByThreadRef.current[activeThreadKey] = current;
-  }, [activeThreadKey, focusComposer, terminalUiState.terminalOpen]);
+  }, [activeThreadKey, focusComposer, terminalUiState.terminalOpen, workspaceCanOwnInput]);
 
   useEffect(() => {
-    if (!workspaceActive) {
+    if (!workspaceCanOwnInput) {
       return;
     }
     const handler = (event: globalThis.KeyboardEvent) => {
@@ -2877,7 +2887,7 @@ export default function ChatView(props: ChatViewProps) {
     keybindings,
     onToggleDiff,
     toggleTerminalVisibility,
-    workspaceActive,
+    workspaceCanOwnInput,
     composerRef,
   ]);
 

@@ -1,3 +1,19 @@
+import {
+  closestCenter,
+  DndContext,
+  PointerSensor,
+  type DragEndEvent,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
+import {
+  arrayMove,
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import type { ScopedThreadRef, ThreadPromptDraft } from "@t3tools/contracts";
 import { ThreadPromptDraftId } from "@t3tools/contracts";
 import { Loader2Icon, PlusIcon, Trash2Icon } from "lucide-react";
@@ -14,6 +30,21 @@ interface ThreadPromptDraftsPanelProps {
   onSendPrompt: (prompt: string) => void;
 }
 
+interface SortableDraftItemProps {
+  draft: ThreadPromptDraft;
+  focused: boolean;
+  selected: boolean;
+  saveState: "idle" | "saving" | "error";
+  textareaRef: (element: HTMLTextAreaElement | null) => void;
+  onDelete: () => void;
+  onEdit: () => void;
+  onFocus: () => void;
+  onPersist: () => void;
+  onSelect: () => void;
+  onSend: () => void;
+  onUpdate: (body: string) => void;
+}
+
 function createPromptDraft(threadRef: ScopedThreadRef, body = ""): ThreadPromptDraft {
   const now = new Date().toISOString();
   return {
@@ -26,17 +57,129 @@ function createPromptDraft(threadRef: ScopedThreadRef, body = ""): ThreadPromptD
   };
 }
 
+function SortableDraftItem({
+  draft,
+  focused,
+  selected,
+  saveState,
+  textareaRef,
+  onDelete,
+  onEdit,
+  onFocus,
+  onPersist,
+  onSelect,
+  onSend,
+  onUpdate,
+}: SortableDraftItemProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: draft.id,
+    disabled: focused,
+  });
+  const canSend = draft.body.trim().length > 0;
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={cn(
+        "w-full rounded-lg bg-[#1e1e1e] px-[7px] py-2 text-left text-[14px] leading-[18px] text-[#bab9ba] transition-colors hover:bg-[#242424]",
+        selected && "text-[#d7d7d7]",
+        isDragging && "z-10 opacity-80 shadow-lg",
+      )}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+      }}
+      onPointerDownCapture={onSelect}
+      {...attributes}
+      {...(focused ? {} : listeners)}
+    >
+      {focused ? (
+        <textarea
+          ref={textareaRef}
+          value={draft.body}
+          placeholder="New draft"
+          rows={Math.max(1, draft.body.split("\n").length)}
+          className="field-sizing-content block max-h-40 min-h-[18px] w-full resize-none overflow-hidden bg-transparent p-0 text-[14px] leading-[18px] text-inherit outline-none placeholder:text-[#bab9ba]"
+          onChange={(event) => onUpdate(event.target.value)}
+          onFocus={onFocus}
+          onBlur={onPersist}
+        />
+      ) : (
+        <button
+          type="button"
+          className="block min-h-[18px] w-full p-0 text-left text-[14px] leading-[18px] text-inherit outline-none"
+          onClick={onEdit}
+        >
+          <span className={cn("line-clamp-3 break-words", !draft.body.trim() && "text-[#bab9ba]")}>
+            {draft.body.trim() || "New draft"}
+          </span>
+        </button>
+      )}
+      {selected ? (
+        <div className="mt-2 flex h-8 items-end justify-between gap-2">
+          <div className="min-w-0 pb-1 text-xs leading-none text-[#6e6e6e]">
+            {saveState === "saving" ? "Saving" : saveState === "error" ? "Not saved" : "Saved"}
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    size="icon-xs"
+                    variant="ghost"
+                    aria-label="Delete draft"
+                    className="text-[#949494] hover:text-[#f2b8b5]"
+                    onClick={onDelete}
+                  />
+                }
+              >
+                <Trash2Icon className="size-4" />
+              </TooltipTrigger>
+              <TooltipPopup side="top">Delete draft</TooltipPopup>
+            </Tooltip>
+            <button
+              type="button"
+              className={composerSendButtonClassName(canSend)}
+              disabled={!canSend}
+              onClick={onSend}
+              aria-label="Send draft"
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path
+                  d="M8 13V3M8 3L4 7M8 3L12 7"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export const ThreadPromptDraftsPanel = memo(function ThreadPromptDraftsPanel({
   threadRef,
   onSendPrompt,
 }: ThreadPromptDraftsPanelProps) {
   const [drafts, setDrafts] = useState<readonly ThreadPromptDraft[]>([]);
   const [selectedDraftId, setSelectedDraftId] = useState<ThreadPromptDraft["id"] | null>(null);
+  const [focusedDraftId, setFocusedDraftId] = useState<ThreadPromptDraft["id"] | null>(null);
   const [hydrated, setHydrated] = useState(false);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "error">("idle");
   const draftsRef = useRef<readonly ThreadPromptDraft[]>([]);
   const textareaRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
   const hydratedRef = useRef(false);
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 6,
+      },
+    }),
+  );
 
   const persistDrafts = useCallback(
     async (nextDrafts: readonly ThreadPromptDraft[], options?: { silent?: boolean }) => {
@@ -70,12 +213,11 @@ export const ThreadPromptDraftsPanel = memo(function ThreadPromptDraftsPanel({
       .persistence.getThreadPromptDrafts(threadRef.environmentId, threadRef.threadId)
       .then((loadedDrafts) => {
         if (cancelled) return;
-        const orderedDrafts = [...loadedDrafts].sort((a, b) =>
-          b.updatedAt.localeCompare(a.updatedAt),
-        );
+        const orderedDrafts = [...loadedDrafts];
         draftsRef.current = orderedDrafts;
         setDrafts(orderedDrafts);
         setSelectedDraftId(orderedDrafts[0]?.id ?? null);
+        setFocusedDraftId(null);
         hydratedRef.current = true;
         setHydrated(true);
       })
@@ -84,6 +226,7 @@ export const ThreadPromptDraftsPanel = memo(function ThreadPromptDraftsPanel({
         draftsRef.current = [];
         setDrafts([]);
         setSelectedDraftId(null);
+        setFocusedDraftId(null);
         hydratedRef.current = true;
         setHydrated(true);
         setSaveState("error");
@@ -123,6 +266,7 @@ export const ThreadPromptDraftsPanel = memo(function ThreadPromptDraftsPanel({
     const nextDraft = createPromptDraft(threadRef);
     setDrafts((current) => [nextDraft, ...current]);
     setSelectedDraftId(nextDraft.id);
+    setFocusedDraftId(nextDraft.id);
     window.requestAnimationFrame(() => {
       textareaRefs.current[nextDraft.id]?.focus();
     });
@@ -160,6 +304,17 @@ export const ThreadPromptDraftsPanel = memo(function ThreadPromptDraftsPanel({
     if (!prompt) return;
     onSendPrompt(prompt);
   }, [onSendPrompt, selectedDraft]);
+
+  const reorderDrafts = useCallback((event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    setDrafts((current) => {
+      const oldIndex = current.findIndex((draft) => draft.id === active.id);
+      const newIndex = current.findIndex((draft) => draft.id === over.id);
+      if (oldIndex < 0 || newIndex < 0) return current;
+      return arrayMove([...current], oldIndex, newIndex);
+    });
+  }, []);
 
   return (
     <div className="flex h-full min-h-0 flex-col p-2 text-[#bab9ba]">
@@ -199,84 +354,53 @@ export const ThreadPromptDraftsPanel = memo(function ThreadPromptDraftsPanel({
             New draft
           </button>
         ) : (
-          drafts.map((draft) => {
-            const selected = draft.id === selectedDraftId;
-            return (
-              <div
-                key={draft.id}
-                className={cn(
-                  "w-full rounded-lg bg-[#1e1e1e] px-[7px] py-2 text-left text-[14px] leading-[18px] text-[#bab9ba] transition-colors hover:bg-[#242424]",
-                  selected && "text-[#d7d7d7]",
-                )}
-                onPointerDown={() => setSelectedDraftId(draft.id)}
-              >
-                <textarea
-                  ref={(element) => {
-                    textareaRefs.current[draft.id] = element;
-                  }}
-                  value={draft.body}
-                  placeholder="New draft"
-                  rows={Math.max(1, draft.body.split("\n").length)}
-                  className="field-sizing-content block max-h-40 min-h-[18px] w-full resize-none overflow-hidden bg-transparent p-0 text-[14px] leading-[18px] text-inherit outline-none placeholder:text-[#bab9ba]"
-                  onChange={(event) => updateDraft(draft.id, event.target.value)}
-                  onFocus={() => setSelectedDraftId(draft.id)}
-                  onBlur={() => void persistDrafts(draftsRef.current)}
-                />
-                {selected ? (
-                  <div className="mt-2 flex h-8 items-end justify-between gap-2">
-                    <div className="min-w-0 pb-1 text-xs leading-none text-[#6e6e6e]">
-                      {saveState === "saving"
-                        ? "Saving"
-                        : saveState === "error"
-                          ? "Not saved"
-                          : "Saved"}
-                    </div>
-                    <div className="flex shrink-0 items-center gap-1">
-                      <Tooltip>
-                        <TooltipTrigger
-                          render={
-                            <Button
-                              size="icon-xs"
-                              variant="ghost"
-                              aria-label="Delete draft"
-                              className="text-[#949494] hover:text-[#f2b8b5]"
-                              onClick={deleteSelectedDraft}
-                            />
-                          }
-                        >
-                          <Trash2Icon className="size-4" />
-                        </TooltipTrigger>
-                        <TooltipPopup side="top">Delete draft</TooltipPopup>
-                      </Tooltip>
-                      <button
-                        type="button"
-                        className={composerSendButtonClassName(draft.body.trim().length > 0)}
-                        disabled={draft.body.trim().length === 0}
-                        onClick={sendSelectedDraft}
-                        aria-label="Send draft"
-                      >
-                        <svg
-                          width="16"
-                          height="16"
-                          viewBox="0 0 16 16"
-                          fill="none"
-                          aria-hidden="true"
-                        >
-                          <path
-                            d="M8 13V3M8 3L4 7M8 3L12 7"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-                ) : null}
+          <DndContext
+            collisionDetection={closestCenter}
+            modifiers={[restrictToVerticalAxis]}
+            sensors={sensors}
+            onDragEnd={reorderDrafts}
+          >
+            <SortableContext
+              items={drafts.map((draft) => draft.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              <div className="space-y-2">
+                {drafts.map((draft) => (
+                  <SortableDraftItem
+                    key={draft.id}
+                    draft={draft}
+                    focused={focusedDraftId === draft.id}
+                    selected={draft.id === selectedDraftId}
+                    saveState={saveState}
+                    textareaRef={(element) => {
+                      textareaRefs.current[draft.id] = element;
+                    }}
+                    onDelete={deleteSelectedDraft}
+                    onEdit={() => {
+                      setSelectedDraftId(draft.id);
+                      setFocusedDraftId(draft.id);
+                      window.requestAnimationFrame(() => {
+                        textareaRefs.current[draft.id]?.focus();
+                      });
+                    }}
+                    onFocus={() => {
+                      setSelectedDraftId(draft.id);
+                      setFocusedDraftId(draft.id);
+                    }}
+                    onPersist={() => {
+                      if (focusedDraftId === draft.id) {
+                        setFocusedDraftId(null);
+                      }
+                      void persistDrafts(draftsRef.current);
+                    }}
+                    onSelect={() => setSelectedDraftId(draft.id)}
+                    onSend={sendSelectedDraft}
+                    onUpdate={(body) => updateDraft(draft.id, body)}
+                  />
+                ))}
               </div>
-            );
-          })
+            </SortableContext>
+          </DndContext>
         )}
       </div>
     </div>

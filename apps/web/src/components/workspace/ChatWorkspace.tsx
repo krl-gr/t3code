@@ -73,6 +73,11 @@ import { ChatWorkspacePanel } from "./ChatWorkspacePanel";
 const CHAT_PANEL_COMPONENT_ID = "chatContainer";
 const WORKSPACE_PERSIST_DEBOUNCE_MS = 250;
 
+type WorkspaceRestorePhase = "pending" | "restoring" | "settled";
+type StartupRoutePolicy = "restore-saved-active";
+
+const STARTUP_ROUTE_POLICY: StartupRoutePolicy = "restore-saved-active";
+
 export interface ChatWorkspaceRouteTarget {
   target: ChatWorkspacePanelTarget;
   diffSearch: DiffRouteSearch;
@@ -153,6 +158,10 @@ function routeSyncKeyForPanelTarget(
 
   const normalizedDiffSearch = parseDiffRouteSearch({ ...diffSearch });
   return `thread:${target.ref.environmentId}:${target.ref.threadId}:${normalizedDiffSearch.diff ?? ""}:${normalizedDiffSearch.diffTurnId ?? ""}:${normalizedDiffSearch.diffFilePath ?? ""}`;
+}
+
+function routeKeyForWorkspaceRouteTarget(target: ChatWorkspaceRouteTarget | null): string | null {
+  return target ? getChatWorkspaceRouteTargetKey(target) : null;
 }
 
 function nextDiffSearch(previous: DiffRouteSearch, next: DiffRouteSearchUpdater): DiffRouteSearch {
@@ -555,10 +564,21 @@ export function ChatWorkspace({ children, routeTarget = null }: ChatWorkspacePro
     useHandleNewThread();
   const apiRef = useRef<DockviewApi | null>(null);
   const restoredRef = useRef(false);
+  const restorePhaseRef = useRef<WorkspaceRestorePhase>("pending");
+  const startupRoutePolicyRef = useRef<StartupRoutePolicy>(STARTUP_ROUTE_POLICY);
+  const initialRouteTargetKeyRef = useRef<string | null>(
+    routeKeyForWorkspaceRouteTarget(routeTarget),
+  );
+  const hasRestoredPersistedPanelsRef = useRef(false);
   const persistTimerRef = useRef<number | null>(null);
+  const routeSyncFrameRef = useRef<number | null>(null);
+  const restoreSettleFrameRef = useRef<number | null>(null);
   const lastAppliedRouteTargetKeyRef = useRef<string | null>(null);
   const lastRouteSyncRef = useRef<string | null>(null);
+  const ignoredStartupRouteTargetKeyRef = useRef<string | null>(null);
   const pendingRoutePanelIdRef = useRef<ChatWorkspacePanelId | null>(null);
+  const pendingActivePanelRouteSyncRef = useRef<ChatWorkspacePanelId | null>(null);
+  const routeTargetRef = useRef<ChatWorkspaceRouteTarget | null>(routeTarget);
   const panelsByIdRef = useRef<Record<ChatWorkspacePanelId, ChatWorkspacePanelState>>({});
   const activePanelIdRef = useRef<ChatWorkspacePanelId | null>(null);
   const [api, setApi] = useState<DockviewApi | null>(null);
@@ -580,6 +600,10 @@ export function ChatWorkspace({ children, routeTarget = null }: ChatWorkspacePro
   useEffect(() => {
     panelsByIdRef.current = panelsById;
   }, [panelsById]);
+
+  useEffect(() => {
+    routeTargetRef.current = routeTarget;
+  }, [routeTarget]);
 
   useEffect(() => {
     activePanelIdRef.current = activePanelId;
@@ -622,6 +646,14 @@ export function ChatWorkspace({ children, routeTarget = null }: ChatWorkspacePro
       if (persistTimerRef.current) {
         window.clearTimeout(persistTimerRef.current);
         persistTimerRef.current = null;
+      }
+      if (routeSyncFrameRef.current !== null) {
+        window.cancelAnimationFrame(routeSyncFrameRef.current);
+        routeSyncFrameRef.current = null;
+      }
+      if (restoreSettleFrameRef.current !== null) {
+        window.cancelAnimationFrame(restoreSettleFrameRef.current);
+        restoreSettleFrameRef.current = null;
       }
       persistNow();
     };
@@ -679,9 +711,13 @@ export function ChatWorkspace({ children, routeTarget = null }: ChatWorkspacePro
       }
 
       const panel = ensureDockviewPanel(currentApi, panelId, nextState, referenceGroupId);
-      panel.api.setActive();
-      activePanelIdRef.current = panelId;
-      setActivePanelId(panelId);
+      if (currentApi.activePanel?.id !== panelId) {
+        panel.api.setActive();
+      }
+      if (activePanelIdRef.current !== panelId) {
+        activePanelIdRef.current = panelId;
+        setActivePanelId(panelId);
+      }
       return true;
     },
     [ensureDockviewPanel],
@@ -715,9 +751,13 @@ export function ChatWorkspace({ children, routeTarget = null }: ChatWorkspacePro
       }
 
       const panel = ensureDockviewPanel(currentApi, panelId, nextState, referenceGroupId);
-      panel.api.setActive();
-      activePanelIdRef.current = panelId;
-      setActivePanelId(panelId);
+      if (currentApi.activePanel?.id !== panelId) {
+        panel.api.setActive();
+      }
+      if (activePanelIdRef.current !== panelId) {
+        activePanelIdRef.current = panelId;
+        setActivePanelId(panelId);
+      }
       return true;
     },
     [ensureDockviewPanel],
@@ -870,6 +910,10 @@ export function ChatWorkspace({ children, routeTarget = null }: ChatWorkspacePro
 
   const syncActivePanelRoute = useCallback(
     (panelId: ChatWorkspacePanelId | null) => {
+      if (!restoredRef.current || restorePhaseRef.current !== "settled") {
+        return;
+      }
+
       if (!panelId) {
         if (lastRouteSyncRef.current !== "index") {
           lastRouteSyncRef.current = "index";
@@ -929,6 +973,63 @@ export function ChatWorkspace({ children, routeTarget = null }: ChatWorkspacePro
     [navigate, router],
   );
 
+  const scheduleActivePanelRouteSync = useCallback(
+    (panelId: ChatWorkspacePanelId | null) => {
+      pendingActivePanelRouteSyncRef.current = panelId;
+
+      if (!restoredRef.current || restorePhaseRef.current !== "settled") {
+        return;
+      }
+
+      if (routeSyncFrameRef.current !== null) {
+        window.cancelAnimationFrame(routeSyncFrameRef.current);
+      }
+
+      routeSyncFrameRef.current = window.requestAnimationFrame(() => {
+        routeSyncFrameRef.current = null;
+        if (!restoredRef.current || restorePhaseRef.current !== "settled") {
+          return;
+        }
+        syncActivePanelRoute(pendingActivePanelRouteSyncRef.current);
+      });
+    },
+    [syncActivePanelRoute],
+  );
+
+  const applyRouteTargetToActivePanel = useCallback(
+    (nextRouteTarget: ChatWorkspaceRouteTarget): ChatWorkspacePanelId | null => {
+      const routeTargetKey = getChatWorkspaceRouteTargetKey(nextRouteTarget);
+      const panelId = openWorkspaceTarget({
+        disposition: "active-panel",
+        target:
+          nextRouteTarget.target.kind === "thread"
+            ? {
+                kind: "thread",
+                ref: nextRouteTarget.target.ref,
+                diffSearch: nextRouteTarget.diffSearch,
+              }
+            : {
+                kind: "draft",
+                draftId: nextRouteTarget.target.draftId,
+                ref: nextRouteTarget.target.ref,
+                diffSearch: nextRouteTarget.diffSearch,
+              },
+      });
+      if (!panelId) {
+        return null;
+      }
+
+      lastAppliedRouteTargetKeyRef.current = routeTargetKey;
+      pendingRoutePanelIdRef.current = panelId;
+      lastRouteSyncRef.current = routeSyncKeyForPanelTarget(
+        nextRouteTarget.target,
+        nextRouteTarget.diffSearch,
+      );
+      return panelId;
+    },
+    [openWorkspaceTarget],
+  );
+
   const updatePanelDiffSearch = useCallback(
     (panelId: ChatWorkspacePanelId, next: DiffRouteSearchUpdater) => {
       const panelState = panelsByIdRef.current[panelId];
@@ -949,12 +1050,16 @@ export function ChatWorkspace({ children, routeTarget = null }: ChatWorkspacePro
       panelsByIdRef.current = nextPanelsById;
       setPanelsById(nextPanelsById);
       lastRouteSyncRef.current = null;
-      syncActivePanelRoute(panelId);
+      scheduleActivePanelRouteSync(panelId);
     },
-    [syncActivePanelRoute],
+    [scheduleActivePanelRouteSync],
   );
 
   const cleanupStalePanels = useCallback(() => {
+    if (!restoredRef.current || restorePhaseRef.current !== "settled") {
+      return;
+    }
+
     const appState = useStore.getState();
     const draftState = useComposerDraftStore.getState();
 
@@ -988,17 +1093,21 @@ export function ChatWorkspace({ children, routeTarget = null }: ChatWorkspacePro
   const onReady = useCallback(
     (event: DockviewReadyEvent) => {
       const currentApi = event.api;
+      restorePhaseRef.current = "restoring";
+      initialRouteTargetKeyRef.current = routeKeyForWorkspaceRouteTarget(routeTargetRef.current);
       apiRef.current = currentApi;
       setApi(currentApi);
 
       const persisted = readPersistedChatWorkspaceState();
       let restoredState: PersistedChatWorkspaceStateV1 = persisted;
+      let restoredSavedPanels = Object.keys(persisted.panelsById).length > 0;
 
       if (persisted.dockview) {
         try {
           currentApi.fromJSON(persisted.dockview as SerializedDockview);
         } catch {
           currentApi.clear();
+          restoredSavedPanels = false;
           const restoredPanelId = routeTarget ? createChatWorkspacePanelId() : null;
           restoredState = routeTarget
             ? {
@@ -1016,6 +1125,8 @@ export function ChatWorkspace({ children, routeTarget = null }: ChatWorkspacePro
           writePersistedChatWorkspaceState(persistedStateWithDockview(restoredState, null));
         }
       }
+      hasRestoredPersistedPanelsRef.current =
+        restoredSavedPanels && Object.keys(restoredState.panelsById).length > 0;
 
       const restoredPanelIds = new Set(Object.keys(restoredState.panelsById));
       const restoredPanels = currentApi.panels.slice();
@@ -1059,8 +1170,41 @@ export function ChatWorkspace({ children, routeTarget = null }: ChatWorkspacePro
       setActivePanelId(nextActivePanelId);
       restoredRef.current = true;
       schedulePersist();
+
+      if (restoreSettleFrameRef.current !== null) {
+        window.cancelAnimationFrame(restoreSettleFrameRef.current);
+      }
+      restoreSettleFrameRef.current = window.requestAnimationFrame(() => {
+        restoreSettleFrameRef.current = window.requestAnimationFrame(() => {
+          restoreSettleFrameRef.current = null;
+          restorePhaseRef.current = "settled";
+          cleanupStalePanels();
+
+          if (
+            hasRestoredPersistedPanelsRef.current &&
+            startupRoutePolicyRef.current === "restore-saved-active"
+          ) {
+            scheduleActivePanelRouteSync(activePanelIdRef.current);
+            return;
+          }
+
+          const currentRouteTarget = routeTargetRef.current;
+          if (currentRouteTarget) {
+            applyRouteTargetToActivePanel(currentRouteTarget);
+            return;
+          }
+
+          scheduleActivePanelRouteSync(activePanelIdRef.current);
+        });
+      });
     },
-    [routeTarget, schedulePersist],
+    [
+      applyRouteTargetToActivePanel,
+      cleanupStalePanels,
+      routeTarget,
+      scheduleActivePanelRouteSync,
+      schedulePersist,
+    ],
   );
 
   useEffect(() => {
@@ -1069,8 +1213,12 @@ export function ChatWorkspace({ children, routeTarget = null }: ChatWorkspacePro
     }
     const activeDisposable = api.onDidActivePanelChange((panel) => {
       const panelId = normalizePanelId(panel?.id ?? "");
+      if (activePanelIdRef.current === panelId) {
+        return;
+      }
       activePanelIdRef.current = panelId;
       setActivePanelId(panelId);
+      scheduleActivePanelRouteSync(panelId);
     });
     const removeDisposable = api.onDidRemovePanel((panel) => {
       const panelId = normalizePanelId(panel.id);
@@ -1086,6 +1234,7 @@ export function ChatWorkspace({ children, routeTarget = null }: ChatWorkspacePro
         const nextPanelId = normalizePanelId(api.activePanel?.id ?? "");
         activePanelIdRef.current = nextPanelId;
         setActivePanelId(nextPanelId);
+        scheduleActivePanelRouteSync(nextPanelId);
       }
     });
     const layoutDisposable = api.onDidLayoutChange(schedulePersist);
@@ -1094,7 +1243,7 @@ export function ChatWorkspace({ children, routeTarget = null }: ChatWorkspacePro
       removeDisposable.dispose();
       layoutDisposable.dispose();
     };
-  }, [api, schedulePersist]);
+  }, [api, scheduleActivePanelRouteSync, schedulePersist]);
 
   useEffect(() => {
     if (!api || !routeTarget || !restoredRef.current) {
@@ -1103,35 +1252,30 @@ export function ChatWorkspace({ children, routeTarget = null }: ChatWorkspacePro
       }
       return;
     }
+    if (restorePhaseRef.current !== "settled") {
+      return;
+    }
     const routeTargetKey = getChatWorkspaceRouteTargetKey(routeTarget);
+    const routeSyncKey = routeSyncKeyForPanelTarget(routeTarget.target, routeTarget.diffSearch);
+    if (lastRouteSyncRef.current === routeSyncKey) {
+      lastAppliedRouteTargetKeyRef.current = routeTargetKey;
+      return;
+    }
+    if (
+      hasRestoredPersistedPanelsRef.current &&
+      startupRoutePolicyRef.current === "restore-saved-active" &&
+      initialRouteTargetKeyRef.current === routeTargetKey &&
+      ignoredStartupRouteTargetKeyRef.current !== routeTargetKey
+    ) {
+      ignoredStartupRouteTargetKeyRef.current = routeTargetKey;
+      lastAppliedRouteTargetKeyRef.current = routeTargetKey;
+      return;
+    }
     if (lastAppliedRouteTargetKeyRef.current === routeTargetKey) {
       return;
     }
-    const panelId = openWorkspaceTarget({
-      disposition: "active-panel",
-      target:
-        routeTarget.target.kind === "thread"
-          ? {
-              kind: "thread",
-              ref: routeTarget.target.ref,
-              diffSearch: routeTarget.diffSearch,
-            }
-          : {
-              kind: "draft",
-              draftId: routeTarget.target.draftId,
-              ref: routeTarget.target.ref,
-              diffSearch: routeTarget.diffSearch,
-            },
-    });
-    if (panelId) {
-      lastAppliedRouteTargetKeyRef.current = routeTargetKey;
-      pendingRoutePanelIdRef.current = panelId;
-      lastRouteSyncRef.current = routeSyncKeyForPanelTarget(
-        routeTarget.target,
-        routeTarget.diffSearch,
-      );
-    }
-  }, [api, openWorkspaceTarget, routeTarget]);
+    applyRouteTargetToActivePanel(routeTarget);
+  }, [api, applyRouteTargetToActivePanel, routeTarget]);
 
   useEffect(() => {
     if (!api || !restoredRef.current) {
@@ -1143,8 +1287,8 @@ export function ChatWorkspace({ children, routeTarget = null }: ChatWorkspacePro
     if (activePanelId === pendingRoutePanelIdRef.current) {
       pendingRoutePanelIdRef.current = null;
     }
-    syncActivePanelRoute(activePanelId);
-  }, [activePanelId, api, panelsById, syncActivePanelRoute]);
+    scheduleActivePanelRouteSync(activePanelId);
+  }, [activePanelId, api, panelsById, scheduleActivePanelRouteSync]);
 
   useEffect(() => {
     const unsubscribeApp = useStore.subscribe(cleanupStalePanels);

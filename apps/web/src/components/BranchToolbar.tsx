@@ -15,6 +15,7 @@ import {
   useRef,
   useState,
   type ReactNode,
+  type SVGProps,
 } from "react";
 
 import { useComposerDraftStore, type DraftId } from "../composerDraftStore";
@@ -65,7 +66,83 @@ import {
 import { Toggle } from "./ui/toggle";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 import { OpenInPicker, shouldShowOpenInPicker } from "./chat/OpenInPicker";
-import { NotebookPenIcon } from "lucide-react";
+
+function ContextBarDraftsIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      {...props}
+    >
+      <g clipPath="url(#drafts-icon-clip)">
+        <path
+          d="M6.8916 2.27325C7.6237 2.13157 8.37617 2.13157 9.10827 2.27325"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M9.10827 13.7266C8.37617 13.8682 7.6237 13.8682 6.8916 13.7266"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M11.272 3.16992C11.8912 3.58947 12.4239 4.12418 12.8411 4.74492"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M2.27276 9.10729C2.13108 8.37519 2.13108 7.62272 2.27276 6.89062"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M12.8299 11.2725C12.4103 11.8917 11.8756 12.4244 11.2549 12.8416"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M13.7271 6.89062C13.8687 7.62272 13.8687 8.37519 13.7271 9.10729"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M3.1709 4.72737C3.59045 4.10818 4.12516 3.57545 4.7459 3.1582"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M4.59525 13.3189L2.90008 13.8148C2.80398 13.8403 2.70296 13.8408 2.60659 13.8163C2.51023 13.7918 2.42173 13.7431 2.34949 13.6748C2.27726 13.6065 2.22368 13.5208 2.19386 13.426C2.16403 13.3311 2.15894 13.2302 2.17908 13.1329L2.742 11.3945"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </g>
+      <defs>
+        <clipPath id="drafts-icon-clip">
+          <rect width="14" height="14" fill="white" transform="translate(1 1)" />
+        </clipPath>
+      </defs>
+    </svg>
+  );
+}
 
 interface BranchToolbarProps {
   environmentId: EnvironmentId;
@@ -516,7 +593,7 @@ export const BranchToolbar = memo(function BranchToolbar({
             />
           }
         >
-          <NotebookPenIcon className="size-4" />
+          <ContextBarDraftsIcon className="size-4" />
         </TooltipTrigger>
         <TooltipPopup side="top">Drafts</TooltipPopup>
       </Tooltip>
@@ -666,7 +743,7 @@ export const BranchToolbar = memo(function BranchToolbar({
               <MenuGroup>
                 <MenuGroupLabel>View</MenuGroupLabel>
                 <ContextActionMenuItem
-                  icon={<NotebookPenIcon className="size-4" />}
+                  icon={<ContextBarDraftsIcon className="size-4" />}
                   onSelect={onToggleDrafts}
                 >
                   Drafts

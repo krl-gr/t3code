@@ -94,13 +94,51 @@ vi.mock("./ChatWorkspacePanel", () => ({
 const environmentId = EnvironmentId.make("environment-local");
 const threadOneId = ThreadId.make("thread-one");
 const threadTwoId = ThreadId.make("thread-two");
+const threadThreeId = ThreadId.make("thread-three");
 const draftOneId = DraftId.make("draft-one");
 const draftOneThreadId = ThreadId.make("thread-draft-one");
+
+function seedPersistedWorkspacePanels(input: {
+  activePanelId: string;
+  panels: ReadonlyArray<{
+    panelId: string;
+    threadId: ThreadId;
+  }>;
+}) {
+  window.localStorage.setItem(
+    CHAT_WORKSPACE_STORAGE_KEY,
+    JSON.stringify({
+      version: 1,
+      dockview: null,
+      activePanelId: input.activePanelId,
+      panelsById: Object.fromEntries(
+        input.panels.map((panel) => [
+          panel.panelId,
+          {
+            kind: "chat",
+            target: {
+              kind: "thread",
+              ref: {
+                environmentId,
+                threadId: panel.threadId,
+              },
+            },
+            diffSearch: {},
+          },
+        ]),
+      ),
+    }),
+  );
+}
 
 function readPersistedPanelThreadIds(): string[] {
   return Object.values(readPersistedChatWorkspaceState().panelsById).flatMap((panelState) =>
     panelState.kind === "chat" ? [String(panelState.target.ref.threadId)] : [],
   );
+}
+
+function readActiveWorkspacePanelText(): string {
+  return document.querySelector('[data-active="true"]')?.textContent ?? "";
 }
 
 function WorkspaceRouteShell() {
@@ -207,6 +245,82 @@ describe("ChatWorkspace", () => {
     const mounted = await renderWorkspace("/");
     try {
       await expect.element(page.getByText("Pick a thread to continue")).toBeVisible();
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("restores the saved active tab instead of replacing it with the startup URL", async () => {
+    seedPersistedWorkspacePanels({
+      activePanelId: "workspace:panel-two",
+      panels: [
+        { panelId: "workspace:panel-one", threadId: threadOneId },
+        { panelId: "workspace:panel-two", threadId: threadTwoId },
+      ],
+    });
+    const mounted = await renderWorkspace(`/${environmentId}/${threadOneId}`);
+
+    try {
+      await vi.waitFor(() => {
+        expect(document.querySelectorAll(".dv-tab")).toHaveLength(2);
+        expect(readActiveWorkspacePanelText()).toContain(String(threadTwoId));
+        expect(mounted.router.state.location.pathname).toBe(`/${environmentId}/${threadTwoId}`);
+      });
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("does not overwrite restored workspace tabs with the initial route target", async () => {
+    seedPersistedWorkspacePanels({
+      activePanelId: "workspace:panel-two",
+      panels: [
+        { panelId: "workspace:panel-one", threadId: threadOneId },
+        { panelId: "workspace:panel-two", threadId: threadTwoId },
+      ],
+    });
+    const mounted = await renderWorkspace(`/${environmentId}/${threadOneId}`);
+
+    try {
+      await vi.waitFor(() => {
+        expect(readActiveWorkspacePanelText()).toContain(String(threadTwoId));
+      });
+      expect(readPersistedPanelThreadIds().toSorted()).toEqual(
+        [String(threadOneId), String(threadTwoId)].toSorted(),
+      );
+    } finally {
+      await mounted.cleanup();
+    }
+  });
+
+  it("reuses the restored active tab for future route navigation", async () => {
+    seedPersistedWorkspacePanels({
+      activePanelId: "workspace:panel-two",
+      panels: [
+        { panelId: "workspace:panel-one", threadId: threadOneId },
+        { panelId: "workspace:panel-two", threadId: threadTwoId },
+      ],
+    });
+    const mounted = await renderWorkspace(`/${environmentId}/${threadOneId}`);
+
+    try {
+      await vi.waitFor(() => {
+        expect(readActiveWorkspacePanelText()).toContain(String(threadTwoId));
+        expect(mounted.router.state.location.pathname).toBe(`/${environmentId}/${threadTwoId}`);
+      });
+
+      await mounted.router.navigate({
+        to: "/$environmentId/$threadId",
+        params: {
+          environmentId,
+          threadId: threadThreeId,
+        },
+      });
+
+      await vi.waitFor(() => {
+        expect(document.querySelectorAll(".dv-tab")).toHaveLength(2);
+        expect(readActiveWorkspacePanelText()).toContain(String(threadThreeId));
+      });
     } finally {
       await mounted.cleanup();
     }
