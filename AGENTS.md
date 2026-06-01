@@ -24,6 +24,23 @@ If a tradeoff is required, choose correctness and robustness over short-term con
 
 Long term maintainability is a core priority. If you add new functionality, first check if there is shared logic that can be extracted to a separate module. Duplicate logic across multiple files is a code smell and should be avoided. Don't be afraid to change existing code. Don't take shortcuts by just adding local logic to solve a problem.
 
+## Project-Local Skills
+
+Reusable agent workflows for this repository live in `agents/skills/`.
+
+Treat this `AGENTS.md` file as the canonical project instruction source. When a project-local skill applies, read the relevant `SKILL.md` after reading this file and follow both; `AGENTS.md` takes precedence if there is a conflict.
+
+Landing-page skills copied from TheUICodex App Landing Core:
+
+- `agents/skills/app-landing-workflow/SKILL.md`: full app landing-page workflow from product understanding through page versions.
+- `agents/skills/landing-workspace-setup/SKILL.md`: workspace setup and initial landing plan.
+- `agents/skills/landing-product-audience-discovery/SKILL.md`: product problem, audience, goals, and source discovery.
+- `agents/skills/landing-customer-research-tone/SKILL.md`: customer research, objections, alternatives, and tone.
+- `agents/skills/landing-content-screenshot-plan/SKILL.md`: landing-page copy, screenshot choices, proof blocks, and CTA direction.
+- `agents/skills/landing-visual-directions/SKILL.md`: visual references, design direction, and multiple page versions.
+
+Other CLIs that do not auto-discover Codex skills should be pointed directly at these files when landing-page work is requested.
+
 ## Package Roles
 
 - `apps/server`: Node.js WebSocket server. Wraps Codex app-server (JSON-RPC over stdio), serves the React web app, and manages provider sessions.
