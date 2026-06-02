@@ -31,6 +31,7 @@
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
   --color-foreground: var(--foreground);
+  --color-app-content-background: var(--app-content-background);
   --color-background: var(--background);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -94,6 +95,7 @@
   --radius: 0.625rem;
   --background: var(--color-white);
   --app-chrome-background: var(--background);
+  --app-content-background: --alpha(var(--color-white) / 50%);
   --foreground: var(--color-neutral-800);
   --card: var(--color-white);
   --card-foreground: var(--color-neutral-800);
@@ -118,7 +120,7 @@
   --success-foreground: var(--color-emerald-700);
   --warning: var(--color-amber-500);
   --warning-foreground: var(--color-amber-700);
-  --sidebar: --alpha(var(--color-white) / 50%);
+  --sidebar: --alpha(var(--color-white) / 25%);
   --sidebar-foreground: var(--foreground);
   --sidebar-accent: --alpha(var(--color-black) / 5%);
   --sidebar-accent-foreground: var(--foreground);
@@ -140,6 +142,7 @@
     color-scheme: dark;
     --background: color-mix(in srgb, var(--color-neutral-950) 95%, var(--color-white));
     --app-chrome-background: var(--background);
+    --app-content-background: #131313FA;
     --foreground: var(--color-neutral-100);
     --card: color-mix(in srgb, var(--background) 98%, var(--color-white));
     --card-foreground: var(--color-neutral-100);
@@ -164,7 +167,7 @@
     --success-foreground: var(--color-emerald-400);
     --warning: var(--color-amber-500);
     --warning-foreground: var(--color-amber-400);
-    --sidebar: color-mix(in srgb, var(--background) 67%, transparent);
+    --sidebar: color-mix(in srgb, var(--background) 34%, transparent);
     --sidebar-foreground: var(--foreground);
     --sidebar-accent: --alpha(var(--color-white) / 7%);
     --sidebar-accent-foreground: var(--foreground);
@@ -247,7 +250,7 @@ body::after {
   --dv-active-sash-transition-duration: 0.08s;
   --dv-drag-over-background-color: color-mix(in srgb, var(--primary) 18%, transparent);
   --dv-drag-over-border-color: color-mix(in srgb, var(--primary) 42%, transparent);
-  --dv-group-view-background-color: var(--background);
+  --dv-group-view-background-color: transparent;
   --dv-icon-hover-background-color: var(--accent);
   --dv-inactivegroup-hiddenpanel-tab-background-color: transparent;
   --dv-inactivegroup-hiddenpanel-tab-color: #bab9ba;
@@ -262,7 +265,7 @@ body::after {
   --dv-tab-divider-color: #2b2b2c;
   --dv-tab-font-size: 14px;
   --dv-tab-margin: 0;
-  --dv-tabs-and-actions-container-background-color: var(--background);
+  --dv-tabs-and-actions-container-background-color: transparent;
   --dv-tabs-and-actions-container-font-size: 14px;
   --dv-tabs-and-actions-container-height: 48px;
   --dv-tabs-container-scrollbar-color: var(--border);
@@ -270,7 +273,7 @@ body::after {
   --dv-activegroup-hiddenpanel-tab-color: #bab9ba;
   --dv-activegroup-visiblepanel-tab-background-color: transparent;
   --dv-activegroup-visiblepanel-tab-color: #bab9ba;
-  background: var(--background);
+  background: transparent;
   color: var(--foreground);
   font-family: inherit;
 }
@@ -379,7 +382,7 @@ body::after {
 }
 
 .t3code-dockview-theme .dv-view {
-  background: var(--background);
+  background: transparent;
 }
 
 pre,
