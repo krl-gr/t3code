@@ -13,13 +13,16 @@ import {
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as PubSub from "effect/PubSub";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
+import { ChildProcessSpawner } from "effect/unstable/process";
 
 import { createModelCapabilities } from "@t3tools/shared/model";
 import { ServerConfig } from "../../config.ts";
 import { getBrowserAutomationService } from "../../browser/BrowserAutomationService.ts";
+import { getComputerUseService } from "../../computerUse/ComputerUseService.ts";
 import { PiSdkManager } from "../../piSdkManager.ts";
 import { PI_PROVIDER_SETUP_MESSAGE, createPiHarnessCatalogSnapshot } from "../../piHarness.ts";
 import {
@@ -63,7 +66,7 @@ const PI_CAPABILITIES_WITH_THINKING = createModelCapabilities({
   ],
 });
 
-export type PiDriverEnv = ServerConfig;
+export type PiDriverEnv = ServerConfig | FileSystem.FileSystem | ChildProcessSpawner.ChildProcessSpawner;
 
 const withInstanceIdentity =
   (input: {
@@ -338,7 +341,13 @@ export const PiDriver: ProviderDriver<PiSettings, PiDriverEnv> = {
   create: ({ instanceId, displayName, accentColor, enabled, config }) =>
     Effect.gen(function* () {
       const serverConfig = yield* ServerConfig;
+      const fileSystem = yield* FileSystem.FileSystem;
+      const childProcessSpawner = yield* ChildProcessSpawner.ChildProcessSpawner;
       const browserAutomation = getBrowserAutomationService(serverConfig);
+      const computerUse = getComputerUseService(serverConfig, {
+        fileSystem,
+        childProcessSpawner,
+      });
       const continuationIdentity = defaultProviderContinuationIdentity({
         driverKind: DRIVER_KIND,
         instanceId,
@@ -353,6 +362,7 @@ export const PiDriver: ProviderDriver<PiSettings, PiDriverEnv> = {
       const manager = new PiSdkManager({
         stateDir: serverConfig.stateDir,
         browserAutomation,
+        computerUse,
       });
       const events = yield* PubSub.unbounded<ProviderRuntimeEvent>();
       const adapter = makePiAdapter(manager, events);

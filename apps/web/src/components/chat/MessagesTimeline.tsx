@@ -34,6 +34,7 @@ import {
   GitBranchIcon,
   GlobeIcon,
   HammerIcon,
+  MousePointer2Icon,
   type LucideIcon,
   SquarePenIcon,
   TerminalIcon,
@@ -1172,6 +1173,7 @@ function workEntryIcon(workEntry: TimelineWorkEntry): LucideIcon {
   if (workEntry.requestKind === "command") return TerminalIcon;
   if (workEntry.requestKind === "file-read") return EyeIcon;
   if (workEntry.requestKind === "file-change") return SquarePenIcon;
+  if (workEntry.requestKind === "dynamic-tool") return MousePointer2Icon;
 
   if (workEntry.itemType === "command_execution" || workEntry.command) {
     return TerminalIcon;

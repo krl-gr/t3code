@@ -75,7 +75,7 @@ interface DerivedWorkLogEntry extends WorkLogEntry {
 
 export interface PendingApproval {
   requestId: ApprovalRequestId;
-  requestKind: "command" | "file-read" | "file-change";
+  requestKind: "command" | "file-read" | "file-change" | "dynamic-tool";
   createdAt: string;
   detail?: string;
 }
@@ -185,8 +185,9 @@ function requestKindFromRequestType(requestType: unknown): PendingApproval["requ
   switch (requestType) {
     case "command_execution_approval":
     case "exec_command_approval":
-    case "dynamic_tool_call":
       return "command";
+    case "dynamic_tool_call":
+      return "dynamic-tool";
     case "file_read_approval":
       return "file-read";
     case "file_change_approval":
@@ -230,7 +231,8 @@ export function derivePendingApprovals(
       payload &&
       (payload.requestKind === "command" ||
         payload.requestKind === "file-read" ||
-        payload.requestKind === "file-change")
+        payload.requestKind === "file-change" ||
+        payload.requestKind === "dynamic-tool")
         ? payload.requestKind
         : payload
           ? requestKindFromRequestType(payload.requestType)
@@ -1048,7 +1050,8 @@ function extractWorkLogRequestKind(
   if (
     payload?.requestKind === "command" ||
     payload?.requestKind === "file-read" ||
-    payload?.requestKind === "file-change"
+    payload?.requestKind === "file-change" ||
+    payload?.requestKind === "dynamic-tool"
   ) {
     return payload.requestKind;
   }

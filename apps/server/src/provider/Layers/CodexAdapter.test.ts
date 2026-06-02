@@ -276,7 +276,10 @@ validationLayer("CodexAdapterLive validation", (it) => {
         runtimeMode: "full-access",
       });
 
-      assert.deepStrictEqual(validationRuntimeFactory.factory.mock.calls[0]?.[0], {
+      const runtimeOptions = validationRuntimeFactory.factory.mock.calls[0]?.[0];
+      assert.ok(runtimeOptions?.computerUse);
+      const { computerUse: _computerUse, ...runtimeOptionsWithoutComputerUse } = runtimeOptions;
+      assert.deepStrictEqual(runtimeOptionsWithoutComputerUse, {
         binaryPath: "codex",
         cwd: process.cwd(),
         model: "gpt-5.3-codex",

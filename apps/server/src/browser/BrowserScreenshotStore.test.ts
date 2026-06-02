@@ -51,6 +51,7 @@ describe("BrowserScreenshotStore", () => {
     expect(payload).toEqual({
       screenshotBase64: "YWJj",
       mimeType: "image/png",
+      kind: "browser",
       origin: "https://x.com",
       url: "https://x.com/krl_grn",
     });
@@ -77,8 +78,44 @@ describe("BrowserScreenshotStore", () => {
     expect(payload).toEqual({
       screenshotBase64: "YWJj",
       mimeType: "image/png",
+      kind: "browser",
       origin: "https://x.com",
       url: "https://x.com/krl_grn",
+    });
+  });
+
+  it("extracts Codex dynamic computer-use screenshot payloads", () => {
+    const payload = extractBrowserScreenshotPayload({
+      threadId: "provider-thread-1",
+      turnId: "turn-1",
+      item: {
+        id: "item-1",
+        type: "dynamicToolCall",
+        namespace: "t3_computer",
+        tool: "computer_screenshot",
+        status: "completed",
+        success: true,
+        arguments: {
+          app: "Simulator",
+        },
+        contentItems: [
+          {
+            type: "inputText",
+            text: "Captured screenshot.",
+          },
+          {
+            type: "inputImage",
+            imageUrl: "data:image/png;base64,YWJj",
+          },
+        ],
+      },
+    });
+
+    expect(payload).toEqual({
+      screenshotBase64: "YWJj",
+      mimeType: "image/png",
+      kind: "computer",
+      app: "Simulator",
     });
   });
 
@@ -94,6 +131,40 @@ describe("BrowserScreenshotStore", () => {
       content: [{ type: "text", text: "Browser action completed: search" }],
       details: { action: "search", blocked: false },
       isError: false,
+    });
+  });
+
+  it("redacts Codex dynamic computer-use screenshot data from activity payloads", () => {
+    expect(
+      stripBrowserScreenshotPersistence({
+        item: {
+          id: "item-1",
+          type: "dynamicToolCall",
+          namespace: "t3_computer",
+          tool: "computer_screenshot",
+          status: "completed",
+          success: true,
+          arguments: { app: "Simulator" },
+          contentItems: [
+            { type: "inputText", text: "Captured screenshot." },
+            { type: "inputImage", imageUrl: "data:image/png;base64,YWJj" },
+          ],
+        },
+      }),
+    ).toEqual({
+      item: {
+        id: "item-1",
+        type: "dynamicToolCall",
+        namespace: "t3_computer",
+        tool: "computer_screenshot",
+        status: "completed",
+        success: true,
+        arguments: { app: "Simulator" },
+        contentItems: [
+          { type: "inputText", text: "Captured screenshot." },
+          { type: "inputImage", imageUrl: "[screenshot persisted]" },
+        ],
+      },
     });
   });
 

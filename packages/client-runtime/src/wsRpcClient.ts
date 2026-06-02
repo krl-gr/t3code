@@ -157,6 +157,11 @@ export interface WsRpcClient {
     >;
     readonly closeBrowserProfile: RpcUnaryNoArgMethod<typeof WS_METHODS.browserProfileClose>;
     readonly clearBrowserProfile: RpcUnaryNoArgMethod<typeof WS_METHODS.browserProfileClear>;
+    readonly getComputerUseSnapshot: RpcUnaryNoArgMethod<typeof WS_METHODS.computerUseSnapshot>;
+    readonly restartComputerUse: RpcUnaryNoArgMethod<typeof WS_METHODS.computerUseRestart>;
+    readonly stopComputerUse: RpcUnaryNoArgMethod<typeof WS_METHODS.computerUseStop>;
+    readonly refreshComputerUseTools: RpcUnaryNoArgMethod<typeof WS_METHODS.computerUseRefreshTools>;
+    readonly runComputerUseDoctor: RpcUnaryNoArgMethod<typeof WS_METHODS.computerUseDoctor>;
   };
   readonly orchestration: {
     readonly dispatchCommand: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.dispatchCommand>;
@@ -309,6 +314,15 @@ export function createWsRpcClient(
         transport.request((client) => client[WS_METHODS.browserProfileClose]({})),
       clearBrowserProfile: () =>
         transport.request((client) => client[WS_METHODS.browserProfileClear]({})),
+      getComputerUseSnapshot: () =>
+        transport.request((client) => client[WS_METHODS.computerUseSnapshot]({})),
+      restartComputerUse: () =>
+        transport.request((client) => client[WS_METHODS.computerUseRestart]({})),
+      stopComputerUse: () => transport.request((client) => client[WS_METHODS.computerUseStop]({})),
+      refreshComputerUseTools: () =>
+        transport.request((client) => client[WS_METHODS.computerUseRefreshTools]({})),
+      runComputerUseDoctor: () =>
+        transport.request((client) => client[WS_METHODS.computerUseDoctor]({})),
       subscribeConfig: (listener, options) =>
         transport.subscribe(
           (client) => client[WS_METHODS.subscribeServerConfig]({}),

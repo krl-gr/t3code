@@ -47,6 +47,8 @@ import { resolveAttachmentPath } from "./attachmentStore.ts";
 import { applyAskModePromptPrefix } from "./provider/AskModeInstructions.ts";
 import { createPiBrowserTools } from "./browser/PiBrowserTools.ts";
 import type { BrowserAutomationServiceShape } from "./browser/BrowserAutomationService.ts";
+import { createPiComputerUseTools } from "./computerUse/PiComputerUseTools.ts";
+import type { ComputerUseServiceShape } from "./computerUse/ComputerUseService.ts";
 import type {
   ProviderThreadSnapshot,
   ProviderThreadTurnSnapshot,
@@ -61,6 +63,7 @@ import {
   mapPiToolNameToItemType,
   mapPiToolNameToRequestType,
   PI_BROWSER_TOOL_NAMES,
+  PI_COMPUTER_TOOL_NAMES,
   PI_DEFAULT_MODE_PROMPT_PREFIX,
   PI_FULL_TOOL_NAMES,
   PI_PLAN_MODE_PROMPT_PREFIX,
@@ -158,6 +161,7 @@ interface PiCreatedSession {
 export interface PiSdkManagerOptions {
   readonly stateDir: string;
   readonly browserAutomation?: BrowserAutomationServiceShape;
+  readonly computerUse?: ComputerUseServiceShape;
   readonly agentDir?: string;
   readonly sessionDir?: string;
   readonly createSession?: (input: PiSessionFactoryInput) => Promise<PiCreatedSession>;
@@ -412,6 +416,7 @@ export class PiSdkManager extends EventEmitter<PiSdkManagerEvents> {
   private readonly agentDir: string;
   private readonly sessionDir: string;
   private readonly browserAutomation: BrowserAutomationServiceShape | undefined;
+  private readonly computerUse: ComputerUseServiceShape | undefined;
   private readonly createSessionFactory: (
     input: PiSessionFactoryInput,
   ) => Promise<PiCreatedSession>;
@@ -425,6 +430,7 @@ export class PiSdkManager extends EventEmitter<PiSdkManagerEvents> {
       normalizeString(options.sessionDir) ??
       path.join(options.stateDir, "provider", "pi", "sessions");
     this.browserAutomation = options.browserAutomation;
+    this.computerUse = options.computerUse;
     this.createSessionFactory = options.createSession ?? createPiSessionWithSdk;
   }
 
@@ -481,6 +487,37 @@ export class PiSdkManager extends EventEmitter<PiSdkManagerEvents> {
     throw new Error(
       `Pi browser tools were not registered in the active session. Missing tools: ${missingToolNames.join(", ")}. Restart the Pi session or rebuild the tool registry.`,
     );
+  }
+
+  private assertComputerToolsRegistered(
+    context: PiSessionContext,
+    activeComputerToolNames: ReadonlyArray<string>,
+  ) {
+    if (!this.computerUse || activeComputerToolNames.length === 0) {
+      return;
+    }
+
+    const effectiveToolNames = new Set(context.session.getActiveToolNames());
+    const missingToolNames = activeComputerToolNames.filter(
+      (toolName) => !effectiveToolNames.has(toolName),
+    );
+    if (missingToolNames.length === 0) {
+      return;
+    }
+
+    throw new Error(
+      `Pi computer-use tools were not registered in the active session. Missing tools: ${missingToolNames.join(", ")}. Restart the Pi session or rebuild the tool registry.`,
+    );
+  }
+
+  private async resolveActiveToolNames(
+    interactionMode?: ProviderInteractionMode,
+  ): Promise<ReadonlyArray<string>> {
+    const baseToolNames = interactionMode === "plan" ? PI_PLAN_TOOL_NAMES : PI_FULL_TOOL_NAMES;
+    const computerToolNames = this.computerUse
+      ? await this.computerUse.activeToolNames(interactionMode)
+      : [];
+    return [...baseToolNames, ...computerToolNames];
   }
 
   private buildSessionConfiguredPayload(context: PiSessionContext) {
@@ -609,9 +646,10 @@ export class PiSdkManager extends EventEmitter<PiSdkManagerEvents> {
     readonly toolName: string;
     readonly turnId: TurnId;
     readonly detail: string;
+    readonly force?: boolean;
     readonly signal?: AbortSignal;
   }): Promise<void> {
-    if (input.context.sessionRecord.runtimeMode !== "approval-required") {
+    if (!input.force && input.context.sessionRecord.runtimeMode !== "approval-required") {
       return;
     }
 
@@ -736,8 +774,10 @@ export class PiSdkManager extends EventEmitter<PiSdkManagerEvents> {
     readonly contextRef: { current?: PiSessionContext };
   }): PiCustomTool[] {
     const browserTools = this.browserAutomation ? createPiBrowserTools(this.browserAutomation) : [];
+    const computerTools = this.computerUse ? createPiComputerUseTools(this.computerUse) : [];
+    const customTools = [...browserTools, ...computerTools];
 
-    return browserTools.map((tool) => {
+    return customTools.map((tool) => {
       const execute: PiCustomTool["execute"] = async (
         toolCallId: Parameters<PiCustomTool["execute"]>[0],
         params: Parameters<PiCustomTool["execute"]>[1],
@@ -753,12 +793,22 @@ export class PiSdkManager extends EventEmitter<PiSdkManagerEvents> {
         if (!currentTurn) {
           throw new Error(`No Pi turn is active while executing '${tool.name}'.`);
         }
+        const args = (params ?? {}) as Record<string, unknown>;
+        const computerApproval =
+          this.computerUse && (PI_COMPUTER_TOOL_NAMES as readonly string[]).includes(tool.name)
+            ? await this.computerUse.shouldRequireApproval({
+                toolName: tool.name,
+                args,
+                interactionMode: currentTurn.interactionMode,
+              })
+            : undefined;
 
         await this.awaitApprovalDecision({
           context,
           toolName: tool.name,
           turnId: currentTurn.turnId,
-          detail: summarizePiToolArgs(tool.name, params as Record<string, unknown>),
+          detail: computerApproval?.detail ?? summarizePiToolArgs(tool.name, args),
+          ...(computerApproval?.required ? { force: true } : {}),
           ...(signal !== undefined ? { signal } : {}),
         });
 
@@ -1215,10 +1265,15 @@ export class PiSdkManager extends EventEmitter<PiSdkManagerEvents> {
       this.emitSessionConfigured(context);
     }
 
-    const activeToolNames =
-      input.interactionMode === "plan" ? PI_PLAN_TOOL_NAMES : PI_FULL_TOOL_NAMES;
+    const activeToolNames = await this.resolveActiveToolNames(input.interactionMode);
     context.session.setActiveToolsByName(activeToolNames as unknown as string[]);
     this.assertBrowserToolsRegistered(context);
+    this.assertComputerToolsRegistered(
+      context,
+      activeToolNames.filter((toolName) =>
+        (PI_COMPUTER_TOOL_NAMES as readonly string[]).includes(toolName),
+      ),
+    );
 
     const images = await this.materializePiImages(input.attachments);
     const turnId = TurnId.make(`pi-turn-${randomUUID()}`);

@@ -2,7 +2,13 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 
+import {
+  COMPUTER_USE_NAMESPACE,
+  COMPUTER_USE_TOOL_PREFIX,
+} from "../computerUse/ComputerUseToolDefinitions.ts";
+
 const BROWSER_SCREENSHOTS_DIRNAME = "browser-screenshots";
+const COMPUTER_SCREENSHOTS_DIRNAME = "computer-screenshots";
 const DEFAULT_THREAD_TITLE = "untitled";
 const DEFAULT_ORIGIN = "unknown-origin";
 const TITLE_SEGMENT_MAX_LENGTH = 80;
@@ -11,8 +17,10 @@ const ORIGIN_SEGMENT_MAX_LENGTH = 80;
 interface BrowserScreenshotPayload {
   readonly screenshotBase64: string;
   readonly mimeType: "image/png";
+  readonly kind?: "browser" | "computer";
   readonly origin?: string;
   readonly url?: string;
+  readonly app?: string;
 }
 
 export interface PersistBrowserScreenshotInput extends BrowserScreenshotPayload {
@@ -67,11 +75,87 @@ function browserScreenshotTimestamp(createdAt: string): string {
   return `${date}_${hour}-${minute}-${second}${suffix}`;
 }
 
+function parsePngDataUrl(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const match = /^data:image\/png;base64,([a-z0-9+/=]+)$/i.exec(value.trim());
+  return match?.[1];
+}
+
+function computerUseAppNameFromArgs(args: unknown): string | undefined {
+  if (!isRecord(args)) {
+    return undefined;
+  }
+  const app = typeof args.app === "string" ? args.app.trim() : "";
+  return app.length > 0 ? app : undefined;
+}
+
+function isCompletedCodexComputerUseDynamicToolItem(
+  item: unknown,
+): item is Record<string, unknown> {
+  if (!isRecord(item)) {
+    return false;
+  }
+  if (
+    item.type !== "dynamicToolCall" ||
+    item.namespace !== COMPUTER_USE_NAMESPACE ||
+    typeof item.tool !== "string" ||
+    !item.tool.startsWith(COMPUTER_USE_TOOL_PREFIX)
+  ) {
+    return false;
+  }
+  return item.success !== false && item.status !== "failed";
+}
+
+function redactCodexComputerUseContentItems(item: Record<string, unknown>): Record<string, unknown> {
+  const contentItems = Array.isArray(item.contentItems) ? item.contentItems : undefined;
+  if (!contentItems) {
+    return item;
+  }
+  return {
+    ...item,
+    contentItems: contentItems.map((entry) =>
+      isRecord(entry) && entry.type === "inputImage" && typeof entry.imageUrl === "string"
+        ? { ...entry, imageUrl: "[screenshot persisted]" }
+        : entry,
+    ),
+  };
+}
+
+function extractCodexComputerScreenshotPayload(
+  value: Record<string, unknown>,
+): BrowserScreenshotPayload | null {
+  const item = isRecord(value.item) ? value.item : undefined;
+  if (!isCompletedCodexComputerUseDynamicToolItem(item)) {
+    return null;
+  }
+
+  const contentItems = Array.isArray(item.contentItems) ? item.contentItems : [];
+  const imageItem = contentItems.find(
+    (entry): entry is { readonly type: "inputImage"; readonly imageUrl: string } =>
+      isRecord(entry) && entry.type === "inputImage" && typeof entry.imageUrl === "string",
+  );
+  const screenshotBase64 = parsePngDataUrl(imageItem?.imageUrl);
+  if (!screenshotBase64) {
+    return null;
+  }
+
+  const app = computerUseAppNameFromArgs(item.arguments);
+  return {
+    screenshotBase64,
+    mimeType: "image/png",
+    kind: "computer",
+    ...(app ? { app } : {}),
+  };
+}
+
 export function browserScreenshotOriginSlug(input: {
   readonly origin?: string;
   readonly url?: string;
+  readonly app?: string;
 }): string {
-  const candidate = input.origin ?? input.url;
+  const candidate = input.origin ?? input.url ?? input.app;
   if (!candidate) {
     return DEFAULT_ORIGIN;
   }
@@ -97,6 +181,7 @@ export function browserScreenshotFileName(input: {
   readonly createdAt: string;
   readonly origin?: string;
   readonly url?: string;
+  readonly app?: string;
 }): string {
   return `${browserScreenshotTimestamp(input.createdAt)}_${browserScreenshotOriginSlug(input)}.png`;
 }
@@ -106,9 +191,16 @@ export function extractBrowserScreenshotPayload(value: unknown): BrowserScreensh
     return null;
   }
 
+  const codexComputerScreenshot = extractCodexComputerScreenshotPayload(value);
+  if (codexComputerScreenshot) {
+    return codexComputerScreenshot;
+  }
+
   const persistenceScreenshot = isRecord(value.persistenceScreenshot)
     ? value.persistenceScreenshot
     : undefined;
+  const details = isRecord(value.details) ? value.details : undefined;
+  const kind = details?.kind === "computerUse" ? "computer" : "browser";
   if (
     typeof persistenceScreenshot?.data === "string" &&
     persistenceScreenshot.data.trim().length > 0 &&
@@ -118,15 +210,19 @@ export function extractBrowserScreenshotPayload(value: unknown): BrowserScreensh
     return {
       screenshotBase64: persistenceScreenshot.data,
       mimeType: "image/png",
+      kind,
       ...(typeof persistenceScreenshot.origin === "string"
         ? { origin: persistenceScreenshot.origin }
         : {}),
       ...(typeof persistenceScreenshot.url === "string" ? { url: persistenceScreenshot.url } : {}),
+      ...(typeof persistenceScreenshot.app === "string" ? { app: persistenceScreenshot.app } : {}),
     };
   }
 
-  const details = isRecord(value.details) ? value.details : undefined;
-  if (details?.action !== "screenshot" || details.blocked === true) {
+  if (details?.kind !== "computerUse" && details?.action !== "screenshot") {
+    return null;
+  }
+  if (details.blocked === true) {
     return null;
   }
 
@@ -158,13 +254,26 @@ export function extractBrowserScreenshotPayload(value: unknown): BrowserScreensh
   return {
     screenshotBase64,
     mimeType: "image/png",
+    kind,
     ...(typeof details.origin === "string" ? { origin: details.origin } : {}),
     ...(typeof details.url === "string" ? { url: details.url } : {}),
+    ...(typeof details.app === "string" ? { app: details.app } : {}),
   };
 }
 
 export function stripBrowserScreenshotPersistence(value: unknown): unknown {
-  if (!isRecord(value) || !("persistenceScreenshot" in value)) {
+  if (!isRecord(value)) {
+    return value;
+  }
+
+  if (isCompletedCodexComputerUseDynamicToolItem(value.item)) {
+    return {
+      ...value,
+      item: redactCodexComputerUseContentItems(value.item),
+    };
+  }
+
+  if (!("persistenceScreenshot" in value)) {
     return value;
   }
 
@@ -207,7 +316,7 @@ function availableFilePath(input: {
   });
 }
 
-export function persistBrowserScreenshot(input: PersistBrowserScreenshotInput) {
+function persistScreenshot(input: PersistBrowserScreenshotInput) {
   return Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
@@ -216,7 +325,10 @@ export function persistBrowserScreenshot(input: PersistBrowserScreenshotInput) {
       return null;
     }
 
-    const rootDirectory = path.join(input.stateDir, BROWSER_SCREENSHOTS_DIRNAME);
+    const rootDirectory = path.join(
+      input.stateDir,
+      input.kind === "computer" ? COMPUTER_SCREENSHOTS_DIRNAME : BROWSER_SCREENSHOTS_DIRNAME,
+    );
     const threadSegment = slugifyBrowserScreenshotSegment(input.threadId, "thread", 120);
     const expectedThreadSuffix = `--${threadSegment}`;
     const rootEntries = yield* fileSystem
@@ -244,4 +356,8 @@ export function persistBrowserScreenshot(input: PersistBrowserScreenshotInput) {
       directoryPath,
     } satisfies PersistedBrowserScreenshot;
   });
+}
+
+export function persistBrowserScreenshot(input: PersistBrowserScreenshotInput) {
+  return persistScreenshot(input);
 }

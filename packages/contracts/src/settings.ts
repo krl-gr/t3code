@@ -4,6 +4,7 @@ import * as Schema from "effect/Schema";
 import * as SchemaTransformation from "effect/SchemaTransformation";
 import { TrimmedNonEmptyString, TrimmedString } from "./baseSchemas.ts";
 import { BrowserSettings } from "./browser.ts";
+import { ComputerUseSettings } from "./computerUse.ts";
 import { DEFAULT_GIT_TEXT_GENERATION_MODEL, ProviderOptionSelections } from "./model.ts";
 import { ModelSelection } from "./orchestration.ts";
 import { ProviderInstanceConfig, ProviderInstanceId } from "./providerInstance.ts";
@@ -401,6 +402,7 @@ export const ServerSettings = Schema.Struct({
     Schema.withDecodingDefault(Effect.succeed({})),
   ),
   browser: BrowserSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
+  computerUse: ComputerUseSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   observability: ObservabilitySettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
 });
 export type ServerSettings = typeof ServerSettings.Type;
@@ -477,6 +479,16 @@ const BrowserSettingsPatch = Schema.Struct({
   allowAllHttpsOrigins: Schema.optionalKey(Schema.Boolean),
 });
 
+const ComputerUseSettingsPatch = Schema.Struct({
+  enabled: Schema.optionalKey(Schema.Boolean),
+  mode: Schema.optionalKey(Schema.Literals(["observe", "control"])),
+  binaryPath: Schema.optionalKey(TrimmedString),
+  mcpArgs: Schema.optionalKey(Schema.Array(TrimmedString)),
+  requireActionApproval: Schema.optionalKey(Schema.Boolean),
+  allowCoordinateFallback: Schema.optionalKey(Schema.Boolean),
+  allowedApps: Schema.optionalKey(Schema.Array(TrimmedString)),
+});
+
 export const ServerSettingsPatch = Schema.Struct({
   // Server settings
   enableAssistantStreaming: Schema.optionalKey(Schema.Boolean),
@@ -491,6 +503,7 @@ export const ServerSettingsPatch = Schema.Struct({
     }),
   ),
   browser: Schema.optionalKey(BrowserSettingsPatch),
+  computerUse: Schema.optionalKey(ComputerUseSettingsPatch),
   providers: Schema.optionalKey(
     Schema.Struct({
       codex: Schema.optionalKey(CodexSettingsPatch),

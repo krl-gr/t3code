@@ -15,6 +15,13 @@ import {
   type CanonicalRequestType,
 } from "@t3tools/contracts";
 import { PRODUCT_BASE_NAME } from "@t3tools/shared/branding";
+import {
+  COMPUTER_USE_ACTION_TOOL_NAMES,
+  COMPUTER_USE_OBSERVE_TOOL_NAMES,
+  COMPUTER_USE_TOOL_NAMES,
+  computerUseToolTitle,
+  summarizeComputerUseArgs,
+} from "./computerUse/ComputerUseToolDefinitions.ts";
 
 export const PI_PROVIDER = "pi" as const;
 
@@ -26,6 +33,10 @@ export const PI_BROWSER_TOOL_NAMES = [
   "browser_extract_text",
   "browser_screenshot",
 ] as const;
+
+export const PI_COMPUTER_OBSERVE_TOOL_NAMES = COMPUTER_USE_OBSERVE_TOOL_NAMES;
+export const PI_COMPUTER_ACTION_TOOL_NAMES = COMPUTER_USE_ACTION_TOOL_NAMES;
+export const PI_COMPUTER_TOOL_NAMES = COMPUTER_USE_TOOL_NAMES;
 
 export const PI_FULL_TOOL_NAMES = [
   "read",
@@ -225,7 +236,10 @@ export async function createLockedPiResourceLoader(input: {
 }
 
 export function mapPiToolNameToItemType(toolName: string): CanonicalItemType {
-  if ((PI_BROWSER_TOOL_NAMES as readonly string[]).includes(toolName)) {
+  if (
+    (PI_BROWSER_TOOL_NAMES as readonly string[]).includes(toolName) ||
+    (PI_COMPUTER_TOOL_NAMES as readonly string[]).includes(toolName)
+  ) {
     return "dynamic_tool_call";
   }
 
@@ -241,7 +255,10 @@ export function mapPiToolNameToItemType(toolName: string): CanonicalItemType {
 }
 
 export function mapPiToolNameToRequestType(toolName: string): CanonicalRequestType {
-  if ((PI_BROWSER_TOOL_NAMES as readonly string[]).includes(toolName)) {
+  if (
+    (PI_BROWSER_TOOL_NAMES as readonly string[]).includes(toolName) ||
+    (PI_COMPUTER_TOOL_NAMES as readonly string[]).includes(toolName)
+  ) {
     return "dynamic_tool_call";
   }
 
@@ -266,6 +283,10 @@ export function summarizePiToolArgs(toolName: string, args: Record<string, unkno
       typeof args.direction === "string" ? args.direction : undefined,
     );
     return url ?? query ?? selector ?? text ?? direction ?? toolName;
+  }
+
+  if (toolName.startsWith("computer_")) {
+    return summarizeComputerUseArgs(toolName, args);
   }
 
   const command = normalizeString(typeof args.command === "string" ? args.command : undefined);
@@ -295,6 +316,10 @@ export function summarizePiToolArgs(toolName: string, args: Record<string, unkno
 }
 
 export function getPiToolTitle(toolName: string): string {
+  if (toolName.startsWith("computer_")) {
+    return computerUseToolTitle(toolName);
+  }
+
   switch (toolName) {
     case "bash":
       return "Ran command";

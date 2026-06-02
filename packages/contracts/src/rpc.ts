@@ -5,6 +5,7 @@ import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 import { ExternalLauncherError, LaunchEditorInput } from "./editor.ts";
 import { AuthAccessStreamEvent } from "./auth.ts";
 import { BrowserOpenLoginWindowInput, BrowserProfileSnapshot } from "./browser.ts";
+import { ComputerUseDoctorResult, ComputerUseSnapshot } from "./computerUse.ts";
 import {
   FilesystemBrowseInput,
   FilesystemBrowseResult,
@@ -169,6 +170,13 @@ export const WS_METHODS = {
   browserProfileClose: "browser.profile.close",
   browserProfileClear: "browser.profile.clear",
 
+  // Computer use methods
+  computerUseSnapshot: "computerUse.snapshot",
+  computerUseRestart: "computerUse.restart",
+  computerUseStop: "computerUse.stop",
+  computerUseRefreshTools: "computerUse.refreshTools",
+  computerUseDoctor: "computerUse.doctor",
+
   // Source control methods
   sourceControlLookupRepository: "sourceControl.lookupRepository",
   sourceControlCloneRepository: "sourceControl.cloneRepository",
@@ -281,6 +289,31 @@ export const WsBrowserProfileCloseRpc = Rpc.make(WS_METHODS.browserProfileClose,
 export const WsBrowserProfileClearRpc = Rpc.make(WS_METHODS.browserProfileClear, {
   payload: Schema.Struct({}),
   success: BrowserProfileSnapshot,
+});
+
+export const WsComputerUseSnapshotRpc = Rpc.make(WS_METHODS.computerUseSnapshot, {
+  payload: Schema.Struct({}),
+  success: ComputerUseSnapshot,
+});
+
+export const WsComputerUseRestartRpc = Rpc.make(WS_METHODS.computerUseRestart, {
+  payload: Schema.Struct({}),
+  success: ComputerUseSnapshot,
+});
+
+export const WsComputerUseStopRpc = Rpc.make(WS_METHODS.computerUseStop, {
+  payload: Schema.Struct({}),
+  success: ComputerUseSnapshot,
+});
+
+export const WsComputerUseRefreshToolsRpc = Rpc.make(WS_METHODS.computerUseRefreshTools, {
+  payload: Schema.Struct({}),
+  success: ComputerUseSnapshot,
+});
+
+export const WsComputerUseDoctorRpc = Rpc.make(WS_METHODS.computerUseDoctor, {
+  payload: Schema.Struct({}),
+  success: ComputerUseDoctorResult,
 });
 
 export const WsSourceControlLookupRepositoryRpc = Rpc.make(
@@ -556,6 +589,11 @@ export const WsRpcGroup = RpcGroup.make(
   WsBrowserProfileOpenLoginWindowRpc,
   WsBrowserProfileCloseRpc,
   WsBrowserProfileClearRpc,
+  WsComputerUseSnapshotRpc,
+  WsComputerUseRestartRpc,
+  WsComputerUseStopRpc,
+  WsComputerUseRefreshToolsRpc,
+  WsComputerUseDoctorRpc,
   WsSourceControlLookupRepositoryRpc,
   WsSourceControlCloneRepositoryRpc,
   WsSourceControlPublishRepositoryRpc,

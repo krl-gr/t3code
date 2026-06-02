@@ -3,6 +3,7 @@ import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
@@ -39,6 +40,7 @@ import {
 } from "@t3tools/contracts";
 import { clamp } from "effect/Number";
 import { HttpRouter, HttpServerRequest } from "effect/unstable/http";
+import { ChildProcessSpawner } from "effect/unstable/process";
 import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 
 import { CheckpointDiffQuery } from "./checkpointing/Services/CheckpointDiffQuery.ts";
@@ -94,6 +96,7 @@ import {
 } from "./auth/Services/SessionCredentialService.ts";
 import { respondToAuthError } from "./auth/http.ts";
 import { getBrowserAutomationService } from "./browser/BrowserAutomationService.ts";
+import { getComputerUseService } from "./computerUse/ComputerUseService.ts";
 const isOrchestrationDispatchCommandError = Schema.is(OrchestrationDispatchCommandError);
 const isWorkspacePathOutsideRootError = Schema.is(WorkspacePathOutsideRootError);
 
@@ -184,9 +187,12 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
       const providerRegistry = yield* ProviderRegistry;
       const providerMaintenanceRunner = yield* ProviderMaintenanceRunner.ProviderMaintenanceRunner;
       const config = yield* ServerConfig;
+      const fileSystem = yield* FileSystem.FileSystem;
+      const childProcessSpawner = yield* ChildProcessSpawner.ChildProcessSpawner;
       const lifecycleEvents = yield* ServerLifecycleEvents;
       const serverSettings = yield* ServerSettingsService;
       const browserAutomation = getBrowserAutomationService(config);
+      const computerUse = getComputerUseService(config, { fileSystem, childProcessSpawner });
       const startup = yield* ServerRuntimeStartup;
       const workspaceEntries = yield* WorkspaceEntries;
       const workspaceFileSystem = yield* WorkspaceFileSystem;
@@ -948,6 +954,46 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
             Effect.promise(() => browserAutomation.clearProfileData()),
             {
               "rpc.aggregate": "browser",
+            },
+          ),
+        [WS_METHODS.computerUseSnapshot]: (_input) =>
+          observeRpcEffect(
+            WS_METHODS.computerUseSnapshot,
+            Effect.promise(() => computerUse.snapshot()),
+            {
+              "rpc.aggregate": "computerUse",
+            },
+          ),
+        [WS_METHODS.computerUseRestart]: (_input) =>
+          observeRpcEffect(
+            WS_METHODS.computerUseRestart,
+            Effect.promise(() => computerUse.restart()),
+            {
+              "rpc.aggregate": "computerUse",
+            },
+          ),
+        [WS_METHODS.computerUseStop]: (_input) =>
+          observeRpcEffect(
+            WS_METHODS.computerUseStop,
+            Effect.promise(() => computerUse.stop()),
+            {
+              "rpc.aggregate": "computerUse",
+            },
+          ),
+        [WS_METHODS.computerUseRefreshTools]: (_input) =>
+          observeRpcEffect(
+            WS_METHODS.computerUseRefreshTools,
+            Effect.promise(() => computerUse.refreshTools()),
+            {
+              "rpc.aggregate": "computerUse",
+            },
+          ),
+        [WS_METHODS.computerUseDoctor]: (_input) =>
+          observeRpcEffect(
+            WS_METHODS.computerUseDoctor,
+            Effect.promise(() => computerUse.doctor()),
+            {
+              "rpc.aggregate": "computerUse",
             },
           ),
         [WS_METHODS.serverDiscoverSourceControl]: (_input) =>

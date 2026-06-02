@@ -38,6 +38,16 @@ import * as EffectCodexSchema from "effect-codex-app-server/schema";
 import { buildCodexInitializeParams } from "./CodexProvider.ts";
 import { expandHomePath } from "../../pathExpansion.ts";
 import {
+  computerUseResultToCodexContentItems,
+  type ComputerUseDynamicToolSpec,
+  type ComputerUseServiceShape,
+} from "../../computerUse/ComputerUseService.ts";
+import {
+  COMPUTER_USE_NAMESPACE,
+  COMPUTER_USE_TOOL_PREFIX,
+  sanitizeComputerUseArgs,
+} from "../../computerUse/ComputerUseToolDefinitions.ts";
+import {
   CODEX_ASK_MODE_DEVELOPER_INSTRUCTIONS,
   CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS,
   CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS,
@@ -89,6 +99,9 @@ const formatSchemaIssue = SchemaIssue.makeFormatterDefault();
 
 export type CodexResumeCursor = typeof CodexResumeCursorSchema.Type;
 type CodexServiceTier = NonNullable<EffectCodexSchema.V2ThreadStartParams["serviceTier"]>;
+type CodexThreadStartParamsWithDynamicTools = EffectCodexSchema.V2ThreadStartParams & {
+  readonly dynamicTools?: ReadonlyArray<ComputerUseDynamicToolSpec>;
+};
 type CodexThreadItem =
   | EffectCodexSchema.V2ThreadReadResponse["thread"]["turns"][number]["items"][number]
   | EffectCodexSchema.V2ThreadRollbackResponse["thread"]["turns"][number]["items"][number];
@@ -104,6 +117,7 @@ export interface CodexSessionRuntimeOptions {
   readonly model?: string;
   readonly serviceTier?: CodexServiceTier | undefined;
   readonly resumeCursor?: CodexResumeCursor;
+  readonly computerUse?: ComputerUseServiceShape;
 }
 
 export interface CodexSessionRuntimeSendTurnInput {
@@ -239,6 +253,10 @@ function makeCodexServerNotification<M extends CodexRpc.ServerNotificationMethod
   return { method, params } as CodexServerNotification;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
 function normalizeCodexModelSlug(
   model: string | undefined | null,
   preferredId?: string,
@@ -288,7 +306,8 @@ function buildThreadStartParams(input: {
   readonly runtimeMode: RuntimeMode;
   readonly model: string | undefined;
   readonly serviceTier: CodexServiceTier | undefined;
-}): EffectCodexSchema.V2ThreadStartParams {
+  readonly dynamicTools?: ReadonlyArray<ComputerUseDynamicToolSpec>;
+}): CodexThreadStartParamsWithDynamicTools {
   const config = runtimeModeToThreadConfig(input.runtimeMode);
   return {
     cwd: input.cwd,
@@ -296,6 +315,9 @@ function buildThreadStartParams(input: {
     sandbox: config.sandbox,
     ...(input.model ? { model: input.model } : {}),
     ...(input.serviceTier ? { serviceTier: input.serviceTier } : {}),
+    ...(input.dynamicTools && input.dynamicTools.length > 0
+      ? { dynamicTools: input.dynamicTools }
+      : {}),
   };
 }
 
@@ -453,6 +475,7 @@ export const openCodexThread = (input: {
   readonly requestedModel: string | undefined;
   readonly serviceTier: CodexServiceTier | undefined;
   readonly resumeThreadId: string | undefined;
+  readonly dynamicTools?: ReadonlyArray<ComputerUseDynamicToolSpec>;
 }): Effect.Effect<CodexThreadOpenResponse, CodexErrors.CodexAppServerError> => {
   const resumeThreadId = input.resumeThreadId;
   const startParams = buildThreadStartParams({
@@ -460,6 +483,7 @@ export const openCodexThread = (input: {
     runtimeMode: input.runtimeMode,
     model: input.requestedModel,
     serviceTier: input.serviceTier,
+    ...(input.dynamicTools !== undefined ? { dynamicTools: input.dynamicTools } : {}),
   });
 
   if (resumeThreadId === undefined) {
@@ -722,6 +746,8 @@ export const makeCodexSessionRuntime = (
     const events = yield* Queue.unbounded<ProviderEvent>();
     const pendingApprovalsRef = yield* Ref.make(new Map<ApprovalRequestId, PendingApproval>());
     const approvalCorrelationsRef = yield* Ref.make(new Map<string, ApprovalCorrelation>());
+    const dynamicApprovalAllowCacheRef = yield* Ref.make(new Set<string>());
+    const turnInteractionModesRef = yield* Ref.make(new Map<string, ProviderInteractionMode>());
     const pendingUserInputsRef = yield* Ref.make(new Map<ApprovalRequestId, PendingUserInput>());
     const collabReceiverTurnsRef = yield* Ref.make(new Map<string, TurnId>());
     const closedRef = yield* Ref.make(false);
@@ -1119,6 +1145,122 @@ export const makeCodexSessionRuntime = (
       }),
     );
 
+    yield* client.handleServerRequest("item/tool/call", (payload) =>
+      Effect.gen(function* () {
+        const args = isRecord(payload.arguments) ? payload.arguments : {};
+        const computerUse = options.computerUse;
+        if (
+          !computerUse ||
+          (payload.namespace !== COMPUTER_USE_NAMESPACE &&
+            !payload.tool.startsWith(COMPUTER_USE_TOOL_PREFIX))
+        ) {
+          return {
+            success: false,
+            contentItems: [
+              {
+                type: "inputText",
+                text: `Unknown dynamic tool: ${payload.tool}.`,
+              },
+            ],
+          } satisfies EffectCodexSchema.DynamicToolCallResponse;
+        }
+
+        const interactionMode = (yield* Ref.get(turnInteractionModesRef)).get(payload.turnId);
+        const sanitizedArgs = sanitizeComputerUseArgs(args);
+        const approval = yield* Effect.promise(() =>
+          computerUse.shouldRequireApproval({
+            toolName: payload.tool,
+            args,
+            ...(interactionMode ? { interactionMode } : {}),
+          }),
+        );
+        const turnId = TurnId.make(payload.turnId);
+        const cacheKey = `${payload.tool}\u0000${approval.detail}`;
+        const approvalCache = yield* Ref.get(dynamicApprovalAllowCacheRef);
+        if (approval.required && !approvalCache.has(cacheKey)) {
+          const requestId = ApprovalRequestId.make(yield* randomUUIDv4);
+          const decision = yield* Deferred.make<ProviderApprovalDecision>();
+          yield* Ref.update(pendingApprovalsRef, (current) => {
+            const next = new Map(current);
+            next.set(requestId, {
+              requestId,
+              jsonRpcId: payload.callId,
+              requestKind: "dynamic-tool",
+              turnId,
+              itemId: undefined,
+              decision,
+            });
+            return next;
+          });
+          yield* Ref.update(approvalCorrelationsRef, (current) => {
+            const next = new Map(current);
+            next.set(payload.callId, {
+              requestId,
+              requestKind: "dynamic-tool",
+              turnId,
+              itemId: undefined,
+            });
+            return next;
+          });
+
+          yield* emitEvent({
+            kind: "request",
+            threadId: options.threadId,
+            method: "item/tool/call",
+            requestId,
+            requestKind: "dynamic-tool",
+            turnId,
+            payload: {
+              ...payload,
+              arguments: sanitizedArgs,
+            },
+          });
+
+          const resolved = yield* Deferred.await(decision).pipe(
+            Effect.ensuring(
+              Ref.update(pendingApprovalsRef, (current) => {
+                const next = new Map(current);
+                next.delete(requestId);
+                return next;
+              }),
+            ),
+          );
+          if (resolved === "acceptForSession") {
+            yield* Ref.update(dynamicApprovalAllowCacheRef, (current) => {
+              const next = new Set(current);
+              next.add(cacheKey);
+              return next;
+            });
+          } else if (resolved !== "accept") {
+            return {
+              success: false,
+              contentItems: [
+                {
+                  type: "inputText",
+                  text:
+                    resolved === "decline"
+                      ? `Computer-use tool '${payload.tool}' was declined by the user.`
+                      : `Computer-use tool '${payload.tool}' was cancelled before approval.`,
+                },
+              ],
+            } satisfies EffectCodexSchema.DynamicToolCallResponse;
+          }
+        }
+
+        const result = yield* Effect.promise(() =>
+          computerUse.callTool({
+            toolName: payload.tool,
+            args,
+            ...(interactionMode ? { interactionMode } : {}),
+          }),
+        );
+        return {
+          success: !result.isError,
+          contentItems: computerUseResultToCodexContentItems(result),
+        } satisfies EffectCodexSchema.DynamicToolCallResponse;
+      }),
+    );
+
     yield* client.handleUnknownServerRequest((method) =>
       Effect.fail(CodexErrors.CodexAppServerRequestError.methodNotFound(method)),
     );
@@ -1209,6 +1351,10 @@ export const makeCodexSessionRuntime = (
       yield* client.notify("initialized", undefined);
 
       const requestedModel = normalizeCodexModelSlug(options.model);
+      const computerUse = options.computerUse;
+      const dynamicTools = computerUse
+        ? yield* Effect.promise(() => computerUse.dynamicToolSpecs())
+        : [];
 
       const opened = yield* openCodexThread({
         client,
@@ -1218,6 +1364,7 @@ export const makeCodexSessionRuntime = (
         requestedModel,
         serviceTier: options.serviceTier,
         resumeThreadId: readResumeCursorThreadId(options.resumeCursor),
+        dynamicTools,
       });
 
       const providerThreadId = opened.thread.id;
@@ -1291,6 +1438,11 @@ export const makeCodexSessionRuntime = (
             ),
           );
           const turnId = TurnId.make(response.turn.id);
+          yield* Ref.update(turnInteractionModesRef, (current) => {
+            const next = new Map(current);
+            next.set(response.turn.id, input.interactionMode ?? "default");
+            return next;
+          });
           yield* updateSession(sessionRef, {
             status: "running",
             activeTurnId: turnId,

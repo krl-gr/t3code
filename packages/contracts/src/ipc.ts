@@ -21,6 +21,7 @@ import type {
 import type { ReviewDiffPreviewInput, ReviewDiffPreviewResult } from "./review.ts";
 import type { FilesystemBrowseInput, FilesystemBrowseResult } from "./filesystem.ts";
 import type { BrowserOpenLoginWindowInput, BrowserProfileSnapshot } from "./browser.ts";
+import type { ComputerUseDoctorResult, ComputerUseSnapshot } from "./computerUse.ts";
 import type {
   ProjectSearchEntriesInput,
   ProjectSearchEntriesResult,
@@ -536,6 +537,11 @@ export interface LocalApi {
     ) => Promise<BrowserProfileSnapshot>;
     closeBrowserProfile?: () => Promise<BrowserProfileSnapshot>;
     clearBrowserProfile?: () => Promise<BrowserProfileSnapshot>;
+    getComputerUseSnapshot?: () => Promise<ComputerUseSnapshot>;
+    restartComputerUse?: () => Promise<ComputerUseSnapshot>;
+    stopComputerUse?: () => Promise<ComputerUseSnapshot>;
+    refreshComputerUseTools?: () => Promise<ComputerUseSnapshot>;
+    runComputerUseDoctor?: () => Promise<ComputerUseDoctorResult>;
   };
 }
 
