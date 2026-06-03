@@ -4103,49 +4103,48 @@ export default function ChatView(props: ChatViewProps) {
                 />
               </div>
             </div>
-            {isGitRepo && (
-              <BranchToolbar
-                environmentId={activeThread.environmentId}
-                threadId={activeThread.id}
-                {...(routeKind === "draft" && draftId ? { draftId } : {})}
-                activeProjectScripts={activeProject?.scripts}
-                availableEditors={availableEditors}
-                diffOpen={diffOpen}
-                diffToggleShortcutLabel={diffPanelShortcutLabel}
-                draftsOpen={draftsPanelOpen}
-                gitCwd={gitCwd}
-                keybindings={keybindings}
-                openInCwd={gitCwd}
-                preferredScriptId={
-                  activeProject ? (lastInvokedScriptByProjectId[activeProject.id] ?? null) : null
-                }
-                terminalAvailable={activeProject !== undefined}
-                terminalOpen={Boolean(terminalUiState.terminalOpen)}
-                terminalToggleShortcutLabel={terminalToggleShortcutLabel}
-                onEnvModeChange={onEnvModeChange}
-                onAddProjectScript={saveProjectScript}
-                onDeleteProjectScript={deleteProjectScript}
-                onRunProjectScript={runProjectScript}
-                onToggleDrafts={toggleDraftsPanel}
-                onToggleDiff={onToggleDiff}
-                onToggleTerminal={toggleTerminalVisibility}
-                onUpdateProjectScript={updateProjectScript}
-                {...(canOverrideServerThreadEnvMode ? { effectiveEnvModeOverride: envMode } : {})}
-                {...(canOverrideServerThreadEnvMode
-                  ? {
-                      activeThreadBranchOverride: activeThreadBranch,
-                      onActiveThreadBranchOverrideChange: setPendingServerThreadBranch,
-                    }
-                  : {})}
-                envLocked={envLocked}
-                onComposerFocusRequest={scheduleComposerFocus}
-                {...(canCheckoutPullRequestIntoThread
-                  ? { onCheckoutPullRequestRequest: openPullRequestDialog }
-                  : {})}
-                {...(hasMultipleEnvironments ? { onEnvironmentChange } : {})}
-                availableEnvironments={logicalProjectEnvironments}
-              />
-            )}
+            <BranchToolbar
+              environmentId={activeThread.environmentId}
+              threadId={activeThread.id}
+              {...(routeKind === "draft" && draftId ? { draftId } : {})}
+              activeProjectScripts={activeProject?.scripts}
+              availableEditors={availableEditors}
+              diffOpen={diffOpen}
+              diffToggleShortcutLabel={diffPanelShortcutLabel}
+              draftsOpen={draftsPanelOpen}
+              gitCwd={gitCwd}
+              isGitRepo={isGitRepo}
+              keybindings={keybindings}
+              openInCwd={gitCwd}
+              preferredScriptId={
+                activeProject ? (lastInvokedScriptByProjectId[activeProject.id] ?? null) : null
+              }
+              terminalAvailable={activeProject !== undefined}
+              terminalOpen={Boolean(terminalUiState.terminalOpen)}
+              terminalToggleShortcutLabel={terminalToggleShortcutLabel}
+              onEnvModeChange={onEnvModeChange}
+              onAddProjectScript={saveProjectScript}
+              onDeleteProjectScript={deleteProjectScript}
+              onRunProjectScript={runProjectScript}
+              onToggleDrafts={toggleDraftsPanel}
+              onToggleDiff={onToggleDiff}
+              onToggleTerminal={toggleTerminalVisibility}
+              onUpdateProjectScript={updateProjectScript}
+              {...(canOverrideServerThreadEnvMode ? { effectiveEnvModeOverride: envMode } : {})}
+              {...(canOverrideServerThreadEnvMode
+                ? {
+                    activeThreadBranchOverride: activeThreadBranch,
+                    onActiveThreadBranchOverrideChange: setPendingServerThreadBranch,
+                  }
+                : {})}
+              envLocked={envLocked}
+              onComposerFocusRequest={scheduleComposerFocus}
+              {...(canCheckoutPullRequestIntoThread
+                ? { onCheckoutPullRequestRequest: openPullRequestDialog }
+                : {})}
+              {...(hasMultipleEnvironments ? { onEnvironmentChange } : {})}
+              availableEnvironments={logicalProjectEnvironments}
+            />
           </div>
 
           {pullRequestDialogState ? (

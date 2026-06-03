@@ -2092,7 +2092,7 @@ describe("ChatView timeline estimator parity (full app)", () => {
     }
   });
 
-  it("hides the entire composer context bar for non-Git projects", async () => {
+  it("keeps the composer context bar visible for non-Git projects", async () => {
     gitStatusMockState.data = createMockGitStatus({
       isRepo: false,
       hasPrimaryRemote: false,
@@ -2112,7 +2112,12 @@ describe("ChatView timeline estimator parity (full app)", () => {
     try {
       await vi.waitFor(
         () => {
-          expect(document.querySelector('[data-chat-context-bar="true"]')).toBeNull();
+          const contextBar = document.querySelector('[data-chat-context-bar="true"]');
+          expect(contextBar).not.toBeNull();
+          expect(contextBar?.textContent).toContain("Project");
+          expect(contextBar?.textContent).not.toContain("No Git");
+          expect(contextBar?.textContent).not.toContain("Local checkout");
+          expect(contextBar?.textContent).toContain("Initialize Git");
         },
         { timeout: 8_000, interval: 16 },
       );

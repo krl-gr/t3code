@@ -154,6 +154,7 @@ interface BranchToolbarProps {
   diffToggleShortcutLabel: string | null;
   draftsOpen: boolean;
   gitCwd: string | null;
+  isGitRepo: boolean;
   keybindings: ResolvedKeybindingsConfig;
   openInCwd: string | null;
   preferredScriptId: string | null;
@@ -218,6 +219,7 @@ export const BranchToolbar = memo(function BranchToolbar({
   diffToggleShortcutLabel,
   draftsOpen,
   gitCwd,
+  isGitRepo,
   keybindings,
   openInCwd,
   preferredScriptId,
@@ -275,7 +277,8 @@ export const BranchToolbar = memo(function BranchToolbar({
       hasServerThread: serverThread !== undefined,
       draftThreadEnvMode: draftThread?.envMode,
     });
-  const envModeLocked = envLocked || (serverThread !== undefined && activeWorktreePath !== null);
+  const envModeLocked =
+    envLocked || !isGitRepo || (serverThread !== undefined && activeWorktreePath !== null);
   const hasRenderableToolbar = hasActiveThread && activeProject !== undefined;
 
   const showEnvironmentPicker = Boolean(
@@ -623,49 +626,71 @@ export const BranchToolbar = memo(function BranchToolbar({
         ref={leftContentRef}
         className="flex min-w-0 items-center gap-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
-        <div className="flex min-w-0 shrink-0 items-center gap-0">
-          <span className={CONTEXT_BAR_ICON_TRIGGER_CLASS} aria-hidden="true">
+        {!isGitRepo ? (
+          <div
+            className="flex h-8 min-w-0 shrink-0 items-center gap-2 px-2 text-left"
+            title={activeProject.cwd}
+          >
             <ProjectFavicon
               environmentId={activeProject.environmentId}
               cwd={activeProject.cwd}
               label={activeProject.name}
               projectKey={activeProject.id}
-              className="size-4"
+              className="size-4 dark:text-white/[0.175]"
             />
-          </span>
-          <ContextBarSlash />
-          {showEnvironmentPicker && availableEnvironments && onEnvironmentChange && (
-            <>
-              <BranchToolbarEnvironmentSelector
-                envLocked={envLocked}
-                environmentId={environmentId}
-                availableEnvironments={availableEnvironments}
-                onEnvironmentChange={onEnvironmentChange}
+            <span className="min-w-0 truncate text-sm font-medium leading-5 text-[rgba(186,185,186,0.7)]">
+              {activeProject.name}
+            </span>
+          </div>
+        ) : (
+          <>
+            <div className="flex min-w-0 shrink-0 items-center gap-0">
+              <span className={CONTEXT_BAR_ICON_TRIGGER_CLASS} aria-hidden="true">
+                <ProjectFavicon
+                  environmentId={activeProject.environmentId}
+                  cwd={activeProject.cwd}
+                  label={activeProject.name}
+                  projectKey={activeProject.id}
+                  className="size-4"
+                />
+              </span>
+              <ContextBarSlash />
+              {showEnvironmentPicker && availableEnvironments && onEnvironmentChange && (
+                <>
+                  <BranchToolbarEnvironmentSelector
+                    envLocked={envLocked}
+                    environmentId={environmentId}
+                    availableEnvironments={availableEnvironments}
+                    onEnvironmentChange={onEnvironmentChange}
+                  />
+                  <ContextBarSeparator />
+                </>
+              )}
+              <BranchToolbarEnvModeSelector
+                envLocked={envModeLocked}
+                effectiveEnvMode={effectiveEnvMode}
+                activeWorktreePath={activeWorktreePath}
+                onEnvModeChange={onEnvModeChange}
               />
-              <ContextBarSeparator />
-            </>
-          )}
-          <BranchToolbarEnvModeSelector
-            envLocked={envModeLocked}
-            effectiveEnvMode={effectiveEnvMode}
-            activeWorktreePath={activeWorktreePath}
-            onEnvModeChange={onEnvModeChange}
-          />
-        </div>
+            </div>
 
-        <ContextBarSeparator />
-        <BranchToolbarBranchSelector
-          className="min-w-0 max-w-40 justify-start"
-          environmentId={environmentId}
-          threadId={threadId}
-          {...(draftId ? { draftId } : {})}
-          envLocked={envLocked}
-          {...(effectiveEnvModeOverride ? { effectiveEnvModeOverride } : {})}
-          {...(activeThreadBranchOverride !== undefined ? { activeThreadBranchOverride } : {})}
-          {...(onActiveThreadBranchOverrideChange ? { onActiveThreadBranchOverrideChange } : {})}
-          {...(onCheckoutPullRequestRequest ? { onCheckoutPullRequestRequest } : {})}
-          {...(onComposerFocusRequest ? { onComposerFocusRequest } : {})}
-        />
+            <ContextBarSeparator />
+            <BranchToolbarBranchSelector
+              className="min-w-0 max-w-40 justify-start"
+              environmentId={environmentId}
+              threadId={threadId}
+              {...(draftId ? { draftId } : {})}
+              envLocked={envLocked}
+              {...(effectiveEnvModeOverride ? { effectiveEnvModeOverride } : {})}
+              {...(activeThreadBranchOverride !== undefined ? { activeThreadBranchOverride } : {})}
+              {...(onActiveThreadBranchOverrideChange
+                ? { onActiveThreadBranchOverrideChange }
+                : {})}
+              {...(onCheckoutPullRequestRequest ? { onCheckoutPullRequestRequest } : {})}
+              {...(onComposerFocusRequest ? { onComposerFocusRequest } : {})}
+            />
+          </>
+        )}
       </div>
 
       <div className="relative flex shrink-0 items-center justify-end gap-0 text-[rgba(186,185,186,0.7)]">
