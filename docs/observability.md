@@ -1,6 +1,6 @@
 # Observability
 
-T3 Code has one server-side observability model:
+Up.computer has one server-side observability model:
 
 - pretty logs go to stdout for humans
 - completed spans go to a local NDJSON trace file
@@ -62,18 +62,16 @@ The local trace file is always on. OTLP export is opt-in.
 
 You do not need any extra env vars. Just run the app normally and inspect `server.trace.ndjson`.
 
-Examples:
+Web/server dev:
 
 ```bash
-npx t3
+bun run dev
 ```
 
-```bash
-node --run dev
-```
+Desktop dev:
 
 ```bash
-node --run dev:desktop
+bun run dev:desktop
 ```
 
 ### Option 2: Run With A Local LGTM Stack
@@ -101,7 +99,7 @@ Default Grafana login:
 ```bash
 export T3CODE_OTLP_TRACES_URL=http://localhost:4318/v1/traces
 export T3CODE_OTLP_METRICS_URL=http://localhost:4318/v1/metrics
-export T3CODE_OTLP_SERVICE_NAME=t3-local
+export T3CODE_OTLP_SERVICE_NAME=upcomputer-local
 ```
 
 Optional:
@@ -113,22 +111,16 @@ export T3CODE_TRACE_TIMING_ENABLED=true
 
 #### 3. Launch the app from that same shell
 
-CLI:
-
-```bash
-npx t3
-```
-
 Monorepo web/server dev:
 
 ```bash
-node --run dev
+bun run dev
 ```
 
 Monorepo desktop dev:
 
 ```bash
-node --run dev:desktop
+bun run dev:desktop
 ```
 
 Packaged desktop app:
@@ -140,8 +132,8 @@ macOS app bundle example:
 ```bash
 T3CODE_OTLP_TRACES_URL=http://localhost:4318/v1/traces \
 T3CODE_OTLP_METRICS_URL=http://localhost:4318/v1/metrics \
-T3CODE_OTLP_SERVICE_NAME=t3-desktop \
-"/Applications/T3 Code.app/Contents/MacOS/T3 Code"
+T3CODE_OTLP_SERVICE_NAME=upcomputer-desktop \
+"/Applications/Up.computer (Alpha).app/Contents/MacOS/Up.computer (Alpha)"
 ```
 
 Direct binary example:
@@ -149,7 +141,7 @@ Direct binary example:
 ```bash
 T3CODE_OTLP_TRACES_URL=http://localhost:4318/v1/traces \
 T3CODE_OTLP_METRICS_URL=http://localhost:4318/v1/metrics \
-T3CODE_OTLP_SERVICE_NAME=t3-desktop \
+T3CODE_OTLP_SERVICE_NAME=upcomputer-desktop \
 ./path/to/your/desktop-app-binary
 ```
 

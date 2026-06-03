@@ -1,65 +1,85 @@
 # Contributing
 
-## Read This First
-
-We are not actively accepting contributions right now.
-
-You can still open an issue or PR, but please do so knowing there is a high chance we close it, defer it forever, or never look at it.
-
-If that sounds annoying, that is because it is. This project is still early and we are trying to keep scope, quality, and direction under control.
-
-PRs are automatically labeled with a `vouch:*` trust status and a `size:*` diff size based on changed lines.
-
-If you are an external contributor, expect `vouch:unvouched` until we explicitly add you to [.github/VOUCHED.td](.github/VOUCHED.td).
+Up.computer is early. The project is open source, but the product direction,
+runtime boundaries, and upstream-sync strategy are still settling. Contributions
+are welcome when they are small, focused, and easy to review.
 
 ## What We Are Most Likely To Accept
 
-Small, focused bug fixes.
+- Focused bug fixes.
+- Reliability fixes, especially around session lifecycle, reconnects, provider
+  runtime behavior, source control, and desktop startup.
+- Performance improvements with a clear before/after explanation.
+- Documentation fixes that make setup, provider configuration, or release
+  behavior easier to understand.
+- Small UI fixes with screenshots or short recordings when visual behavior
+  changes.
 
-Small reliability fixes.
+## What Needs Discussion First
 
-Small performance improvements.
+Open an issue before working on:
 
-Tightly scoped maintenance work that clearly improves the project without changing its direction.
+- new product areas or major feature work
+- broad UI redesigns
+- changes to provider contracts, persistence, or orchestration semantics
+- upstream-sync strategy changes
+- large refactors, package renames, or repository structure changes
 
-## What We Are Least Likely To Accept
+Opening an issue first helps keep scope clear and avoids work that may not fit
+the current direction.
 
-Large PRs.
+## Pull Request Guidelines
 
-Drive-by feature work.
+- Keep PRs small and focused.
+- Do not mix unrelated fixes together.
+- Explain what changed and why.
+- Call out any tradeoffs or behavior changes.
+- Include before/after screenshots for UI changes.
+- Include a short recording for motion, timing, transitions, or interaction
+  changes.
+- Mention whether verification was run. If not, say why.
 
-Opinionated rewrites.
+Large PRs may be declined or deferred even when the idea is good. Smaller PRs
+are much easier to review and merge.
 
-Anything that expands product scope without us asking for it first.
+## Trust And PR Labels
 
-If you open a 1,000+ line PR full of new features, we will probably close it quickly and remember that you ignored the clearly written instructions.
+PRs may be automatically labeled with a `vouch:*` trust status and a `size:*`
+diff-size status. External contributors should expect `vouch:unvouched` until
+they are explicitly added to [.github/VOUCHED.td](.github/VOUCHED.td).
 
-## If You Still Want To Open A PR
+These labels are review aids. They are not a judgment on the person opening the
+PR.
 
-Keep it small.
+## Local Development
 
-Explain exactly what changed.
+Install dependencies:
 
-Explain exactly why the change should exist.
+```bash
+bun install
+```
 
-Do not mix unrelated fixes together.
+Run the app:
 
-If the PR makes anything resembling a UI change, include clear before/after images.
+```bash
+bun run dev
+```
 
-If the change depends on motion, timing, transitions, or interaction details, include a short video.
+Useful commands:
 
-If we have to guess what changed, we are much less likely to review it.
+```bash
+bun run dev:web
+bun run dev:server
+bun run dev:desktop
+```
 
-## Issues First
+## Project Priorities
 
-If you are thinking about a non-trivial change, open an issue first.
+When tradeoffs are necessary, the project prioritizes:
 
-That still does not mean we will want the PR, but it gives you a chance to avoid wasting your time.
+1. Performance.
+2. Reliability.
+3. Predictable behavior during failures, reconnects, partial streams, and
+   session restarts.
 
-## Be Realistic
-
-Opening a PR does not create an obligation on our side.
-
-We may close it. We may ignore it. We may ask you to shrink it. We may reimplement the idea ourselves later.
-
-If you are fine with that, proceed.
+Correctness and robustness matter more than short-term convenience.

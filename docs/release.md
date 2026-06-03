@@ -2,6 +2,12 @@
 
 This document covers the unified release workflow for stable and nightly desktop releases.
 
+> [!NOTE]
+> This release pipeline is inherited from upstream T3 Code and is still being
+> adapted for Up.computer. Review repository slugs, hosted-app domains, package
+> publishing, and signing secrets before using it for a public production
+> release.
+
 ## What the workflow does
 
 - Workflow: `.github/workflows/release.yml`

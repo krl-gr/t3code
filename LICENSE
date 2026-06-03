@@ -1,6 +1,7 @@
 MIT License
 
 Copyright (c) 2026 T3 Tools Inc.
+Copyright (c) 2026 Kirill Gurianov / Up.computer
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -19,3 +20,17 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+Trademark Notice
+
+The MIT license above applies to the source code and documentation. It does not
+grant permission to use the Up.computer name, logos, icons, visual identity,
+domain names, or other brand identifiers except to accurately refer to this
+project.
+
+You may not use Up.computer branding in a way that suggests endorsement,
+sponsorship, affiliation, or that a modified build is an official Up.computer
+release without prior written permission.
+
+Modified or redistributed builds should use different product branding unless
+they are official Up.computer builds or you have written permission.
