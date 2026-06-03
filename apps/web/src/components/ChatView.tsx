@@ -905,8 +905,9 @@ export default function ChatView(props: ChatViewProps) {
   const shouldUsePlanSidebarSheetForViewport = useMediaQuery(RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY);
   const shouldUsePlanSidebarSheet =
     !forceInlineThreadPanels && shouldUsePlanSidebarSheetForViewport;
-  // Tracks whether the user explicitly dismissed the sidebar for the active turn.
-  const planSidebarDismissedForTurnRef = useRef<string | null>(null);
+  // Tracks plan/sidebar dismissals by thread so returning to a chat doesn't
+  // re-open a panel the user already hid for that same turn.
+  const planSidebarDismissedTurnByThreadRef = useRef(new Map<string, string>());
   // When set, the thread-change reset effect will open the sidebar instead of closing it.
   // Used by "Implement in a new thread" to carry the sidebar-open intent across navigation.
   const planSidebarOpenOnNextThreadRef = useRef(false);
@@ -1617,6 +1618,8 @@ export default function ChatView(props: ChatViewProps) {
     [activeLatestTurn?.turnId, threadActivities],
   );
   const planSidebarLabel = sidebarProposedPlan || interactionMode === "plan" ? "Plan" : "Tasks";
+  const planSidebarDismissalTurnKey =
+    activePlan?.turnId ?? sidebarProposedPlan?.turnId ?? "__dismissed__";
   const showPlanFollowUpPrompt =
     pendingUserInputs.length === 0 &&
     interactionMode === "plan" &&
@@ -2508,19 +2511,29 @@ export default function ChatView(props: ChatViewProps) {
   const togglePlanSidebar = useCallback(() => {
     setPlanSidebarOpen((open) => {
       if (open) {
-        planSidebarDismissedForTurnRef.current =
-          activePlan?.turnId ?? sidebarProposedPlan?.turnId ?? "__dismissed__";
+        if (activeThreadKey) {
+          planSidebarDismissedTurnByThreadRef.current.set(
+            activeThreadKey,
+            planSidebarDismissalTurnKey,
+          );
+        }
       } else {
-        planSidebarDismissedForTurnRef.current = null;
+        if (activeThreadKey) {
+          planSidebarDismissedTurnByThreadRef.current.delete(activeThreadKey);
+        }
       }
       return !open;
     });
-  }, [activePlan?.turnId, sidebarProposedPlan?.turnId]);
+  }, [activeThreadKey, planSidebarDismissalTurnKey]);
   const closePlanSidebar = useCallback(() => {
     setPlanSidebarOpen(false);
-    planSidebarDismissedForTurnRef.current =
-      activePlan?.turnId ?? sidebarProposedPlan?.turnId ?? "__dismissed__";
-  }, [activePlan?.turnId, sidebarProposedPlan?.turnId]);
+    if (activeThreadKey) {
+      planSidebarDismissedTurnByThreadRef.current.set(
+        activeThreadKey,
+        planSidebarDismissalTurnKey,
+      );
+    }
+  }, [activeThreadKey, planSidebarDismissalTurnKey]);
 
   const persistThreadSettingsForNextTurn = useCallback(
     async (input: {
@@ -2610,8 +2623,7 @@ export default function ChatView(props: ChatViewProps) {
       planSidebarOpenOnNextThreadRef.current = false;
       setPlanSidebarOpen(false);
     }
-    planSidebarDismissedForTurnRef.current = null;
-  }, [activeThread?.id]);
+  }, [activeThreadKey]);
 
   // Auto-open the plan sidebar when plan/todo steps arrive for the current turn.
   // Don't auto-open for plans carried over from a previous turn (the user can open manually).
@@ -2621,15 +2633,21 @@ export default function ChatView(props: ChatViewProps) {
     if (planSidebarOpen) return;
     const latestTurnId = activeLatestTurn?.turnId ?? null;
     if (latestTurnId && activePlan.turnId !== latestTurnId) return;
-    const turnKey = activePlan.turnId ?? sidebarProposedPlan?.turnId ?? "__dismissed__";
-    if (planSidebarDismissedForTurnRef.current === turnKey) return;
+    if (
+      activeThreadKey &&
+      planSidebarDismissedTurnByThreadRef.current.get(activeThreadKey) ===
+        planSidebarDismissalTurnKey
+    ) {
+      return;
+    }
     setPlanSidebarOpen(true);
   }, [
     activePlan,
     activeLatestTurn?.turnId,
+    activeThreadKey,
     autoOpenPlanSidebar,
+    planSidebarDismissalTurnKey,
     planSidebarOpen,
-    sidebarProposedPlan?.turnId,
   ]);
 
   useEffect(() => {
@@ -3567,7 +3585,9 @@ export default function ChatView(props: ChatViewProps) {
         // "default" mode here means the agent is executing the plan, which produces
         // step-tracking activities that the sidebar will display.
         if (nextInteractionMode === "default" && autoOpenPlanSidebar) {
-          planSidebarDismissedForTurnRef.current = null;
+          if (activeThreadKey) {
+            planSidebarDismissedTurnByThreadRef.current.delete(activeThreadKey);
+          }
           setPlanSidebarOpen(true);
         }
         sendInFlightRef.current = false;
@@ -3585,6 +3605,7 @@ export default function ChatView(props: ChatViewProps) {
     },
     [
       activeThread,
+      activeThreadKey,
       activeProposedPlan,
       beginLocalDispatch,
       isConnecting,
