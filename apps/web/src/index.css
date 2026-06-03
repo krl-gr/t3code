@@ -140,7 +140,7 @@
 
   @variant dark {
     color-scheme: dark;
-    --background: color-mix(in srgb, var(--color-neutral-950) 95%, var(--color-white));
+    --background: #131313FA;
     --app-chrome-background: var(--background);
     --app-content-background: #131313FA;
     --foreground: var(--color-neutral-100);
@@ -242,6 +242,20 @@ body::after {
   background: var(--sidebar);
   -webkit-backdrop-filter: blur(28px) saturate(1.25);
   backdrop-filter: blur(28px) saturate(1.25);
+}
+
+.t3-chat-header-overlay::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 6rem;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--app-content-background) 96%, transparent) 0%,
+    color-mix(in srgb, var(--app-content-background) 72%, transparent) 58%,
+    transparent 100%
+  );
 }
 
 .t3code-dockview-theme {
