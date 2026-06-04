@@ -22,7 +22,13 @@
  * @module provider/Drivers/CodexDriver
  */
 import { CodexSettings, ProviderDriverKind, type ServerProvider } from "@t3tools/contracts";
-import { Duration, Effect, FileSystem, Path, Schema, Stream } from "effect";
+import * as Duration from "effect/Duration";
+import * as Crypto from "effect/Crypto";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 import { HttpClient } from "effect/unstable/http";
 import { ChildProcessSpawner } from "effect/unstable/process";
 
@@ -46,6 +52,7 @@ import {
   materializeCodexShadowHome,
   resolveCodexHomeLayout,
 } from "./CodexHomeLayout.ts";
+const decodeCodexSettings = Schema.decodeSync(CodexSettings);
 
 const DRIVER_KIND = ProviderDriverKind.make("codex");
 const SNAPSHOT_REFRESH_INTERVAL = Duration.minutes(5);
@@ -63,6 +70,7 @@ const UPDATE = makePackageManagedProviderMaintenanceResolver({
  */
 export type CodexDriverEnv =
   | ChildProcessSpawner.ChildProcessSpawner
+  | Crypto.Crypto
   | FileSystem.FileSystem
   | HttpClient.HttpClient
   | Path.Path
@@ -98,7 +106,7 @@ export const CodexDriver: ProviderDriver<CodexSettings, CodexDriverEnv> = {
     supportsMultipleInstances: true,
   },
   configSchema: CodexSettings,
-  defaultConfig: (): CodexSettings => Schema.decodeSync(CodexSettings)({}),
+  defaultConfig: (): CodexSettings => decodeCodexSettings({}),
   create: ({ instanceId, displayName, accentColor, environment, enabled, config }) =>
     Effect.gen(function* () {
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
@@ -160,7 +168,8 @@ export const CodexDriver: ProviderDriver<CodexSettings, CodexDriverEnv> = {
         getSettings: Effect.succeed(effectiveConfig),
         streamSettings: Stream.never,
         haveSettingsChanged: () => false,
-        initialSnapshot: (settings) => stampIdentity(makePendingCodexProvider(settings)),
+        initialSnapshot: (settings) =>
+          makePendingCodexProvider(settings).pipe(Effect.map(stampIdentity)),
         checkProvider,
         enrichSnapshot: ({ snapshot, publishSnapshot }) =>
           enrichProviderSnapshotWithVersionAdvisory(snapshot, maintenanceCapabilities).pipe(

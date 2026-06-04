@@ -48,7 +48,7 @@ describe("wsConnectionState", () => {
     recordWsConnectionAttempt("ws://localhost:3020/ws", {
       connectionLabel: "Remote Mac",
     });
-    recordWsConnectionErrored("Unable to connect to the T3 server WebSocket.");
+    recordWsConnectionErrored("Unable to connect to the Up.computer server WebSocket.");
 
     const firstRetryDelayMs = getWsReconnectDelayMsForRetry(0);
     if (firstRetryDelayMs === null) {
@@ -67,13 +67,13 @@ describe("wsConnectionState", () => {
     recordWsConnectionAttempt("ws://localhost:3020/ws", {
       connectionLabel: "Remote Mac",
     });
-    recordWsConnectionErrored("Unable to connect to the T3 server WebSocket.", {
+    recordWsConnectionErrored("Unable to connect to the Up.computer server WebSocket.", {
       versionMismatchHint: "Version mismatch. Try syncing the client and server.",
     });
 
     expect(getWsConnectionStatus()).toMatchObject({
       lastError:
-        "Unable to connect to the T3 server WebSocket. Hint: Version mismatch. Try syncing the client and server.",
+        "Unable to connect to the Up.computer server WebSocket. Hint: Version mismatch. Try syncing the client and server.",
     });
   });
 
@@ -95,7 +95,7 @@ describe("wsConnectionState", () => {
   it("marks the reconnect cycle as exhausted after the final attempt fails", () => {
     for (let attempt = 0; attempt < WS_RECONNECT_MAX_ATTEMPTS; attempt += 1) {
       recordWsConnectionAttempt("ws://localhost:3020/ws");
-      recordWsConnectionErrored("Unable to connect to the T3 server WebSocket.");
+      recordWsConnectionErrored("Unable to connect to the Up.computer server WebSocket.");
     }
 
     expect(getWsConnectionStatus()).toMatchObject({

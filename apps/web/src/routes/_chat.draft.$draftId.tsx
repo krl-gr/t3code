@@ -1,11 +1,10 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo } from "react";
-import ChatView from "../components/ChatView";
+
 import { threadHasStarted } from "../components/ChatView.logic";
-import { useComposerDraftStore, DraftId } from "../composerDraftStore";
-import { SidebarInset } from "../components/ui/sidebar";
-import { createThreadSelectorAcrossEnvironments } from "../storeSelectors";
+import { DraftId, useComposerDraftStore } from "../composerDraftStore";
 import { useStore } from "../store";
+import { createThreadSelectorAcrossEnvironments } from "../storeSelectors";
 import { buildThreadRouteParams } from "../threadRoutes";
 
 function DraftChatThreadRouteView() {
@@ -53,32 +52,7 @@ function DraftChatThreadRouteView() {
     void navigate({ to: "/", replace: true });
   }, [canonicalThreadRef, draftSession, navigate]);
 
-  if (canonicalThreadRef) {
-    return (
-      <SidebarInset className="h-svh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground md:h-dvh">
-        <ChatView
-          environmentId={canonicalThreadRef.environmentId}
-          threadId={canonicalThreadRef.threadId}
-          routeKind="server"
-        />
-      </SidebarInset>
-    );
-  }
-
-  if (!draftSession) {
-    return null;
-  }
-
-  return (
-    <SidebarInset className="h-svh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground md:h-dvh">
-      <ChatView
-        draftId={draftId}
-        environmentId={draftSession.environmentId}
-        threadId={draftSession.threadId}
-        routeKind="draft"
-      />
-    </SidebarInset>
-  );
+  return null;
 }
 
 export const Route = createFileRoute("/_chat/draft/$draftId")({

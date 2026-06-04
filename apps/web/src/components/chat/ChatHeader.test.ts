@@ -1,7 +1,7 @@
 import { EnvironmentId } from "@t3tools/contracts";
 import { describe, expect, it } from "vitest";
 
-import { shouldShowOpenInPicker } from "./ChatHeader";
+import { shouldShowOpenInPicker } from "./OpenInPicker";
 
 describe("shouldShowOpenInPicker", () => {
   const primaryEnvironmentId = EnvironmentId.make("environment-primary");

@@ -8,9 +8,16 @@ import {
 } from "@t3tools/contracts";
 import { createModelSelection } from "@t3tools/shared/model";
 import { assert, it } from "@effect/vitest";
-import { Effect, FileSystem, Layer, Schema } from "effect";
+import * as Effect from "effect/Effect";
+import * as Duration from "effect/Duration";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
 import { ServerConfig } from "./config.ts";
 import { ServerSettingsLive, ServerSettingsService } from "./serverSettings.ts";
+
+const decodeSettingsPatch = Schema.decodeUnknownEffect(ServerSettingsPatch);
+const decodeServerSettings = Schema.decodeUnknownEffect(ServerSettings);
 
 const makeServerSettingsLayer = () =>
   ServerSettingsLive.pipe(
@@ -25,15 +32,16 @@ const makeServerSettingsLayer = () =>
 
 it.layer(NodeServices.layer)("server settings", (it) => {
   it.effect("decodes nested settings patches", () =>
-    Effect.sync(() => {
-      const decodePatch = Schema.decodeUnknownSync(ServerSettingsPatch);
-
-      assert.deepEqual(decodePatch({ providers: { codex: { binaryPath: "/tmp/codex" } } }), {
-        providers: { codex: { binaryPath: "/tmp/codex" } },
-      });
+    Effect.gen(function* () {
+      assert.deepEqual(
+        yield* decodeSettingsPatch({ providers: { codex: { binaryPath: "/tmp/codex" } } }),
+        {
+          providers: { codex: { binaryPath: "/tmp/codex" } },
+        },
+      );
 
       assert.deepEqual(
-        decodePatch({
+        yield* decodeSettingsPatch({
           textGenerationModelSelection: {
             options: [{ id: "fastMode", value: false }],
           },
@@ -50,10 +58,8 @@ it.layer(NodeServices.layer)("server settings", (it) => {
   it.effect(
     "decodes legacy object-shaped textGenerationModelSelection.options from settings.json",
     () =>
-      Effect.sync(() => {
-        const decode = Schema.decodeUnknownSync(ServerSettings);
-
-        const decoded = decode({
+      Effect.gen(function* () {
+        const decoded = yield* decodeServerSettings({
           textGenerationModelSelection: {
             provider: ProviderDriverKind.make("codex"),
             model: "gpt-5.4-mini",
@@ -434,11 +440,13 @@ it.layer(NodeServices.layer)("server settings", (it) => {
             serverPassword: "secret-password",
           },
         },
+        automaticGitFetchInterval: Duration.seconds(10),
       });
 
       assert.equal(next.providers.codex.binaryPath, "/opt/homebrew/bin/codex");
 
       const raw = yield* fileSystem.readFileString(serverConfig.settingsPath);
+      // @effect-diagnostics-next-line preferSchemaOverJson:off
       assert.deepEqual(JSON.parse(raw), {
         addProjectBaseDirectory: "~/Development",
         observability: {
@@ -454,6 +462,7 @@ it.layer(NodeServices.layer)("server settings", (it) => {
             serverPassword: "secret-password",
           },
         },
+        automaticGitFetchInterval: 10_000,
       });
     }).pipe(Effect.provide(makeServerSettingsLayer())),
   );
@@ -490,6 +499,7 @@ it.layer(NodeServices.layer)("server settings", (it) => {
 
       const raw = yield* fileSystem.readFileString(serverConfig.settingsPath);
       assert.notInclude(raw, "sk-or-secret");
+      // @effect-diagnostics-next-line preferSchemaOverJson:off
       assert.deepEqual(JSON.parse(raw).providerInstances.codex_personal.environment, [
         {
           name: "OPENROUTER_API_KEY",

@@ -1,4 +1,5 @@
-import { Effect, Layer } from "effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { PtyAdapter } from "../Services/PTY.ts";
 import type { PtyAdapterShape, PtyExitEvent, PtyProcess } from "../Services/PTY.ts";
 
@@ -94,7 +95,7 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     if (process.platform === "win32") {
       return yield* Effect.die(
-        "Bun PTY terminal support is unavailable on Windows. Please use Node.js (e.g. by running `npx t3`) instead.",
+        "Bun PTY terminal support is unavailable on Windows. Please use Node.js (e.g. by running `npx @updotcomputer/cli`) instead.",
       );
     }
     return {

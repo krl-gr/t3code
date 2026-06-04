@@ -6,6 +6,7 @@ import {
   getAppModelOptionsForInstance,
   resolveAppModelSelectionForInstance,
   resolveAppModelSelectionState,
+  supportsGitTextGenerationEntry,
 } from "./modelSelection";
 
 function provider(input: {
@@ -246,6 +247,41 @@ describe("instance-scoped model selection", () => {
     expect(resolveAppModelSelectionState(settings, providers)).toEqual({
       instanceId: ProviderInstanceId.make("claude_openrouter"),
       model: "openai/gpt-5.5",
+    });
+  });
+
+  it("keeps Pi available for chat models but excludes it from git text generation", () => {
+    const providers = [
+      provider({
+        provider: ProviderDriverKind.make("pi"),
+        instanceId: "pi",
+        models: ["pi/default", "openai-codex/gpt-5.4"],
+      }),
+      provider({
+        provider: ProviderDriverKind.make("codex"),
+        instanceId: "codex",
+        models: ["gpt-5.4-mini"],
+      }),
+    ];
+    const piEntry = deriveProviderInstanceEntries(providers).find(
+      (entry) => entry.instanceId === "pi",
+    )!;
+    const settings: UnifiedSettings = {
+      ...DEFAULT_UNIFIED_SETTINGS,
+      textGenerationModelSelection: {
+        instanceId: ProviderInstanceId.make("pi"),
+        model: "pi/default",
+      },
+    };
+
+    expect(getAppModelOptionsForInstance(settings, piEntry).map((option) => option.slug)).toEqual([
+      "pi/default",
+      "openai-codex/gpt-5.4",
+    ]);
+    expect(supportsGitTextGenerationEntry(piEntry)).toBe(false);
+    expect(resolveAppModelSelectionState(settings, providers)).toEqual({
+      instanceId: ProviderInstanceId.make("codex"),
+      model: "gpt-5.4-mini",
     });
   });
 });

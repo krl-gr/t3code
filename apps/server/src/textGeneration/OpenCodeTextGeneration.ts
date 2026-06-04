@@ -1,4 +1,8 @@
-import { Effect, Exit, Fiber, Schema, Scope } from "effect";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
+import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 
 import {
@@ -7,8 +11,10 @@ import {
   type ModelSelection,
   type OpenCodeSettings,
 } from "@t3tools/contracts";
+import { PRODUCT_BASE_NAME } from "@t3tools/shared/branding";
 import { sanitizeBranchFragment, sanitizeFeatureBranchName } from "@t3tools/shared/git";
 import { getModelSelectionStringOptionValue } from "@t3tools/shared/model";
+import { extractJsonObject } from "@t3tools/shared/schemaJson";
 
 import { ServerConfig } from "../config.ts";
 import { resolveAttachmentPath } from "../attachmentStore.ts";
@@ -20,7 +26,6 @@ import {
 } from "./TextGenerationPrompts.ts";
 import { type TextGenerationShape } from "./TextGeneration.ts";
 import {
-  extractJsonObject,
   sanitizeCommitSubject,
   sanitizePrTitle,
   sanitizeThreadTitle,
@@ -298,7 +303,7 @@ export const makeOpenCodeTextGeneration = Effect.fn("makeOpenCodeTextGeneration"
               : {}),
           });
           const session = await client.session.create({
-            title: `T3 Code ${input.operation}`,
+            title: `${PRODUCT_BASE_NAME} ${input.operation}`,
             permission: [{ permission: "*", pattern: "*", action: "deny" }],
           });
           if (!session.data) {
@@ -348,9 +353,8 @@ export const makeOpenCodeTextGeneration = Effect.fn("makeOpenCodeTextGeneration"
             releaseSharedServer,
           );
 
-    return yield* Schema.decodeEffect(Schema.fromJsonString(input.outputSchemaJson))(
-      extractJsonObject(rawOutput),
-    ).pipe(
+    const decodeOutput = Schema.decodeEffect(Schema.fromJsonString(input.outputSchemaJson));
+    return yield* decodeOutput(extractJsonObject(rawOutput)).pipe(
       Effect.catchTag("SchemaError", (cause) =>
         Effect.fail(
           new TextGenerationError({

@@ -1,4 +1,9 @@
-import { Cache, Context, Duration, Effect, Exit, Layer } from "effect";
+import * as Cache from "effect/Cache";
+import * as Context from "effect/Context";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
 import {
   SourceControlProviderError,
   type SourceControlProviderDiscoveryItem,
@@ -46,7 +51,7 @@ export interface SourceControlProviderRegistryShape {
 export class SourceControlProviderRegistry extends Context.Service<
   SourceControlProviderRegistry,
   SourceControlProviderRegistryShape
->()("t3/source-control/SourceControlProviderRegistry") {}
+>()("t3/sourceControl/SourceControlProviderRegistry") {}
 
 function unsupportedProvider(
   kind: SourceControlProviderKind,
@@ -87,18 +92,17 @@ function selectProviderContext(
     readonly url: string;
   }>,
 ): SourceControlProvider.SourceControlProviderContext | null {
-  const candidates = remotes
-    .map((remote) => {
-      const provider = detectSourceControlProviderFromRemoteUrl(remote.url);
-      return provider
-        ? {
-            provider,
-            remoteName: remote.name,
-            remoteUrl: remote.url,
-          }
-        : null;
-    })
-    .filter((value): value is SourceControlProvider.SourceControlProviderContext => value !== null);
+  const candidates: Array<SourceControlProvider.SourceControlProviderContext> = [];
+  for (const remote of remotes) {
+    const provider = detectSourceControlProviderFromRemoteUrl(remote.url);
+    if (provider) {
+      candidates.push({
+        provider,
+        remoteName: remote.name,
+        remoteUrl: remote.url,
+      });
+    }
+  }
 
   return (
     candidates.find((candidate) => candidate.remoteName === "origin") ??

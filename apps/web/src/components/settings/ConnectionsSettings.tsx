@@ -17,8 +17,10 @@ import {
   type DesktopServerExposureState,
   type EnvironmentId,
 } from "@t3tools/contracts";
-import { DateTime } from "effect";
+import { WsRpcClient } from "@t3tools/client-runtime";
+import * as DateTime from "effect/DateTime";
 
+import { APP_BASE_NAME } from "../../branding";
 import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import { cn } from "../../lib/utils";
 import { formatElapsedDurationLabel, formatExpiresInLabel } from "../../timestampFormat";
@@ -82,7 +84,6 @@ import {
   type ServerClientSessionRecord,
   type ServerPairingLinkRecord,
 } from "~/environments/primary";
-import type { WsRpcClient } from "~/rpc/wsRpcClient";
 import {
   type SavedEnvironmentRecord,
   type SavedEnvironmentRuntimeState,
@@ -534,21 +535,27 @@ const PairingLinkListRow = memo(function PairingLinkListRow({
     const endpoint = selectPairingEndpoint(endpoints, defaultEndpointKey);
     return endpoint ? resolveAdvertisedEndpointPairingUrl(endpoint, pairingLink.credential) : null;
   }, [defaultEndpointKey, endpoints, pairingLink.credential]);
-  const endpointCopyOptions = useMemo(
-    () =>
-      endpoints
-        .filter((endpoint) => endpoint.status !== "unavailable")
-        .map((endpoint) => {
-          const url = resolveAdvertisedEndpointPairingUrl(endpoint, pairingLink.credential);
-          return {
-            key: endpointDefaultPreferenceKey(endpoint),
-            label: endpoint.label,
-            url,
-            detail: isHostedAppPairingUrl(url) ? "Hosted app link" : "Backend pairing URL",
-          };
-        }),
-    [endpoints, pairingLink.credential],
-  );
+  const endpointCopyOptions = useMemo(() => {
+    const options: Array<{
+      readonly key: string;
+      readonly label: string;
+      readonly url: string;
+      readonly detail: string;
+    }> = [];
+    for (const endpoint of endpoints) {
+      if (endpoint.status === "unavailable") {
+        continue;
+      }
+      const url = resolveAdvertisedEndpointPairingUrl(endpoint, pairingLink.credential);
+      options.push({
+        key: endpointDefaultPreferenceKey(endpoint),
+        label: endpoint.label,
+        url,
+        detail: isHostedAppPairingUrl(url) ? "Hosted app link" : "Backend pairing URL",
+      });
+    }
+    return options;
+  }, [endpoints, pairingLink.credential]);
   const shareablePairingUrl =
     endpointPairingUrl ??
     (endpointUrl != null && endpointUrl !== ""
@@ -2502,8 +2509,8 @@ export function ConnectionsSettings() {
                 </AlertDialogTitle>
                 <AlertDialogDescription>
                   {pendingDesktopServerExposureMode === "network-accessible"
-                    ? "T3 Code will restart to expose this environment over the network."
-                    : "T3 Code will restart and limit this environment back to this machine."}
+                    ? `${APP_BASE_NAME} will restart to expose this environment over the network.`
+                    : `${APP_BASE_NAME} will restart and limit this environment back to this machine.`}
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
@@ -2547,7 +2554,7 @@ export function ConnectionsSettings() {
               <AlertDialogHeader>
                 <AlertDialogTitle>Disable Tailscale HTTPS?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  T3 Code will restart the local backend without Tailscale Serve.
+                  {APP_BASE_NAME} will restart the local backend without Tailscale Serve.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
@@ -2585,8 +2592,8 @@ export function ConnectionsSettings() {
               <DialogHeader>
                 <DialogTitle>Set up Tailscale HTTPS?</DialogTitle>
                 <DialogDescription>
-                  T3 Code will restart the local backend with Tailscale Serve enabled and ask
-                  Tailscale to proxy HTTPS traffic to this backend.
+                  {APP_BASE_NAME} will restart the local backend with Tailscale Serve enabled and
+                  ask Tailscale to proxy HTTPS traffic to this backend.
                 </DialogDescription>
               </DialogHeader>
               <DialogPanel className="space-y-4">
@@ -2662,14 +2669,26 @@ export function ConnectionsSettings() {
               }
             }}
           >
-            <DialogTrigger
-              render={
-                <Button size="xs" variant="outline">
-                  <PlusIcon className="size-3" />
-                  Add environment
-                </Button>
-              }
-            />
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <DialogTrigger
+                    render={
+                      <Button
+                        size="xs"
+                        variant="ghost"
+                        className="h-5 gap-1 rounded-sm px-1 text-[11px] font-normal text-muted-foreground/60 hover:text-muted-foreground"
+                        aria-label="Add environment"
+                      >
+                        <PlusIcon className="size-3" />
+                        <span>Add environment</span>
+                      </Button>
+                    }
+                  />
+                }
+              />
+              <TooltipPopup side="top">Add environment</TooltipPopup>
+            </Tooltip>
             <DialogPopup className="max-h-[80dvh] sm:max-w-3xl">
               <DialogHeader>
                 <DialogTitle>Add Environment</DialogTitle>

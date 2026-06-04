@@ -1,5 +1,3 @@
-import { randomUUID } from "node:crypto";
-
 import {
   ApprovalRequestId,
   EventId,
@@ -12,7 +10,10 @@ import {
   TurnId,
   ProviderDriverKind,
 } from "@t3tools/contracts";
-import { Effect, Queue, Stream } from "effect";
+import * as Effect from "effect/Effect";
+import * as Crypto from "effect/Crypto";
+import * as Queue from "effect/Queue";
+import * as Stream from "effect/Stream";
 
 import {
   ProviderAdapterSessionNotFoundError,
@@ -202,7 +203,7 @@ interface MakeTestProviderAdapterHarnessOptions {
 }
 
 function nowIso(): string {
-  return new Date().toISOString();
+  return "2026-01-01T00:00:00.000Z";
 }
 
 function sessionNotFound(
@@ -225,6 +226,7 @@ function missingSessionEffect(
 export const makeTestProviderAdapterHarness = (options?: MakeTestProviderAdapterHarnessOptions) =>
   Effect.gen(function* () {
     const provider = options?.provider ?? ProviderDriverKind.make("codex");
+    const crypto = yield* Crypto.Crypto;
     const runtimeEvents = yield* Queue.unbounded<ProviderRuntimeEvent>();
     let sessionCount = 0;
     const sessions = new Map<ThreadId, SessionState>();
@@ -240,6 +242,18 @@ export const makeTestProviderAdapterHarness = (options?: MakeTestProviderAdapter
     >();
 
     const emit = (event: ProviderRuntimeEvent) => Queue.offer(runtimeEvents, event);
+    const randomUUIDv4 = (threadId: ThreadId) =>
+      crypto.randomUUIDv4.pipe(
+        Effect.mapError(
+          (cause) =>
+            new ProviderAdapterValidationError({
+              provider,
+              operation: "crypto/randomUUIDv4",
+              issue: `Failed to generate test runtime identifier for thread '${threadId}'.`,
+              cause,
+            }),
+        ),
+      );
 
     const startSession: ProviderAdapterShape<ProviderAdapterError>["startSession"] = (input) =>
       Effect.gen(function* () {
@@ -308,10 +322,9 @@ export const makeTestProviderAdapterHarness = (options?: MakeTestProviderAdapter
         for (const fixtureEvent of response.events) {
           const rawEvent: Record<string, unknown> = {
             ...(fixtureEvent as Record<string, unknown>),
-            eventId: randomUUID(),
+            eventId: yield* randomUUIDv4(input.threadId),
             provider,
             sessionId: RuntimeSessionId.make(String(input.threadId)),
-            createdAt: nowIso(),
           };
           rawEvent.threadId = state.snapshot.threadId;
           if (Object.hasOwn(rawEvent, "turnId")) {
@@ -366,7 +379,7 @@ export const makeTestProviderAdapterHarness = (options?: MakeTestProviderAdapter
         if (deferredTurnCompletedEvents.length === 0) {
           yield* emit({
             type: "turn.completed",
-            eventId: EventId.make(randomUUID()),
+            eventId: EventId.make(yield* randomUUIDv4(input.threadId)),
             provider,
             createdAt: nowIso(),
             threadId: state.snapshot.threadId,

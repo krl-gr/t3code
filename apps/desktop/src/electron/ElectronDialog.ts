@@ -12,6 +12,11 @@ export interface ElectronDialogPickFolderInput {
   readonly defaultPath: Option.Option<string>;
 }
 
+export interface ElectronDialogPickFileSystemEntriesInput {
+  readonly owner: Option.Option<Electron.BrowserWindow>;
+  readonly defaultPath: Option.Option<string>;
+}
+
 export interface ElectronDialogConfirmInput {
   readonly owner: Option.Option<Electron.BrowserWindow>;
   readonly message: string;
@@ -21,6 +26,9 @@ export interface ElectronDialogShape {
   readonly pickFolder: (
     input: ElectronDialogPickFolderInput,
   ) => Effect.Effect<Option.Option<string>>;
+  readonly pickFileSystemEntries: (
+    input: ElectronDialogPickFileSystemEntriesInput,
+  ) => Effect.Effect<Option.Option<readonly string[]>>;
   readonly confirm: (input: ElectronDialogConfirmInput) => Effect.Effect<boolean>;
   readonly showMessageBox: (
     options: Electron.MessageBoxOptions,
@@ -29,7 +37,7 @@ export interface ElectronDialogShape {
 }
 
 export class ElectronDialog extends Context.Service<ElectronDialog, ElectronDialogShape>()(
-  "t3/desktop/electron/Dialog",
+  "@t3tools/desktop/electron/ElectronDialog",
 ) {}
 
 const make = ElectronDialog.of({
@@ -54,6 +62,29 @@ const make = ElectronDialog.of({
     }
     return Option.fromNullishOr(result.filePaths[0]);
   }),
+  pickFileSystemEntries: Effect.fn("desktop.electron.dialog.pickFileSystemEntries")(
+    function* (input) {
+      const openDialogOptions: Electron.OpenDialogOptions = Option.match(input.defaultPath, {
+        onNone: () => ({
+          properties: ["openFile", "openDirectory", "multiSelections"],
+        }),
+        onSome: (defaultPath) => ({
+          properties: ["openFile", "openDirectory", "multiSelections"],
+          defaultPath,
+        }),
+      });
+      const result = yield* Option.match(input.owner, {
+        onNone: () => Effect.promise(() => Electron.dialog.showOpenDialog(openDialogOptions)),
+        onSome: (owner) =>
+          Effect.promise(() => Electron.dialog.showOpenDialog(owner, openDialogOptions)),
+      });
+
+      if (result.canceled || result.filePaths.length === 0) {
+        return Option.none();
+      }
+      return Option.some(result.filePaths);
+    },
+  ),
   confirm: Effect.fn("desktop.electron.dialog.confirm")(function* (input) {
     const normalizedMessage = input.message.trim();
     if (normalizedMessage.length === 0) {

@@ -24,9 +24,11 @@
               : "system";
           const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
           const isDark = theme === "dark" || (theme === "system" && prefersDark);
+          const isElectron = Boolean(window.desktopBridge || window.nativeApi);
+          document.documentElement.classList.toggle("electron", isElectron);
           document.documentElement.classList.toggle("dark", isDark);
           const chromeColor = isDark ? DARK_BACKGROUND : LIGHT_BACKGROUND;
-          document.documentElement.style.backgroundColor = chromeColor;
+          document.documentElement.style.backgroundColor = isElectron ? "transparent" : chromeColor;
           themeColorMeta?.setAttribute("content", chromeColor);
         } catch {
           document.documentElement.classList.add("dark");
@@ -48,7 +50,7 @@
         background: #ffffff;
         color: #262626;
         font-family:
-          "DM Sans",
+          "Inter",
           -apple-system,
           BlinkMacSystemFont,
           "Segoe UI",
@@ -59,6 +61,13 @@
       html.dark body {
         background: #161616;
         color: #f5f5f5;
+      }
+
+      html.electron,
+      html.electron body,
+      html.electron #root,
+      html.electron #boot-shell {
+        background: transparent;
       }
 
       #boot-shell {
@@ -86,16 +95,16 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300..800;1,9..40,300..800&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300..800;1,14..32,300..800&display=swap"
       rel="stylesheet"
     />
-    <title>T3 Code (Alpha)</title>
+    <title>Up.computer (Alpha)</title>
   </head>
   <body>
     <div id="root">
       <div id="boot-shell">
-        <div id="boot-shell-card" aria-label="T3 Code splash screen">
-          <img id="boot-shell-logo" src="/apple-touch-icon.png" alt="T3 Code" />
+        <div id="boot-shell-card" aria-label="Up.computer splash screen">
+          <img id="boot-shell-logo" src="/apple-touch-icon.png" alt="Up.computer" />
         </div>
       </div>
     </div>

@@ -1,8 +1,11 @@
-import { splitPromptIntoComposerSegments } from "./composer-editor-mentions";
+import {
+  formatComposerMentionToken,
+  splitPromptIntoComposerSegments,
+} from "./composer-editor-mentions";
 import { INLINE_TERMINAL_CONTEXT_PLACEHOLDER } from "./lib/terminalContext";
 
 export type ComposerTriggerKind = "path" | "slash-command" | "skill";
-export type ComposerSlashCommand = "model" | "plan" | "default";
+export type ComposerSlashCommand = "model" | "plan" | "default" | "ask";
 
 export interface ComposerTrigger {
   kind: ComposerTriggerKind;
@@ -54,7 +57,7 @@ export function expandCollapsedComposerCursor(text: string, cursorInput: number)
 
   for (const segment of segments) {
     if (segment.type === "mention") {
-      const expandedLength = segment.path.length + 1;
+      const expandedLength = formatComposerMentionToken(segment.path).length;
       if (remaining <= 1) {
         return expandedCursor + (remaining === 0 ? 0 : expandedLength);
       }
@@ -142,7 +145,7 @@ export function collapseExpandedComposerCursor(text: string, cursorInput: number
 
   for (const segment of segments) {
     if (segment.type === "mention") {
-      const expandedLength = segment.path.length + 1;
+      const expandedLength = formatComposerMentionToken(segment.path).length;
       if (remaining === 0) {
         return collapsedCursor;
       }
@@ -258,12 +261,13 @@ export function detectComposerTrigger(text: string, cursorInput: number): Compos
 export function parseStandaloneComposerSlashCommand(
   text: string,
 ): Exclude<ComposerSlashCommand, "model"> | null {
-  const match = /^\/(plan|default)\s*$/i.exec(text.trim());
+  const match = /^\/(plan|default|build|ask)\s*$/i.exec(text.trim());
   if (!match) {
     return null;
   }
   const command = match[1]?.toLowerCase();
   if (command === "plan") return "plan";
+  if (command === "ask") return "ask";
   return "default";
 }
 

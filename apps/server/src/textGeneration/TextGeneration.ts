@@ -1,4 +1,6 @@
-import { Context, Effect, Layer } from "effect";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { ChatAttachment, ModelSelection, ProviderInstanceId } from "@t3tools/contracts";
 import { TextGenerationError } from "@t3tools/contracts";
 
@@ -8,7 +10,7 @@ import {
 } from "../provider/Services/ProviderInstanceRegistry.ts";
 import type { ProviderInstance } from "../provider/ProviderDriver.ts";
 
-export type TextGenerationProvider = "codex" | "claudeAgent" | "cursor" | "opencode";
+export type TextGenerationProvider = "codex" | "claudeAgent" | "cursor" | "pi" | "opencode";
 
 export interface CommitMessageGenerationInput {
   cwd: string;
@@ -114,7 +116,7 @@ export interface TextGenerationShape {
  * TextGeneration - Service tag for commit and PR text generation.
  */
 export class TextGeneration extends Context.Service<TextGeneration, TextGenerationShape>()(
-  "t3/text-generation/TextGeneration",
+  "t3/textGeneration/TextGeneration",
 ) {}
 
 type TextGenerationOp =

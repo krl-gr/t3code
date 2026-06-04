@@ -1,5 +1,4 @@
-import * as nodeOs from "node:os";
-
+import * as NodeOs from "node:os";
 import type {
   CursorSettings,
   ModelCapabilities,
@@ -11,9 +10,18 @@ import type {
 } from "@t3tools/contracts";
 import { ProviderDriverKind } from "@t3tools/contracts";
 import type * as EffectAcpSchema from "effect-acp/schema";
-import { Cause, Effect, Exit, FileSystem, Layer, Option, Path, Result } from "effect";
+import * as Cause from "effect/Cause";
+import * as DateTime from "effect/DateTime";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Path from "effect/Path";
+import * as Result from "effect/Result";
 import { HttpClient } from "effect/unstable/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
+import { PRODUCT_BASE_NAME } from "@t3tools/shared/branding";
 import {
   createModelCapabilities,
   getProviderOptionBooleanSelectionValue,
@@ -58,38 +66,40 @@ export const CURSOR_PARAMETERIZED_MODEL_PICKER_CAPABILITIES = {
 
 export function buildInitialCursorProviderSnapshot(
   cursorSettings: CursorSettings,
-): ServerProviderDraft {
-  const checkedAt = new Date().toISOString();
-  const models = getCursorFallbackModels(cursorSettings);
+): Effect.Effect<ServerProviderDraft> {
+  return Effect.gen(function* () {
+    const checkedAt = yield* Effect.map(DateTime.now, DateTime.formatIso);
+    const models = getCursorFallbackModels(cursorSettings);
 
-  if (!cursorSettings.enabled) {
+    if (!cursorSettings.enabled) {
+      return buildServerProvider({
+        presentation: CURSOR_PRESENTATION,
+        enabled: false,
+        checkedAt,
+        models,
+        probe: {
+          installed: false,
+          version: null,
+          status: "warning",
+          auth: { status: "unknown" },
+          message: `Cursor is disabled in ${PRODUCT_BASE_NAME} settings.`,
+        },
+      });
+    }
+
     return buildServerProvider({
       presentation: CURSOR_PRESENTATION,
-      enabled: false,
+      enabled: true,
       checkedAt,
       models,
       probe: {
-        installed: false,
+        installed: true,
         version: null,
         status: "warning",
         auth: { status: "unknown" },
-        message: "Cursor is disabled in T3 Code settings.",
+        message: "Checking Cursor Agent availability...",
       },
     });
-  }
-
-  return buildServerProvider({
-    presentation: CURSOR_PRESENTATION,
-    enabled: true,
-    checkedAt,
-    models,
-    probe: {
-      installed: true,
-      version: null,
-      status: "warning",
-      auth: { status: "unknown" },
-      message: "Checking Cursor Agent availability...",
-    },
   });
 }
 
@@ -587,11 +597,12 @@ export const discoverCursorModelCapabilitiesViaAcp = (
           );
         }
 
-        const targetModelSlugs = new Set(
-          existingModels
-            .filter((model) => !model.isCustom && !hasCursorModelCapabilities(model))
-            .map((model) => model.slug),
-        );
+        const targetModelSlugs = new Set<string>();
+        for (const model of existingModels) {
+          if (!model.isCustom && !hasCursorModelCapabilities(model)) {
+            targetModelSlugs.add(model.slug);
+          }
+        }
         if (targetModelSlugs.size === 0) {
           return buildCursorDiscoveredModels(
             modelChoices.map((modelChoice) => ({
@@ -712,9 +723,13 @@ export interface CursorAboutResult {
 }
 
 function joinProviderMessages(...messages: ReadonlyArray<string | undefined>): string | undefined {
-  const parts = messages
-    .map((message) => message?.trim())
-    .filter((message): message is string => Boolean(message));
+  const parts: Array<string> = [];
+  for (const message of messages) {
+    const trimmed = message?.trim();
+    if (trimmed) {
+      parts.push(trimmed);
+    }
+  }
   return parts.length > 0 ? parts.join(" ") : undefined;
 }
 
@@ -781,11 +796,13 @@ export function parseCursorCliConfigChannel(raw: string): string | undefined {
 }
 
 function toTitleCaseWords(value: string): string {
-  return value
-    .split(/[\s_-]+/g)
-    .filter((part) => part.length > 0)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
-    .join(" ");
+  const parts: Array<string> = [];
+  for (const part of value.split(/[\s_-]+/g)) {
+    if (part.length > 0) {
+      parts.push(part.charAt(0).toUpperCase() + part.slice(1).toLowerCase());
+    }
+  }
+  return parts.join(" ");
 }
 
 function cursorSubscriptionLabel(subscriptionType: string | undefined): string | undefined {
@@ -854,7 +871,7 @@ function isCursorAboutJsonFormatUnsupported(result: CommandResult): boolean {
 const readCursorCliConfigChannel = Effect.fn("readCursorCliConfigChannel")(function* () {
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const configPath = path.join(nodeOs.homedir(), ".cursor", "cli-config.json");
+  const configPath = path.join(NodeOs.homedir(), ".cursor", "cli-config.json");
   const raw = yield* fileSystem.readFileString(configPath).pipe(Effect.orElseSucceed(() => ""));
   return parseCursorCliConfigChannel(raw);
 });
@@ -1085,7 +1102,7 @@ export const checkCursorProviderStatus = Effect.fn("checkCursorProviderStatus")(
   never,
   ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path
 > {
-  const checkedAt = new Date().toISOString();
+  const checkedAt = DateTime.formatIso(yield* DateTime.now);
   const fallbackModels = getCursorFallbackModels(cursorSettings);
 
   if (!cursorSettings.enabled) {
@@ -1099,7 +1116,7 @@ export const checkCursorProviderStatus = Effect.fn("checkCursorProviderStatus")(
         version: null,
         status: "warning",
         auth: { status: "unknown" },
-        message: "Cursor is disabled in T3 Code settings.",
+        message: `Cursor is disabled in ${PRODUCT_BASE_NAME} settings.`,
       },
     });
   }

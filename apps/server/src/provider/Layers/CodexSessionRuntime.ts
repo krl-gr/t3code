@@ -17,7 +17,17 @@ import {
   TurnId,
 } from "@t3tools/contracts";
 import { normalizeModelSlug } from "@t3tools/shared/model";
-import { Deferred, Effect, Exit, Layer, Queue, Ref, Scope, Random, Schema, Stream } from "effect";
+import * as Crypto from "effect/Crypto";
+import * as DateTime from "effect/DateTime";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
+import * as Queue from "effect/Queue";
+import * as Ref from "effect/Ref";
+import * as Scope from "effect/Scope";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 import * as SchemaIssue from "effect/SchemaIssue";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import * as CodexClient from "effect-codex-app-server/client";
@@ -28,9 +38,21 @@ import * as EffectCodexSchema from "effect-codex-app-server/schema";
 import { buildCodexInitializeParams } from "./CodexProvider.ts";
 import { expandHomePath } from "../../pathExpansion.ts";
 import {
+  computerUseResultToCodexContentItems,
+  type ComputerUseDynamicToolSpec,
+  type ComputerUseServiceShape,
+} from "../../computerUse/ComputerUseService.ts";
+import {
+  COMPUTER_USE_NAMESPACE,
+  COMPUTER_USE_TOOL_PREFIX,
+  sanitizeComputerUseArgs,
+} from "../../computerUse/ComputerUseToolDefinitions.ts";
+import {
+  CODEX_ASK_MODE_DEVELOPER_INSTRUCTIONS,
   CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS,
   CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS,
 } from "../CodexDeveloperInstructions.ts";
+const decodeV2TurnStartResponse = Schema.decodeUnknownEffect(EffectCodexSchema.V2TurnStartResponse);
 
 const PROVIDER = ProviderDriverKind.make("codex");
 
@@ -42,6 +64,7 @@ const BENIGN_ERROR_LOG_SNIPPETS = [
   "state db missing rollout path for thread",
   "state db record_discrepancy: find_thread_path_by_id_str_in_subdir, falling_back",
 ];
+const CODEX_APP_SERVER_FORCE_KILL_AFTER = "2 seconds" as const;
 const RECOVERABLE_THREAD_RESUME_ERROR_SNIPPETS = [
   "not found",
   "missing thread",
@@ -56,6 +79,8 @@ export const CodexResumeCursorSchema = Schema.Struct({
 const CodexUserInputAnswerObject = Schema.Struct({
   answers: Schema.Array(Schema.String),
 });
+const isCodexResumeCursorSchema = Schema.is(CodexResumeCursorSchema);
+const isCodexUserInputAnswerObject = Schema.is(CodexUserInputAnswerObject);
 
 // TODO: Verify `packages/effect-codex-app-server/scripts/generate.ts` so the generated
 // `V2TurnStartParams` schema includes `collaborationMode` directly.
@@ -64,6 +89,9 @@ const CodexTurnStartParamsWithCollaborationMode = EffectCodexSchema.V2TurnStartP
     collaborationMode: Schema.optionalKey(EffectCodexSchema.V2TurnStartParams__CollaborationMode),
   }),
 );
+const decodeCodexTurnStartParamsWithCollaborationMode = Schema.decodeUnknownEffect(
+  CodexTurnStartParamsWithCollaborationMode,
+);
 
 export type CodexTurnStartParamsWithCollaborationMode =
   typeof CodexTurnStartParamsWithCollaborationMode.Type;
@@ -71,6 +99,9 @@ const formatSchemaIssue = SchemaIssue.makeFormatterDefault();
 
 export type CodexResumeCursor = typeof CodexResumeCursorSchema.Type;
 type CodexServiceTier = NonNullable<EffectCodexSchema.V2ThreadStartParams["serviceTier"]>;
+type CodexThreadStartParamsWithDynamicTools = EffectCodexSchema.V2ThreadStartParams & {
+  readonly dynamicTools?: ReadonlyArray<ComputerUseDynamicToolSpec>;
+};
 type CodexThreadItem =
   | EffectCodexSchema.V2ThreadReadResponse["thread"]["turns"][number]["items"][number]
   | EffectCodexSchema.V2ThreadRollbackResponse["thread"]["turns"][number]["items"][number];
@@ -86,6 +117,7 @@ export interface CodexSessionRuntimeOptions {
   readonly model?: string;
   readonly serviceTier?: CodexServiceTier | undefined;
   readonly resumeCursor?: CodexResumeCursor;
+  readonly computerUse?: ComputerUseServiceShape;
 }
 
 export interface CodexSessionRuntimeSendTurnInput {
@@ -221,6 +253,10 @@ function makeCodexServerNotification<M extends CodexRpc.ServerNotificationMethod
   return { method, params } as CodexServerNotification;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
 function normalizeCodexModelSlug(
   model: string | undefined | null,
   preferredId?: string,
@@ -238,7 +274,7 @@ function normalizeCodexModelSlug(
 function readResumeCursorThreadId(
   resumeCursor: ProviderSession["resumeCursor"],
 ): string | undefined {
-  return Schema.is(CodexResumeCursorSchema)(resumeCursor) ? resumeCursor.threadId : undefined;
+  return isCodexResumeCursorSchema(resumeCursor) ? resumeCursor.threadId : undefined;
 }
 
 function runtimeModeToThreadConfig(input: RuntimeMode): {
@@ -270,7 +306,8 @@ function buildThreadStartParams(input: {
   readonly runtimeMode: RuntimeMode;
   readonly model: string | undefined;
   readonly serviceTier: CodexServiceTier | undefined;
-}): EffectCodexSchema.V2ThreadStartParams {
+  readonly dynamicTools?: ReadonlyArray<ComputerUseDynamicToolSpec>;
+}): CodexThreadStartParamsWithDynamicTools {
   const config = runtimeModeToThreadConfig(input.runtimeMode);
   return {
     cwd: input.cwd,
@@ -278,6 +315,9 @@ function buildThreadStartParams(input: {
     sandbox: config.sandbox,
     ...(input.model ? { model: input.model } : {}),
     ...(input.serviceTier ? { serviceTier: input.serviceTier } : {}),
+    ...(input.dynamicTools && input.dynamicTools.length > 0
+      ? { dynamicTools: input.dynamicTools }
+      : {}),
   };
 }
 
@@ -311,16 +351,31 @@ function buildCodexCollaborationMode(input: {
   }
   const model = normalizeCodexModelSlug(input.model) ?? DEFAULT_MODEL;
   return {
-    mode: input.interactionMode,
+    mode: resolveCodexCollaborationModeKind(input.interactionMode),
     settings: {
       model,
       reasoning_effort: input.effort ?? "medium",
-      developer_instructions:
-        input.interactionMode === "plan"
-          ? CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS
-          : CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS,
+      developer_instructions: resolveCodexDeveloperInstructions(input.interactionMode),
     },
   };
+}
+
+function resolveCodexCollaborationModeKind(
+  interactionMode: ProviderInteractionMode,
+): EffectCodexSchema.V2TurnStartParams__CollaborationMode["mode"] {
+  return interactionMode === "plan" ? "plan" : "default";
+}
+
+function resolveCodexDeveloperInstructions(interactionMode: ProviderInteractionMode): string {
+  switch (interactionMode) {
+    case "plan":
+      return CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS;
+    case "ask":
+      return CODEX_ASK_MODE_DEVELOPER_INSTRUCTIONS;
+    case "default":
+    default:
+      return CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS;
+  }
 }
 
 export function buildTurnStartParams(input: {
@@ -357,7 +412,7 @@ export function buildTurnStartParams(input: {
     ...(input.effort ? { effort: input.effort } : {}),
   });
 
-  return Schema.decodeUnknownEffect(CodexTurnStartParamsWithCollaborationMode)({
+  return decodeCodexTurnStartParamsWithCollaborationMode({
     threadId: input.threadId,
     input: turnInput,
     approvalPolicy: config.approvalPolicy,
@@ -420,6 +475,7 @@ export const openCodexThread = (input: {
   readonly requestedModel: string | undefined;
   readonly serviceTier: CodexServiceTier | undefined;
   readonly resumeThreadId: string | undefined;
+  readonly dynamicTools?: ReadonlyArray<ComputerUseDynamicToolSpec>;
 }): Effect.Effect<CodexThreadOpenResponse, CodexErrors.CodexAppServerError> => {
   const resumeThreadId = input.resumeThreadId;
   const startParams = buildThreadStartParams({
@@ -427,6 +483,7 @@ export const openCodexThread = (input: {
     runtimeMode: input.runtimeMode,
     model: input.requestedModel,
     serviceTier: input.serviceTier,
+    ...(input.dynamicTools !== undefined ? { dynamicTools: input.dynamicTools } : {}),
   });
 
   if (resumeThreadId === undefined) {
@@ -613,7 +670,7 @@ function toCodexUserInputAnswer(
     const answers = value.filter((entry): entry is string => typeof entry === "string");
     return Effect.succeed({ answers });
   }
-  if (Schema.is(CodexUserInputAnswerObject)(value)) {
+  if (isCodexUserInputAnswerObject(value)) {
     return Effect.succeed({ answers: value.answers });
   }
   return Effect.fail(new CodexSessionRuntimeInvalidUserInputAnswersError({ questionId }));
@@ -653,11 +710,14 @@ function updateSession(
   sessionRef: Ref.Ref<ProviderSession>,
   updates: Partial<ProviderSession>,
 ): Effect.Effect<void> {
-  return Ref.update(sessionRef, (session) => ({
-    ...session,
-    ...updates,
-    updatedAt: new Date().toISOString(),
-  }));
+  return Effect.gen(function* () {
+    const updatedAt = DateTime.formatIso(yield* DateTime.now);
+    yield* Ref.update(sessionRef, (session) => ({
+      ...session,
+      ...updates,
+      updatedAt,
+    }));
+  });
 }
 
 function parseThreadSnapshot(
@@ -677,14 +737,17 @@ export const makeCodexSessionRuntime = (
 ): Effect.Effect<
   CodexSessionRuntimeShape,
   CodexErrors.CodexAppServerError,
-  ChildProcessSpawner.ChildProcessSpawner | Scope.Scope
+  ChildProcessSpawner.ChildProcessSpawner | Crypto.Crypto | Scope.Scope
 > =>
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const runtimeScope = yield* Scope.Scope;
+    const crypto = yield* Crypto.Crypto;
     const events = yield* Queue.unbounded<ProviderEvent>();
     const pendingApprovalsRef = yield* Ref.make(new Map<ApprovalRequestId, PendingApproval>());
     const approvalCorrelationsRef = yield* Ref.make(new Map<string, ApprovalCorrelation>());
+    const dynamicApprovalAllowCacheRef = yield* Ref.make(new Set<string>());
+    const turnInteractionModesRef = yield* Ref.make(new Map<string, ProviderInteractionMode>());
     const pendingUserInputsRef = yield* Ref.make(new Map<ApprovalRequestId, PendingUserInput>());
     const collabReceiverTurnsRef = yield* Ref.make(new Map<string, TurnId>());
     const closedRef = yield* Ref.make(false);
@@ -702,6 +765,7 @@ export const makeCodexSessionRuntime = (
         ChildProcess.make(options.binaryPath, ["app-server"], {
           cwd: options.cwd,
           env,
+          forceKillAfter: CODEX_APP_SERVER_FORCE_KILL_AFTER,
           shell: process.platform === "win32",
         }),
       )
@@ -724,7 +788,18 @@ export const makeCodexSessionRuntime = (
       Effect.provide(clientContext),
     );
     const serverNotifications = yield* Queue.unbounded<CodexServerNotification>();
+    const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
+    const randomUUIDv4 = crypto.randomUUIDv4.pipe(
+      Effect.mapError(
+        (cause) =>
+          new CodexErrors.CodexAppServerTransportError({
+            detail: "Failed to generate Codex runtime identifier.",
+            cause,
+          }),
+      ),
+    );
 
+    const sessionCreatedAt = yield* nowIso;
     const initialSession = {
       provider: PROVIDER,
       ...(options.providerInstanceId ? { providerInstanceId: options.providerInstanceId } : {}),
@@ -734,22 +809,23 @@ export const makeCodexSessionRuntime = (
       ...(options.model ? { model: options.model } : {}),
       threadId: options.threadId,
       ...(options.resumeCursor !== undefined ? { resumeCursor: options.resumeCursor } : {}),
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      createdAt: sessionCreatedAt,
+      updatedAt: sessionCreatedAt,
     } satisfies ProviderSession;
     const sessionRef = yield* Ref.make<ProviderSession>(initialSession);
     const offerEvent = (event: ProviderEvent) => Queue.offer(events, event).pipe(Effect.asVoid);
 
     const emitEvent = (event: Omit<ProviderEvent, "id" | "provider" | "createdAt">) =>
-      Effect.flatMap(Random.nextUUIDv4, (id) =>
-        offerEvent({
+      Effect.gen(function* () {
+        const id = yield* randomUUIDv4;
+        return yield* offerEvent({
           id: EventId.make(id),
           provider: PROVIDER,
           ...(options.providerInstanceId ? { providerInstanceId: options.providerInstanceId } : {}),
-          createdAt: new Date().toISOString(),
+          createdAt: yield* nowIso,
           ...event,
-        }),
-      );
+        });
+      });
     const emitSessionEvent = (method: string, message: string) =>
       emitEvent({
         kind: "session",
@@ -909,7 +985,7 @@ export const makeCodexSessionRuntime = (
 
     yield* client.handleServerRequest("item/commandExecution/requestApproval", (payload) =>
       Effect.gen(function* () {
-        const requestId = ApprovalRequestId.make(yield* Random.nextUUIDv4);
+        const requestId = ApprovalRequestId.make(yield* randomUUIDv4);
         const turnId = TurnId.make(payload.turnId);
         const itemId = ProviderItemId.make(payload.itemId);
         const decision = yield* Deferred.make<ProviderApprovalDecision>();
@@ -965,7 +1041,7 @@ export const makeCodexSessionRuntime = (
 
     yield* client.handleServerRequest("item/fileChange/requestApproval", (payload) =>
       Effect.gen(function* () {
-        const requestId = ApprovalRequestId.make(yield* Random.nextUUIDv4);
+        const requestId = ApprovalRequestId.make(yield* randomUUIDv4);
         const turnId = TurnId.make(payload.turnId);
         const itemId = ProviderItemId.make(payload.itemId);
         const decision = yield* Deferred.make<ProviderApprovalDecision>();
@@ -1021,7 +1097,7 @@ export const makeCodexSessionRuntime = (
 
     yield* client.handleServerRequest("item/tool/requestUserInput", (payload) =>
       Effect.gen(function* () {
-        const requestId = ApprovalRequestId.make(yield* Random.nextUUIDv4);
+        const requestId = ApprovalRequestId.make(yield* randomUUIDv4);
         const turnId = TurnId.make(payload.turnId);
         const itemId = ProviderItemId.make(payload.itemId);
         const answers = yield* Deferred.make<ProviderUserInputAnswers>();
@@ -1066,6 +1142,122 @@ export const makeCodexSessionRuntime = (
             ),
           ),
         } satisfies EffectCodexSchema.ToolRequestUserInputResponse;
+      }),
+    );
+
+    yield* client.handleServerRequest("item/tool/call", (payload) =>
+      Effect.gen(function* () {
+        const args = isRecord(payload.arguments) ? payload.arguments : {};
+        const computerUse = options.computerUse;
+        if (
+          !computerUse ||
+          (payload.namespace !== COMPUTER_USE_NAMESPACE &&
+            !payload.tool.startsWith(COMPUTER_USE_TOOL_PREFIX))
+        ) {
+          return {
+            success: false,
+            contentItems: [
+              {
+                type: "inputText",
+                text: `Unknown dynamic tool: ${payload.tool}.`,
+              },
+            ],
+          } satisfies EffectCodexSchema.DynamicToolCallResponse;
+        }
+
+        const interactionMode = (yield* Ref.get(turnInteractionModesRef)).get(payload.turnId);
+        const sanitizedArgs = sanitizeComputerUseArgs(args);
+        const approval = yield* Effect.promise(() =>
+          computerUse.shouldRequireApproval({
+            toolName: payload.tool,
+            args,
+            ...(interactionMode ? { interactionMode } : {}),
+          }),
+        );
+        const turnId = TurnId.make(payload.turnId);
+        const cacheKey = `${payload.tool}\u0000${approval.detail}`;
+        const approvalCache = yield* Ref.get(dynamicApprovalAllowCacheRef);
+        if (approval.required && !approvalCache.has(cacheKey)) {
+          const requestId = ApprovalRequestId.make(yield* randomUUIDv4);
+          const decision = yield* Deferred.make<ProviderApprovalDecision>();
+          yield* Ref.update(pendingApprovalsRef, (current) => {
+            const next = new Map(current);
+            next.set(requestId, {
+              requestId,
+              jsonRpcId: payload.callId,
+              requestKind: "dynamic-tool",
+              turnId,
+              itemId: undefined,
+              decision,
+            });
+            return next;
+          });
+          yield* Ref.update(approvalCorrelationsRef, (current) => {
+            const next = new Map(current);
+            next.set(payload.callId, {
+              requestId,
+              requestKind: "dynamic-tool",
+              turnId,
+              itemId: undefined,
+            });
+            return next;
+          });
+
+          yield* emitEvent({
+            kind: "request",
+            threadId: options.threadId,
+            method: "item/tool/call",
+            requestId,
+            requestKind: "dynamic-tool",
+            turnId,
+            payload: {
+              ...payload,
+              arguments: sanitizedArgs,
+            },
+          });
+
+          const resolved = yield* Deferred.await(decision).pipe(
+            Effect.ensuring(
+              Ref.update(pendingApprovalsRef, (current) => {
+                const next = new Map(current);
+                next.delete(requestId);
+                return next;
+              }),
+            ),
+          );
+          if (resolved === "acceptForSession") {
+            yield* Ref.update(dynamicApprovalAllowCacheRef, (current) => {
+              const next = new Set(current);
+              next.add(cacheKey);
+              return next;
+            });
+          } else if (resolved !== "accept") {
+            return {
+              success: false,
+              contentItems: [
+                {
+                  type: "inputText",
+                  text:
+                    resolved === "decline"
+                      ? `Computer-use tool '${payload.tool}' was declined by the user.`
+                      : `Computer-use tool '${payload.tool}' was cancelled before approval.`,
+                },
+              ],
+            } satisfies EffectCodexSchema.DynamicToolCallResponse;
+          }
+        }
+
+        const result = yield* Effect.promise(() =>
+          computerUse.callTool({
+            toolName: payload.tool,
+            args,
+            ...(interactionMode ? { interactionMode } : {}),
+          }),
+        );
+        return {
+          success: !result.isError,
+          contentItems: computerUseResultToCodexContentItems(result),
+        } satisfies EffectCodexSchema.DynamicToolCallResponse;
       }),
     );
 
@@ -1159,6 +1351,10 @@ export const makeCodexSessionRuntime = (
       yield* client.notify("initialized", undefined);
 
       const requestedModel = normalizeCodexModelSlug(options.model);
+      const computerUse = options.computerUse;
+      const dynamicTools = computerUse
+        ? yield* Effect.promise(() => computerUse.dynamicToolSpecs())
+        : [];
 
       const opened = yield* openCodexThread({
         client,
@@ -1168,6 +1364,7 @@ export const makeCodexSessionRuntime = (
         requestedModel,
         serviceTier: options.serviceTier,
         resumeThreadId: readResumeCursorThreadId(options.resumeCursor),
+        dynamicTools,
       });
 
       const providerThreadId = opened.thread.id;
@@ -1177,7 +1374,7 @@ export const makeCodexSessionRuntime = (
         cwd: opened.cwd,
         model: opened.model,
         resumeCursor: { threadId: providerThreadId },
-        updatedAt: new Date().toISOString(),
+        updatedAt: yield* nowIso,
       } satisfies ProviderSession;
       yield* Ref.set(sessionRef, session);
       yield* emitSessionEvent("session/ready", "Codex App Server session ready.");
@@ -1205,7 +1402,11 @@ export const makeCodexSessionRuntime = (
         status: "closed",
         activeTurnId: undefined,
       });
-      yield* emitSessionEvent("session/closed", "Session stopped");
+      yield* emitSessionEvent("session/closed", "Session stopped").pipe(
+        Effect.catch((cause) =>
+          Effect.logError("Failed to emit Codex session closed event.", { cause }),
+        ),
+      );
       yield* Scope.close(runtimeScope, Exit.void);
       yield* Queue.shutdown(serverNotifications);
       yield* Queue.shutdown(events);
@@ -1231,14 +1432,17 @@ export const makeCodexSessionRuntime = (
             ...(input.interactionMode ? { interactionMode: input.interactionMode } : {}),
           });
           const rawResponse = yield* client.raw.request("turn/start", params);
-          const response = yield* Schema.decodeUnknownEffect(EffectCodexSchema.V2TurnStartResponse)(
-            rawResponse,
-          ).pipe(
+          const response = yield* decodeV2TurnStartResponse(rawResponse).pipe(
             Effect.mapError((error) =>
               toProtocolParseError("Invalid turn/start response payload", error),
             ),
           );
           const turnId = TurnId.make(response.turn.id);
+          yield* Ref.update(turnInteractionModesRef, (current) => {
+            const next = new Map(current);
+            next.set(response.turn.id, input.interactionMode ?? "default");
+            return next;
+          });
           yield* updateSession(sessionRef, {
             status: "running",
             activeTurnId: turnId,

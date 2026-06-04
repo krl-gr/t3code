@@ -7,15 +7,26 @@ import {
   type ServerProviderUpdatedPayload,
   type ServerProviderUpdateState,
 } from "@t3tools/contracts";
-import { Cause, Context, DateTime, Duration, Effect, Layer, Option, Ref, Schema } from "effect";
+import * as Cause from "effect/Cause";
+import * as Context from "effect/Context";
+import * as Data from "effect/Data";
+import * as DateTime from "effect/DateTime";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Ref from "effect/Ref";
+import * as Schema from "effect/Schema";
 import { HttpClient } from "effect/unstable/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
+import { PRODUCT_BASE_NAME } from "@t3tools/shared/branding";
 
 import { ProviderRegistry } from "./Services/ProviderRegistry.ts";
 import { makeProviderMaintenanceCommandCoordinator } from "./providerMaintenanceCommandCoordinator.ts";
 import { enrichProviderSnapshotWithVersionAdvisory } from "./providerMaintenance.ts";
 import type { ProviderMaintenanceCapabilities } from "./providerMaintenance.ts";
 import { collectUint8StreamText } from "../stream/collectUint8StreamText.ts";
+const isServerProviderUpdateError = Schema.is(ServerProviderUpdateError);
 
 const UPDATE_TIMEOUT_MS = 5 * 60_000;
 const UPDATE_OUTPUT_MAX_BYTES = 10_000;
@@ -43,7 +54,12 @@ export interface ProviderMaintenanceRunnerShape {
 export class ProviderMaintenanceRunner extends Context.Service<
   ProviderMaintenanceRunner,
   ProviderMaintenanceRunnerShape
->()("t3/provider/ProviderMaintenanceRunner") {}
+>()("t3/provider/providerMaintenanceRunner") {}
+
+class ProviderMaintenanceCommandError extends Data.TaggedError("ProviderMaintenanceCommandError")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 interface VerifiedProviderRefresh {
   readonly providers: ReadonlyArray<ServerProvider>;
@@ -65,7 +81,10 @@ const runProviderMaintenanceCommandWithSpawner = Effect.fn("ProviderMaintenanceR
           .pipe(
             Effect.mapError(
               (cause) =>
-                new Error(`Failed to run update command ${input.command}: ${cause.message}`),
+                new ProviderMaintenanceCommandError({
+                  message: `Failed to run update command ${input.command}: ${cause.message}`,
+                  cause,
+                }),
             ),
           );
         yield* Effect.addFinalizer(() => child.kill().pipe(Effect.ignore));
@@ -86,7 +105,10 @@ const runProviderMaintenanceCommandWithSpawner = Effect.fn("ProviderMaintenanceR
         ).pipe(
           Effect.mapError(
             (cause) =>
-              new Error(cause instanceof Error ? cause.message : "Update command failed to run."),
+              new ProviderMaintenanceCommandError({
+                message: cause instanceof Error ? cause.message : "Update command failed to run.",
+                cause,
+              }),
           ),
         );
 
@@ -193,13 +215,15 @@ export const make = Effect.fn("ProviderMaintenanceRunner.make")(function* () {
     instanceId: ProviderInstanceId,
   ): Effect.Effect<VerifiedProviderRefresh> =>
     providerRegistry.getProviders.pipe(
-      Effect.map((providers) =>
-        providers
-          .filter(
-            (candidate) => candidate.driver === provider && candidate.instanceId === instanceId,
-          )
-          .map((candidate) => candidate.instanceId),
-      ),
+      Effect.map((providers) => {
+        const instanceIds: Array<ProviderInstanceId> = [];
+        for (const candidate of providers) {
+          if (candidate.driver === provider && candidate.instanceId === instanceId) {
+            instanceIds.push(candidate.instanceId);
+          }
+        }
+        return instanceIds;
+      }),
       Effect.flatMap((instanceIds) =>
         instanceIds.length === 0
           ? providerRegistry.refreshInstance(instanceId)
@@ -338,9 +362,9 @@ export const make = Effect.fn("ProviderMaintenanceRunner.make")(function* () {
                 startedAt,
                 finishedAt,
                 message: couldNotVerify
-                  ? "Update command completed, but T3 Code could not verify the provider version."
+                  ? `Update command completed, but ${PRODUCT_BASE_NAME} could not verify the provider version.`
                   : stillOutdated
-                    ? "Update command completed, but T3 Code still detects an outdated provider version."
+                    ? `Update command completed, but ${PRODUCT_BASE_NAME} still detects an outdated provider version.`
                     : "Provider updated.",
                 output: commandOutput(result),
               }),
@@ -377,7 +401,7 @@ export const make = Effect.fn("ProviderMaintenanceRunner.make")(function* () {
       })
       .pipe(
         Effect.mapError((error) =>
-          Schema.is(ServerProviderUpdateError)(error)
+          isServerProviderUpdateError(error)
             ? new ServerProviderUpdateError({
                 provider,
                 reason: error.reason,

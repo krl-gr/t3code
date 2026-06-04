@@ -1,4 +1,5 @@
 export const PICK_FOLDER_CHANNEL = "desktop:pick-folder";
+export const PICK_FILE_SYSTEM_ENTRIES_CHANNEL = "desktop:pick-file-system-entries";
 export const CONFIRM_CHANNEL = "desktop:confirm";
 export const SET_THEME_CHANNEL = "desktop:set-theme";
 export const CONTEXT_MENU_CHANNEL = "desktop:context-menu";
@@ -19,6 +20,8 @@ export const SET_SAVED_ENVIRONMENT_REGISTRY_CHANNEL = "desktop:set-saved-environ
 export const GET_SAVED_ENVIRONMENT_SECRET_CHANNEL = "desktop:get-saved-environment-secret";
 export const SET_SAVED_ENVIRONMENT_SECRET_CHANNEL = "desktop:set-saved-environment-secret";
 export const REMOVE_SAVED_ENVIRONMENT_SECRET_CHANNEL = "desktop:remove-saved-environment-secret";
+export const GET_THREAD_PROMPT_DRAFTS_CHANNEL = "desktop:get-thread-prompt-drafts";
+export const SET_THREAD_PROMPT_DRAFTS_CHANNEL = "desktop:set-thread-prompt-drafts";
 export const DISCOVER_SSH_HOSTS_CHANNEL = "desktop:discover-ssh-hosts";
 export const ENSURE_SSH_ENVIRONMENT_CHANNEL = "desktop:ensure-ssh-environment";
 export const DISCONNECT_SSH_ENVIRONMENT_CHANNEL = "desktop:disconnect-ssh-environment";

@@ -1,4 +1,11 @@
-import { Context, Effect, Layer, Option, Result, Schema, SchemaIssue, type DateTime } from "effect";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as SchemaIssue from "effect/SchemaIssue";
+import type * as DateTime from "effect/DateTime";
 
 import { TrimmedNonEmptyString, type SourceControlRepositoryVisibility } from "@t3tools/contracts";
 
@@ -90,7 +97,7 @@ export interface GitLabCliShape {
 }
 
 export class GitLabCli extends Context.Service<GitLabCli, GitLabCliShape>()(
-  "t3/source-control/GitLabCli",
+  "t3/sourceControl/GitLabCli",
 ) {}
 
 function isVcsProcessSpawnError(error: unknown): boolean {
@@ -240,10 +247,13 @@ function parseRepositoryPath(repository: string): {
   readonly namespacePath: string | null;
   readonly projectPath: string;
 } {
-  const parts = repository
-    .split("/")
-    .map((part) => part.trim())
-    .filter((part) => part.length > 0);
+  const parts: Array<string> = [];
+  for (const part of repository.split("/")) {
+    const trimmed = part.trim();
+    if (trimmed.length > 0) {
+      parts.push(trimmed);
+    }
+  }
   const projectPath = parts.at(-1) ?? repository.trim();
   const namespacePath = parts.length > 1 ? parts.slice(0, -1).join("/") : null;
   return { namespacePath, projectPath };

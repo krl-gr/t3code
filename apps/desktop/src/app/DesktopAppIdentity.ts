@@ -16,6 +16,7 @@ const COMMIT_HASH_DISPLAY_LENGTH = 12;
 const AppPackageMetadata = Schema.Struct({
   t3codeCommitHash: Schema.optional(Schema.String),
 });
+const decodeAppPackageMetadata = Schema.decodeEffect(Schema.fromJsonString(AppPackageMetadata));
 
 export interface DesktopAppIdentityShape {
   readonly resolveUserDataPath: Effect.Effect<string>;
@@ -25,7 +26,7 @@ export interface DesktopAppIdentityShape {
 export class DesktopAppIdentity extends Context.Service<
   DesktopAppIdentity,
   DesktopAppIdentityShape
->()("t3/desktop/AppIdentity") {}
+>()("@t3tools/desktop/app/DesktopAppIdentity") {}
 
 const normalizeCommitHash = (value: string): Option.Option<string> => {
   const trimmed = value.trim();
@@ -47,7 +48,7 @@ const make = Effect.gen(function* () {
     return yield* Option.match(raw, {
       onNone: () => Effect.succeed(Option.none<string>()),
       onSome: (value) =>
-        Schema.decodeEffect(Schema.fromJsonString(AppPackageMetadata))(value).pipe(
+        decodeAppPackageMetadata(value).pipe(
           Effect.map((parsed) =>
             Option.fromNullishOr(parsed.t3codeCommitHash).pipe(Option.flatMap(normalizeCommitHash)),
           ),
@@ -109,7 +110,7 @@ const make = Effect.gen(function* () {
       yield* electronApp.setDesktopName(environment.linuxDesktopEntryName);
     }
 
-    if (environment.platform === "darwin") {
+    if (environment.platform === "darwin" && environment.isDevelopment) {
       const iconPaths = yield* assets.iconPaths;
       yield* Option.match(iconPaths.png, {
         onNone: () => Effect.void,

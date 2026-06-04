@@ -38,6 +38,8 @@ const JsonSchemaDocument = Schema.StructWithRest(
   }),
   [Schema.Record(Schema.String, Schema.Json)],
 );
+const decodeGithubContentEntries = Schema.decodeEffect(Schema.fromJsonString(GithubContentEntries));
+const decodeJsonSchemaDocument = Schema.decodeEffect(Schema.fromJsonString(JsonSchemaDocument));
 
 interface GeneratedPaths {
   readonly generatedDir: string;
@@ -68,7 +70,7 @@ class GeneratorError extends Schema.TaggedErrorClass<GeneratorError>()("Generato
   }
 }
 
-const ManualSchemas: Record<string, typeof Schema.Json.Type> = {
+const ManualSchemas: Record<string, Schema.Json> = {
   GetAuthStatusParams: {
     type: "object",
     title: "GetAuthStatusParams",
@@ -178,7 +180,7 @@ const fetchText = Effect.fn("fetchText")(function* (url: string) {
 
 const fetchDirectoryEntries = Effect.fn("fetchDirectoryEntries")(function* (path: string) {
   const raw = yield* fetchText(`${GITHUB_API_BASE}/${path}?ref=${UPSTREAM_REF}`);
-  return yield* Schema.decodeEffect(Schema.fromJsonString(GithubContentEntries))(raw);
+  return yield* decodeGithubContentEntries(raw);
 });
 
 function collectSchemaEntries(
@@ -216,7 +218,7 @@ function collectSchemaEntries(
   return entries;
 }
 
-function normalizeNullableTypes(value: typeof Schema.Json.Type): typeof Schema.Json.Type {
+function normalizeNullableTypes(value: Schema.Json): Schema.Json {
   if (Array.isArray(value)) {
     return value.map(normalizeNullableTypes);
   }
@@ -228,10 +230,7 @@ function normalizeNullableTypes(value: typeof Schema.Json.Type): typeof Schema.J
     key,
     normalizeNullableTypes(child),
   ]);
-  const normalizedObject = Object.fromEntries(normalizedEntries) as Record<
-    string,
-    typeof Schema.Json.Type
-  >;
+  const normalizedObject = Object.fromEntries(normalizedEntries) as Record<string, Schema.Json>;
   const typeValue = normalizedObject.type;
 
   if (!Array.isArray(typeValue)) {
@@ -249,7 +248,7 @@ function normalizeNullableTypes(value: typeof Schema.Json.Type): typeof Schema.J
   }
   const nonNullType = nonNullTypes[0]!;
 
-  const nextObject: Record<string, typeof Schema.Json.Type> = {};
+  const nextObject: Record<string, Schema.Json> = {};
   for (const [key, child] of Object.entries(normalizedObject)) {
     if (key !== "type") {
       nextObject[key] = child;
@@ -267,7 +266,7 @@ function normalizeNullableTypes(value: typeof Schema.Json.Type): typeof Schema.J
   };
 }
 
-function stripNullDefaults(value: typeof Schema.Json.Type): typeof Schema.Json.Type {
+function stripNullDefaults(value: Schema.Json): Schema.Json {
   if (Array.isArray(value)) {
     return value.map(stripNullDefaults);
   }
@@ -279,7 +278,7 @@ function stripNullDefaults(value: typeof Schema.Json.Type): typeof Schema.Json.T
     Object.entries(value)
       .filter(([key, child]) => !(key === "default" && child === null))
       .map(([key, child]) => [key, stripNullDefaults(child)]),
-  ) as typeof Schema.Json.Type;
+  ) as Schema.Json;
 }
 
 function toPascalCaseMethod(method: string) {
@@ -415,7 +414,7 @@ function renderSchemaMap(
 }
 
 function renderSchemaTypeReference(schemaName: string) {
-  return schemaName === "undefined" ? "undefined" : `typeof CodexSchema.${schemaName}.Type`;
+  return schemaName === "undefined" ? "undefined" : `CodexSchema.${schemaName}`;
 }
 
 function exportNameForPath(filePath: string): string {
@@ -466,11 +465,11 @@ function buildJsonSchemaFiles(
 }
 
 function rewriteExternalRefs(
-  value: typeof Schema.Json.Type,
+  value: Schema.Json,
   localDefinitionNames: ReadonlyMap<string, string>,
   currentNamespace: string | undefined,
   exportNameByQualifiedName: ReadonlyMap<string, string>,
-): typeof Schema.Json.Type {
+): Schema.Json {
   if (Array.isArray(value)) {
     return value.map((entry) =>
       rewriteExternalRefs(entry, localDefinitionNames, currentNamespace, exportNameByQualifiedName),
@@ -520,7 +519,7 @@ function rewriteExternalRefs(
         ),
       ];
     }),
-  ) as typeof Schema.Json.Type;
+  ) as Schema.Json;
 }
 
 const generateFiles = Effect.fn("generateFiles")(function* () {
@@ -541,11 +540,11 @@ const generateFiles = Effect.fn("generateFiles")(function* () {
   const exportNameByQualifiedName = new Map(
     jsonSchemaFiles.map((file) => [file.qualifiedName, file.exportName]),
   );
-  const aggregateSchemas: Record<string, typeof Schema.Json.Type> = {};
+  const aggregateSchemas: Record<string, Schema.Json> = {};
 
   for (const file of jsonSchemaFiles) {
     const raw = yield* fetchText(file.downloadUrl);
-    const parsed = yield* Schema.decodeEffect(Schema.fromJsonString(JsonSchemaDocument))(raw);
+    const parsed = yield* decodeJsonSchemaDocument(raw);
     const localDefinitionNames = new Map(
       Object.keys(parsed.definitions ?? {}).map((definitionName) => [
         definitionName,
@@ -566,7 +565,7 @@ const generateFiles = Effect.fn("generateFiles")(function* () {
       );
     }
 
-    const topLevelSchema: Record<string, typeof Schema.Json.Type> = {};
+    const topLevelSchema: Record<string, Schema.Json> = {};
     for (const [key, value] of Object.entries(parsed)) {
       if (key !== "definitions") {
         topLevelSchema[key] = value;

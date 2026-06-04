@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+// @effect-diagnostics nodeBuiltinImport:off
 import { appendFileSync } from "node:fs";
 
 import * as Effect from "effect/Effect";
@@ -409,7 +410,7 @@ const program = Effect.gen(function* () {
             status: "completed",
             rawOutput: {
               exitCode: 0,
-              stdout: '{ "name": "t3" }',
+              stdout: '{ "name": "upcomputer" }',
               stderr: "",
             },
           },

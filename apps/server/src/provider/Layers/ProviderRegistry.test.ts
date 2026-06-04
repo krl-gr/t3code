@@ -1,6 +1,16 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { describe, it, assert, live } from "@effect/vitest";
-import { Effect, Exit, Layer, PubSub, Ref, Schema, Scope, Sink, Stream } from "effect";
+import { describe, it, assert } from "@effect/vitest";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
+import * as Layer from "effect/Layer";
+import * as PubSub from "effect/PubSub";
+import * as Ref from "effect/Ref";
+import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
+import * as Sink from "effect/Sink";
+import * as Stream from "effect/Stream";
+import * as TestClock from "effect/testing/TestClock";
 import * as CodexErrors from "effect-codex-app-server/errors";
 import {
   ClaudeSettings,
@@ -18,6 +28,7 @@ import { HttpClient, HttpClientResponse } from "effect/unstable/http";
 import { ChildProcessSpawner } from "effect/unstable/process";
 import { deepMerge } from "@t3tools/shared/Struct";
 import { createModelCapabilities } from "@t3tools/shared/model";
+import { applyServerSettingsPatch } from "@t3tools/shared/serverSettings";
 
 import { checkCodexProviderStatus, type CodexAppServerProviderSnapshot } from "./CodexProvider.ts";
 import { checkClaudeProviderStatus } from "./ClaudeProvider.ts";
@@ -38,6 +49,9 @@ import type { ProviderInstance } from "../ProviderDriver.ts";
 import { ProviderInstanceRegistry } from "../Services/ProviderInstanceRegistry.ts";
 import { ProviderRegistry } from "../Services/ProviderRegistry.ts";
 import { makeManualOnlyProviderMaintenanceCapabilities } from "../providerMaintenance.ts";
+const decodeServerSettings = Schema.decodeSync(ServerSettings);
+const encodeServerSettings = Schema.encodeSync(ServerSettings);
+const encodedDefaultServerSettings = encodeServerSettings(DEFAULT_SERVER_SETTINGS);
 
 const defaultClaudeSettings: ClaudeSettings = Schema.decodeSync(ClaudeSettings)({});
 const defaultCodexSettings: CodexSettings = Schema.decodeSync(CodexSettings)({});
@@ -57,6 +71,10 @@ const TestHttpClientLive = Layer.succeed(
     Effect.succeed(HttpClientResponse.fromWeb(request, Response.json({ version: "0.0.0" }))),
   ),
 );
+
+function normalizeTestPath(value: string | undefined): string | undefined {
+  return value?.replace(/\\/g, "/").replace(/^[A-Za-z]:/, "");
+}
 
 function selectDescriptor(
   id: string,
@@ -180,6 +198,30 @@ function mockCommandSpawnerLayer(
   );
 }
 
+function recordingMockCommandSpawnerLayer(
+  handler: (
+    command: string,
+    args: ReadonlyArray<string>,
+  ) => { stdout: string; stderr: string; code: number },
+) {
+  const commands: Array<{
+    readonly command: string;
+    readonly args: ReadonlyArray<string>;
+  }> = [];
+  const layer = Layer.succeed(
+    ChildProcessSpawner.ChildProcessSpawner,
+    ChildProcessSpawner.make((command) => {
+      const cmd = command as unknown as {
+        command: string;
+        args: ReadonlyArray<string>;
+      };
+      commands.push({ command: cmd.command, args: cmd.args });
+      return Effect.succeed(mockHandle(handler(cmd.command, cmd.args)));
+    }),
+  );
+  return { layer, commands };
+}
+
 function failingSpawnerLayer(description: string) {
   return Layer.succeed(
     ChildProcessSpawner.ChildProcessSpawner,
@@ -192,6 +234,31 @@ function failingSpawnerLayer(description: string) {
           description,
         }),
       ),
+    ),
+  );
+}
+
+function hangingScopedSpawnerLayer(killCalls: Ref.Ref<number>) {
+  return Layer.succeed(
+    ChildProcessSpawner.ChildProcessSpawner,
+    ChildProcessSpawner.make(() =>
+      Effect.gen(function* () {
+        const handle = ChildProcessSpawner.makeHandle({
+          pid: ChildProcessSpawner.ProcessId(1),
+          exitCode: Effect.never,
+          isRunning: Effect.succeed(true),
+          kill: () => Ref.update(killCalls, (current) => current + 1),
+          unref: Effect.succeed(Effect.void),
+          stdin: Sink.drain,
+          stdout: Stream.never,
+          stderr: Stream.never,
+          all: Stream.never,
+          getInputFd: () => Sink.drain,
+          getOutputFd: () => Stream.empty,
+        });
+        yield* Effect.addFinalizer(() => handle.kill().pipe(Effect.ignore));
+        return handle;
+      }),
     ),
   );
 }
@@ -246,13 +313,14 @@ function makeMutableServerSettingsService(
       updateSettings: (patch) =>
         Effect.gen(function* () {
           const current = yield* Ref.get(settingsRef);
-          const next = Schema.decodeSync(ServerSettings)(deepMerge(current, patch));
+          const next = applyServerSettingsPatch(current, patch);
+          encodeServerSettings(next);
           yield* Ref.set(settingsRef, next);
           yield* PubSub.publish(changes, next);
           return next;
         }),
       get streamChanges() {
-        return Stream.fromPubSub(changes);
+        return Stream.concat(Stream.fromEffect(Ref.get(settingsRef)), Stream.fromPubSub(changes));
       },
     } satisfies ServerSettingsShape;
   });
@@ -405,6 +473,28 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
             status.message,
             "Codex CLI (`codex`) is not installed or not on PATH.",
           );
+        }),
+      );
+
+      it.effect("closes the app-server probe scope when provider status times out", () =>
+        Effect.gen(function* () {
+          const killCalls = yield* Ref.make(0);
+          const statusFiber = yield* checkCodexProviderStatus(defaultCodexSettings).pipe(
+            Effect.provide(hangingScopedSpawnerLayer(killCalls)),
+            Effect.forkChild,
+          );
+
+          yield* Effect.yieldNow;
+          yield* TestClock.adjust("11 seconds");
+          yield* Effect.yieldNow;
+
+          const status = yield* Fiber.join(statusFiber);
+          assert.strictEqual(status.status, "error");
+          assert.strictEqual(
+            status.message,
+            "Timed out while checking Codex app-server provider status.",
+          );
+          assert.strictEqual(yield* Ref.get(killCalls), 1);
         }),
       );
     });
@@ -696,7 +786,8 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
               attempt < 50 && cachedProvider?.checkedAt !== refreshedProvider.checkedAt;
               attempt += 1
             ) {
-              yield* Effect.sleep("10 millis");
+              yield* TestClock.adjust("10 millis");
+              yield* Effect.yieldNow;
               cachedProvider = yield* readProviderStatusCache(filePath);
             }
 
@@ -840,8 +931,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
           const changes = yield* PubSub.unbounded<void>();
           const instancesRef = yield* Ref.make<ReadonlyArray<ProviderInstance>>([codexInstance]);
           const failNextList = yield* Ref.make(false);
-          const wait = (millis: number) =>
-            Effect.promise<void>(() => new Promise((resolve) => setTimeout(resolve, millis)));
+          const wait = () => Effect.yieldNow;
           const instanceRegistryLayer = Layer.succeed(ProviderInstanceRegistry, {
             getInstance: (instanceId) =>
               Ref.get(instancesRef).pipe(
@@ -892,7 +982,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
               !providers.some((provider) => provider.instanceId === claudeInstanceId);
               attempt += 1
             ) {
-              yield* wait(10);
+              yield* wait();
               providers = yield* registry.getProviders;
             }
 
@@ -917,10 +1007,10 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
       // assertions below fail.
       it.effect("propagates real Codex probe failures to the aggregator at boot", () =>
         Effect.gen(function* () {
-          const missingBinary = `t3code_codex_missing_${process.pid}_${Date.now()}`;
+          const missingBinary = `t3code_codex_missing_`;
           const serverSettings = yield* makeMutableServerSettingsService(
-            Schema.decodeSync(ServerSettings)(
-              deepMerge(DEFAULT_SERVER_SETTINGS, {
+            decodeServerSettings(
+              deepMerge(encodedDefaultServerSettings, {
                 providers: {
                   // Disable every built-in probe that would otherwise spawn
                   // on the CI host. `enabled: false` short-circuits each
@@ -995,11 +1085,19 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
               "error",
               "Real Codex probe against a missing binary should surface as 'error' in the aggregator",
             );
-            assert.strictEqual(codexPersonal?.installed, false);
-            assert.strictEqual(
-              codexPersonal?.message,
-              "Codex CLI (`codex`) is not installed or not on PATH.",
-            );
+            if (process.platform === "win32") {
+              assert.strictEqual(codexPersonal?.installed, true);
+              assert.match(
+                codexPersonal?.message ?? "",
+                /^Codex app-server provider probe failed: Codex App Server process exited with code 1\./,
+              );
+            } else {
+              assert.strictEqual(codexPersonal?.installed, false);
+              assert.strictEqual(
+                codexPersonal?.message,
+                "Codex CLI (`codex`) is not installed or not on PATH.",
+              );
+            }
           }).pipe(Effect.provide(runtimeServices));
         }),
       );
@@ -1013,23 +1111,13 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
       // rebuilt instance's refresh (previous bug mode), the aggregator
       // keeps the old snapshot and this test fails.
       //
-      // `live` (imported from `@effect/vitest`) is used instead of
-      // `it.effect` so real timers coordinate the fibres that drive the
-      // settings → reconcile → sync pipeline. Under `it.effect`'s
-      // TestClock, `Effect.sleep` blocks until `TestClock.adjust`, which
-      // would require this test to reach into the internals of the
-      // reconcile pipeline to advance it step by step.
-      //
-      // The nested `it` handed to `it.layer(…, (it) => …)` is the
-      // `MethodsNonLive` variant and therefore lacks `.live`; the
-      // top-level `live` export from `@effect/vitest` is the equivalent.
-      live("re-probes when settings change the codex binaryPath", () =>
+      it.effect("re-probes when settings change the codex binaryPath", () =>
         Effect.gen(function* () {
-          const firstMissing = `t3code_codex_first_${process.pid}_${Date.now()}`;
-          const secondMissing = `t3code_codex_second_${process.pid}_${Date.now()}`;
+          const firstMissing = `t3code_codex_first_`;
+          const secondMissing = `t3code_codex_second_`;
           const serverSettings = yield* makeMutableServerSettingsService(
-            Schema.decodeSync(ServerSettings)(
-              deepMerge(DEFAULT_SERVER_SETTINGS, {
+            decodeServerSettings(
+              deepMerge(encodedDefaultServerSettings, {
                 providers: {
                   codex: { enabled: true, binaryPath: firstMissing },
                   claudeAgent: { enabled: false },
@@ -1041,6 +1129,11 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
           );
           const scope = yield* Scope.make();
           yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
+          const recorded = recordingMockCommandSpawnerLayer((command) => ({
+            stdout: "",
+            stderr: `${command} app-server failed`,
+            code: 1,
+          }));
           const providerRegistryLayer = ProviderRegistryLive.pipe(
             Layer.provideMerge(ProviderInstanceRegistryHydrationLive),
             Layer.provideMerge(Layer.succeed(ServerSettingsService, serverSettings)),
@@ -1052,11 +1145,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
             Layer.provideMerge(TestHttpClientLive),
             Layer.provideMerge(Layer.succeed(ProviderEventLoggers, NoOpProviderEventLoggers)),
             Layer.provideMerge(OpenCodeRuntimeLive),
-            // `it.live` does not inherit layers from the outer `it.layer`
-            // wrapper, so provide `NodeServices.layer` inline. This is the
-            // same real `ChildProcessSpawner` + `FileSystem` + `Path`
-            // services that production uses.
-            Layer.provideMerge(NodeServices.layer),
+            Layer.provideMerge(recorded.layer),
           );
           const runtimeServices = yield* Layer.build(providerRegistryLayer).pipe(
             Scope.provide(scope),
@@ -1075,9 +1164,18 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
               (provider) => provider.instanceId === "codex",
             );
             assert.strictEqual(initialCodex?.status, "error");
-            assert.strictEqual(initialCodex?.installed, false);
+            assert.strictEqual(initialCodex?.installed, true);
             const initialCheckedAt = initialCodex?.checkedAt;
             assert.notStrictEqual(initialCheckedAt, undefined);
+
+            // Let the scoped settings watcher fiber acquire its PubSub
+            // subscription before the test publishes the settings change.
+            yield* Effect.yieldNow;
+
+            // Move the virtual clock before the settings mutation so the
+            // rebuilt provider's fresh probe cannot reuse the boot probe's
+            // `checkedAt` timestamp.
+            yield* TestClock.adjust("1 millis");
 
             // Drive a settings change. The Hydration layer's
             // `SettingsWatcherLive` consumes this via `streamChanges`,
@@ -1093,31 +1191,36 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
               },
             });
 
-            // Poll with real timers (via `it.live`) until `checkedAt`
-            // advances or we hit a generous 3-second ceiling. Anything
-            // slower than that is a regression — the real probe fails
-            // fast on ENOENT, and the reconcile + sync pipeline is
-            // purely in-process.
+            // Poll until the rebuilt source probes the new binary path or
+            // we hit a generous virtual 3-second ceiling.
             const refreshed = yield* Effect.gen(function* () {
               for (let attempts = 0; attempts < 60; attempts += 1) {
                 const providers = yield* registry.getProviders;
                 const codex = providers.find((provider) => provider.instanceId === "codex");
-                if (codex !== undefined && codex.checkedAt !== initialCheckedAt) {
+                const codexProbeCommands = recorded.commands
+                  .filter((command) => command.args.join(" ") === "app-server")
+                  .map((command) => command.command);
+                if (codex !== undefined && codexProbeCommands.includes(secondMissing)) {
                   return providers;
                 }
-                yield* Effect.sleep("50 millis");
+                yield* TestClock.adjust("50 millis");
+                yield* Effect.yieldNow;
               }
               return yield* registry.getProviders;
             });
 
             const reprobedCodex = refreshed.find((provider) => provider.instanceId === "codex");
-            assert.notStrictEqual(
-              reprobedCodex?.checkedAt,
-              initialCheckedAt,
-              "Expected a fresh probe after settings change, got the stale snapshot",
+            const codexProbeCommands = recorded.commands
+              .filter((command) => command.args.join(" ") === "app-server")
+              .map((command) => command.command);
+            assert.strictEqual(codexProbeCommands[0], firstMissing);
+            assert.strictEqual(
+              codexProbeCommands.at(-1),
+              secondMissing,
+              "Expected a fresh probe with the updated Codex binaryPath",
             );
             assert.strictEqual(reprobedCodex?.status, "error");
-            assert.strictEqual(reprobedCodex?.installed, false);
+            assert.strictEqual(reprobedCodex?.installed, true);
           }).pipe(Effect.provide(runtimeServices));
         }),
       );
@@ -1125,8 +1228,8 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
       it.effect("includes unavailable instance snapshots in getProviders", () =>
         Effect.gen(function* () {
           const serverSettings = yield* makeMutableServerSettingsService(
-            Schema.decodeSync(ServerSettings)(
-              deepMerge(DEFAULT_SERVER_SETTINGS, {
+            decodeServerSettings(
+              deepMerge(encodedDefaultServerSettings, {
                 providers: {
                   codex: { enabled: false },
                   claudeAgent: { enabled: false },
@@ -1181,8 +1284,8 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
         () =>
           Effect.gen(function* () {
             const serverSettings = yield* makeMutableServerSettingsService(
-              Schema.decodeSync(ServerSettings)(
-                deepMerge(DEFAULT_SERVER_SETTINGS, {
+              decodeServerSettings(
+                deepMerge(encodedDefaultServerSettings, {
                   providers: {
                     codex: {
                       enabled: false,
@@ -1251,12 +1354,13 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
                 "codex",
                 "cursor",
                 "opencode",
+                "pi",
               ]);
               assert.strictEqual(cursorProvider?.enabled, false);
               assert.strictEqual(cursorProvider?.status, "disabled");
               assert.strictEqual(
                 cursorProvider?.message,
-                "Cursor is disabled in T3 Code settings.",
+                "Cursor is disabled in Up.computer settings.",
               );
               assert.strictEqual(cursorSpawned, false);
             }).pipe(Effect.provide(runtimeServices));
@@ -1271,7 +1375,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
           assert.strictEqual(status.enabled, false);
           assert.strictEqual(status.status, "disabled");
           assert.strictEqual(status.installed, false);
-          assert.strictEqual(status.message, "Codex is disabled in T3 Code settings.");
+          assert.strictEqual(status.message, "Codex is disabled in Up.computer settings.");
         }),
       );
     });
@@ -1500,7 +1604,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsService.layerTest(), T
           );
           assert.strictEqual(status.status, "ready");
           assert.deepStrictEqual(
-            recorded.commands.map((command) => command.env?.HOME),
+            recorded.commands.map((command) => normalizeTestPath(command.env?.HOME)),
             [claudeHome],
           );
         }).pipe(Effect.provide(recorded.layer));

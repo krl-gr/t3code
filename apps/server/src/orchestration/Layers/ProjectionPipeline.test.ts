@@ -5,13 +5,17 @@ import {
   EventId,
   MessageId,
   ProjectId,
+  ThreadContextBindingId,
   ThreadId,
   TurnId,
   ProviderInstanceId,
 } from "@t3tools/contracts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
-import { Effect, FileSystem, Layer, Path } from "effect";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import { OrchestrationCommandReceiptRepositoryLive } from "../../persistence/Layers/OrchestrationCommandReceipts.ts";
@@ -55,7 +59,7 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
       const projectionPipeline = yield* OrchestrationProjectionPipeline;
       const eventStore = yield* OrchestrationEventStore;
       const sql = yield* SqlClient.SqlClient;
-      const now = new Date().toISOString();
+      const now = "2026-01-01T00:00:00.000Z";
 
       yield* eventStore.append({
         type: "project.created",
@@ -172,6 +176,124 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
   );
 });
 
+it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-context-binding-updated-at-")))(
+  "OrchestrationProjectionPipeline",
+  (it) => {
+    it.effect("updates thread updated_at when context bindings are added or removed", () =>
+      Effect.gen(function* () {
+        const projectionPipeline = yield* OrchestrationProjectionPipeline;
+        const eventStore = yield* OrchestrationEventStore;
+        const sql = yield* SqlClient.SqlClient;
+        const createdAt = "2026-01-02T00:00:00.000Z";
+        const attachedAt = "2026-01-02T00:00:10.000Z";
+        const removedAt = "2026-01-02T00:00:20.000Z";
+        const threadId = ThreadId.make("thread-context-target");
+        const sourceThreadId = ThreadId.make("thread-context-source");
+        const bindingId = ThreadContextBindingId.make("ctx-source");
+
+        yield* eventStore.append({
+          type: "project.created",
+          eventId: EventId.make("evt-context-project"),
+          aggregateKind: "project",
+          aggregateId: ProjectId.make("project-context"),
+          occurredAt: createdAt,
+          commandId: CommandId.make("cmd-context-project"),
+          causationEventId: null,
+          correlationId: CorrelationId.make("cmd-context-project"),
+          metadata: {},
+          payload: {
+            projectId: ProjectId.make("project-context"),
+            title: "Project Context",
+            workspaceRoot: "/tmp/project-context",
+            defaultModelSelection: null,
+            scripts: [],
+            createdAt,
+            updatedAt: createdAt,
+          },
+        });
+
+        yield* eventStore.append({
+          type: "thread.created",
+          eventId: EventId.make("evt-context-thread"),
+          aggregateKind: "thread",
+          aggregateId: threadId,
+          occurredAt: createdAt,
+          commandId: CommandId.make("cmd-context-thread"),
+          causationEventId: null,
+          correlationId: CorrelationId.make("cmd-context-thread"),
+          metadata: {},
+          payload: {
+            threadId,
+            projectId: ProjectId.make("project-context"),
+            title: "Thread Context Target",
+            modelSelection: {
+              instanceId: ProviderInstanceId.make("codex"),
+              model: "gpt-5-codex",
+            },
+            runtimeMode: "full-access",
+            branch: null,
+            worktreePath: null,
+            createdAt,
+            updatedAt: createdAt,
+          },
+        });
+
+        yield* eventStore.append({
+          type: "thread.context-binding-added",
+          eventId: EventId.make("evt-context-added"),
+          aggregateKind: "thread",
+          aggregateId: threadId,
+          occurredAt: attachedAt,
+          commandId: CommandId.make("cmd-context-added"),
+          causationEventId: null,
+          correlationId: CorrelationId.make("cmd-context-added"),
+          metadata: {},
+          payload: {
+            threadId,
+            binding: {
+              id: bindingId,
+              targetThreadId: threadId,
+              sourceThreadId,
+              sourceProjectId: ProjectId.make("project-context"),
+              sourceThreadTitle: "Source Thread",
+              mode: "snapshot",
+              snapshotText: "USER:\nhello",
+              createdAt: attachedAt,
+              updatedAt: attachedAt,
+            },
+          },
+        });
+
+        yield* eventStore.append({
+          type: "thread.context-binding-removed",
+          eventId: EventId.make("evt-context-removed"),
+          aggregateKind: "thread",
+          aggregateId: threadId,
+          occurredAt: removedAt,
+          commandId: CommandId.make("cmd-context-removed"),
+          causationEventId: null,
+          correlationId: CorrelationId.make("cmd-context-removed"),
+          metadata: {},
+          payload: {
+            threadId,
+            bindingId,
+            removedAt,
+          },
+        });
+
+        yield* projectionPipeline.bootstrap;
+
+        const rows = yield* sql<{ readonly updatedAt: string }>`
+          SELECT updated_at AS "updatedAt"
+          FROM projection_threads
+          WHERE thread_id = ${threadId}
+        `;
+        assert.deepEqual(rows, [{ updatedAt: removedAt }]);
+      }),
+    );
+  },
+);
+
 it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-base-")))(
   "OrchestrationProjectionPipeline",
   (it) => {
@@ -180,7 +302,7 @@ it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-base-")))(
         const projectionPipeline = yield* OrchestrationProjectionPipeline;
         const eventStore = yield* OrchestrationEventStore;
         const sql = yield* SqlClient.SqlClient;
-        const now = new Date().toISOString();
+        const now = "2026-01-01T00:00:00.000Z";
 
         yield* eventStore.append({
           type: "thread.message-sent",
@@ -224,6 +346,7 @@ it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-base-")))(
             WHERE message_id = 'message-attachments'
           `;
         assert.equal(rows.length, 1);
+        // @effect-diagnostics-next-line preferSchemaOverJson:off
         assert.deepEqual(JSON.parse(rows[0]?.attachmentsJson ?? "null"), [
           {
             type: "image",
@@ -246,7 +369,7 @@ it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-projection-atta
         const projectionPipeline = yield* OrchestrationProjectionPipeline;
         const eventStore = yield* OrchestrationEventStore;
         const sql = yield* SqlClient.SqlClient;
-        const now = new Date().toISOString();
+        const now = "2026-01-01T00:00:00.000Z";
 
         yield* eventStore.append({
           type: "thread.message-sent",
@@ -297,6 +420,7 @@ it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-projection-atta
             WHERE message_id = 'message-attachments-safe'
           `;
         assert.equal(rows.length, 1);
+        // @effect-diagnostics-next-line preferSchemaOverJson:off
         assert.deepEqual(JSON.parse(rows[0]?.attachmentsJson ?? "null"), [
           {
             type: "image",
@@ -326,8 +450,8 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
         const projectionPipeline = yield* OrchestrationProjectionPipeline;
         const eventStore = yield* OrchestrationEventStore;
         const sql = yield* SqlClient.SqlClient;
-        const now = new Date().toISOString();
-        const later = new Date(Date.now() + 1_000).toISOString();
+        const now = "2026-01-01T00:00:00.000Z";
+        const later = "2026-01-01T00:00:01.000Z";
 
         yield* eventStore.append({
           type: "project.created",
@@ -441,6 +565,7 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
           WHERE message_id = 'message-clear-attachments'
         `;
         assert.equal(rows.length, 1);
+        // @effect-diagnostics-next-line preferSchemaOverJson:off
         assert.deepEqual(JSON.parse(rows[0]?.attachmentsJson ?? "null"), []);
       }),
   );
@@ -454,8 +579,8 @@ it.layer(
       const projectionPipeline = yield* OrchestrationProjectionPipeline;
       const eventStore = yield* OrchestrationEventStore;
       const sql = yield* SqlClient.SqlClient;
-      const now = new Date().toISOString();
-      const later = new Date(Date.now() + 1_000).toISOString();
+      const now = "2026-01-01T00:00:00.000Z";
+      const later = "2026-01-01T00:00:01.000Z";
 
       yield* eventStore.append({
         type: "project.created",
@@ -576,6 +701,7 @@ it.layer(
               WHERE message_id = 'message-overwrite'
             `;
       assert.equal(rows.length, 1);
+      // @effect-diagnostics-next-line preferSchemaOverJson:off
       assert.deepEqual(JSON.parse(rows[0]?.attachmentsJson ?? "null"), [
         {
           type: "image",
@@ -598,7 +724,7 @@ it.layer(
       const eventStore = yield* OrchestrationEventStore;
       const path = yield* Path.Path;
       const sql = yield* SqlClient.SqlClient;
-      const now = new Date().toISOString();
+      const now = "2026-01-01T00:00:00.000Z";
 
       const appendAndProject = (event: Parameters<typeof eventStore.append>[0]) =>
         eventStore
@@ -722,7 +848,7 @@ it.layer(
       const projectionPipeline = yield* OrchestrationProjectionPipeline;
       const eventStore = yield* OrchestrationEventStore;
       const { attachmentsDir } = yield* ServerConfig;
-      const now = new Date().toISOString();
+      const now = "2026-01-01T00:00:00.000Z";
       const threadId = ThreadId.make("Thread Revert.Files");
       const keepAttachmentId = "thread-revert-files-00000000-0000-4000-8000-000000000001";
       const removeAttachmentId = "thread-revert-files-00000000-0000-4000-8000-000000000002";
@@ -931,7 +1057,7 @@ it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-projection-atta
         const projectionPipeline = yield* OrchestrationProjectionPipeline;
         const eventStore = yield* OrchestrationEventStore;
         const { attachmentsDir } = yield* ServerConfig;
-        const now = new Date().toISOString();
+        const now = "2026-01-01T00:00:00.000Z";
         const threadId = ThreadId.make("Thread Delete.Files");
         const attachmentId = "thread-delete-files-00000000-0000-4000-8000-000000000001";
         const otherThreadAttachmentId =
@@ -1063,7 +1189,7 @@ it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-projection-atta
         const path = yield* Path.Path;
         const projectionPipeline = yield* OrchestrationProjectionPipeline;
         const eventStore = yield* OrchestrationEventStore;
-        const now = new Date().toISOString();
+        const now = "2026-01-01T00:00:00.000Z";
         const { attachmentsDir: attachmentsRootDir, stateDir } = yield* ServerConfig;
         const attachmentsSentinelPath = path.join(attachmentsRootDir, "sentinel.txt");
         const stateDirSentinelPath = path.join(stateDir, "state-sentinel.txt");
@@ -1103,7 +1229,7 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
       const projectionPipeline = yield* OrchestrationProjectionPipeline;
       const eventStore = yield* OrchestrationEventStore;
       const sql = yield* SqlClient.SqlClient;
-      const now = new Date().toISOString();
+      const now = "2026-01-01T00:00:00.000Z";
 
       yield* eventStore.append({
         type: "project.created",
@@ -1230,7 +1356,7 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
       const projectionPipeline = yield* OrchestrationProjectionPipeline;
       const eventStore = yield* OrchestrationEventStore;
       const sql = yield* SqlClient.SqlClient;
-      const now = new Date().toISOString();
+      const now = "2026-01-01T00:00:00.000Z";
 
       yield* eventStore.append({
         type: "project.created",
@@ -2187,7 +2313,7 @@ engineLayer("OrchestrationProjectionPipeline via engine dispatch", (it) => {
     Effect.gen(function* () {
       const engine = yield* OrchestrationEngineService;
       const sql = yield* SqlClient.SqlClient;
-      const createdAt = new Date().toISOString();
+      const createdAt = "2026-01-01T00:00:00.000Z";
 
       yield* engine.dispatch({
         type: "project.create",
@@ -2225,7 +2351,7 @@ engineLayer("OrchestrationProjectionPipeline via engine dispatch", (it) => {
     Effect.gen(function* () {
       const engine = yield* OrchestrationEngineService;
       const sql = yield* SqlClient.SqlClient;
-      const createdAt = new Date().toISOString();
+      const createdAt = "2026-01-01T00:00:00.000Z";
 
       yield* engine.dispatch({
         type: "project.create",

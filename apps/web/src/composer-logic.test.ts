@@ -157,6 +157,16 @@ describe("expandCollapsedComposerCursor", () => {
     );
   });
 
+  it("maps collapsed quoted mention cursor to expanded text cursor", () => {
+    const text = 'what is in @"src/My File @2.ts" now';
+    const collapsedCursorAfterMention = "what is in ".length + 2;
+    const expandedCursorAfterMention = 'what is in @"src/My File @2.ts" '.length;
+
+    expect(expandCollapsedComposerCursor(text, collapsedCursorAfterMention)).toBe(
+      expandedCursorAfterMention,
+    );
+  });
+
   it("allows path trigger detection to close after selecting a mention", () => {
     const text = "what's in my @AGENTS.md ";
     const collapsedCursorAfterMention = "what's in my ".length + 2;
@@ -185,6 +195,16 @@ describe("collapseExpandedComposerCursor", () => {
     const text = "what's in my @AGENTS.md fsfdas";
     const collapsedCursorAfterMention = "what's in my ".length + 2;
     const expandedCursorAfterMention = "what's in my @AGENTS.md ".length;
+
+    expect(collapseExpandedComposerCursor(text, expandedCursorAfterMention)).toBe(
+      collapsedCursorAfterMention,
+    );
+  });
+
+  it("maps expanded quoted mention cursor back to collapsed cursor", () => {
+    const text = 'what is in @"src/My File @2.ts" now';
+    const collapsedCursorAfterMention = "what is in ".length + 2;
+    const expandedCursorAfterMention = 'what is in @"src/My File @2.ts" '.length;
 
     expect(collapseExpandedComposerCursor(text, expandedCursorAfterMention)).toBe(
       collapsedCursorAfterMention,
@@ -302,6 +322,14 @@ describe("parseStandaloneComposerSlashCommand", () => {
 
   it("parses standalone /default command", () => {
     expect(parseStandaloneComposerSlashCommand("/default")).toBe("default");
+  });
+
+  it("parses standalone /build command as default mode", () => {
+    expect(parseStandaloneComposerSlashCommand("/build")).toBe("default");
+  });
+
+  it("parses standalone /ask command", () => {
+    expect(parseStandaloneComposerSlashCommand("/ask")).toBe("ask");
   });
 
   it("ignores slash commands with extra message text", () => {

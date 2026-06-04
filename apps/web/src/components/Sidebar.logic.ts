@@ -1,5 +1,9 @@
 import * as React from "react";
-import type { SidebarProjectSortOrder, SidebarThreadSortOrder } from "@t3tools/contracts/settings";
+import type {
+  SidebarProjectSortOrder,
+  SidebarThreadSortOrder,
+  SidebarViewMode,
+} from "@t3tools/contracts/settings";
 import {
   getThreadSortTimestamp,
   sortThreads,
@@ -241,6 +245,49 @@ export function orderItemsByPreferredIds<TItem, TId>(input: {
   return [...ordered, ...remaining];
 }
 
+export function orderItemsByPreferredMemberIds<TItem>(input: {
+  items: readonly TItem[];
+  preferredMemberIds: readonly string[];
+  getMemberIds: (item: TItem) => readonly string[];
+}): TItem[] {
+  const { getMemberIds, items, preferredMemberIds } = input;
+  if (preferredMemberIds.length === 0) {
+    return [...items];
+  }
+
+  const preferredIndexByMemberId = new Map<string, number>();
+  for (const [index, memberId] of preferredMemberIds.entries()) {
+    if (!preferredIndexByMemberId.has(memberId)) {
+      preferredIndexByMemberId.set(memberId, index);
+    }
+  }
+
+  const promotedItems: Array<{ item: TItem; preferredIndex: number; originalIndex: number }> = [];
+  const remainingItems: TItem[] = [];
+  for (const [originalIndex, item] of items.entries()) {
+    const preferredIndexes = getMemberIds(item).flatMap((memberId) => {
+      const preferredIndex = preferredIndexByMemberId.get(memberId);
+      return preferredIndex === undefined ? [] : [preferredIndex];
+    });
+    const preferredIndex = preferredIndexes.length > 0 ? Math.min(...preferredIndexes) : undefined;
+    if (preferredIndex === undefined) {
+      remainingItems.push(item);
+      continue;
+    }
+    promotedItems.push({ item, preferredIndex, originalIndex });
+  }
+
+  promotedItems.sort((left, right) => {
+    const byPreferredIndex = left.preferredIndex - right.preferredIndex;
+    if (byPreferredIndex !== 0) {
+      return byPreferredIndex;
+    }
+    return left.originalIndex - right.originalIndex;
+  });
+
+  return [...promotedItems.map((entry) => entry.item), ...remainingItems];
+}
+
 export function getVisibleSidebarThreadIds<TThreadId>(
   renderedProjects: readonly {
     shouldShowThreadPanel?: boolean;
@@ -300,30 +347,30 @@ export function resolveThreadRowClassName(input: {
   isSelected: boolean;
 }): string {
   const baseClassName =
-    "h-7 w-full translate-x-0 cursor-pointer justify-start px-2 text-left select-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring";
+    "h-8 w-full translate-x-0 cursor-pointer justify-start px-2 text-left text-foreground/72 select-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring dark:text-white/82";
 
   if (input.isSelected && input.isActive) {
     return cn(
       baseClassName,
-      "bg-primary/22 text-foreground font-medium hover:bg-primary/26 hover:text-foreground dark:bg-primary/30 dark:hover:bg-primary/36",
+      "bg-primary/22 text-foreground hover:bg-primary/26 dark:bg-primary/30 dark:text-white/92 dark:hover:bg-primary/36",
     );
   }
 
   if (input.isSelected) {
     return cn(
       baseClassName,
-      "bg-primary/15 text-foreground hover:bg-primary/19 hover:text-foreground dark:bg-primary/22 dark:hover:bg-primary/28",
+      "bg-primary/15 text-foreground hover:bg-primary/19 dark:bg-primary/22 dark:text-white/92 dark:hover:bg-primary/28",
     );
   }
 
   if (input.isActive) {
     return cn(
       baseClassName,
-      "bg-accent/85 text-foreground font-medium hover:bg-accent hover:text-foreground dark:bg-accent/55 dark:hover:bg-accent/70",
+      "bg-accent/85 text-foreground hover:bg-accent dark:bg-white/[0.06] dark:text-white/92 dark:hover:bg-white/[0.06]",
     );
   }
 
-  return cn(baseClassName, "text-muted-foreground hover:bg-accent hover:text-foreground");
+  return cn(baseClassName, "hover:bg-accent hover:text-foreground dark:hover:text-white/92");
 }
 
 export function resolveThreadStatusPill(input: {
@@ -459,6 +506,26 @@ export function getVisibleThreadsForProject<T extends Pick<Thread, "id">>(input:
   };
 }
 
+export function resolveSidebarThreadPreviewLimit(input: {
+  sidebarViewMode: SidebarViewMode;
+  configuredPreviewCount: number;
+  focusedPreviewCount: number;
+}): number {
+  return input.sidebarViewMode === "focused"
+    ? input.focusedPreviewCount
+    : input.configuredPreviewCount;
+}
+
+export function resolveNextPagedThreadVisibleCount(input: {
+  currentVisibleCount: number | undefined;
+  pageSize: number;
+  totalThreadCount: number;
+}): number {
+  const pageSize = Math.max(0, input.pageSize);
+  const currentVisibleCount = Math.max(pageSize, input.currentVisibleCount ?? pageSize);
+  return Math.min(input.totalThreadCount, currentVisibleCount + pageSize);
+}
+
 export function getFallbackThreadIdAfterDelete<
   T extends Pick<Thread, "id" | "projectId" | "createdAt" | "updatedAt"> & ThreadSortInput,
 >(input: {
@@ -485,6 +552,32 @@ export function getFallbackThreadIdAfterDelete<
     )[0]?.id ?? null
   );
 }
+
+export function resolveFocusedProjectThreadTarget<
+  T extends Pick<SidebarThreadSummary, "id" | "environmentId" | "archivedAt"> & ThreadSortInput,
+>(input: {
+  threads: readonly T[];
+  savedThreadKey: string | null | undefined;
+  sortOrder: SidebarThreadSortOrder;
+  getThreadKey: (thread: T) => string;
+}): T | null {
+  const visibleThreads = input.threads.filter((thread) => thread.archivedAt === null);
+  if (visibleThreads.length === 0) {
+    return null;
+  }
+
+  if (input.savedThreadKey) {
+    const savedThread = visibleThreads.find(
+      (thread) => input.getThreadKey(thread) === input.savedThreadKey,
+    );
+    if (savedThread) {
+      return savedThread;
+    }
+  }
+
+  return sortThreads(visibleThreads, input.sortOrder)[0] ?? null;
+}
+
 export function getProjectSortTimestamp(
   project: SidebarProject,
   projectThreads: readonly ThreadSortInput[],

@@ -10,6 +10,7 @@ import type {
   OrchestrationShellSnapshot,
   OrchestrationShellStreamEvent,
   OrchestrationSession,
+  ThreadContextBinding,
   OrchestrationSessionStatus,
   OrchestrationThread,
   OrchestrationThreadShell,
@@ -20,7 +21,7 @@ import type {
 } from "@t3tools/contracts";
 import { isProviderDriverKind, ProviderDriverKind } from "@t3tools/contracts";
 import type { ThreadId, TurnId } from "@t3tools/contracts";
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 import { resolveModelSlugForProvider } from "@t3tools/shared/model";
 import { create } from "zustand";
 import {
@@ -37,11 +38,18 @@ import {
 import { resolveEnvironmentHttpUrl } from "./environments/runtime";
 import { sanitizeThreadErrorMessage } from "./rpc/transportError";
 import { getThreadFromEnvironmentState } from "./threadDerivation";
+const isProviderDriverKindValue = Schema.is(ProviderDriverKind);
 
 export interface EnvironmentState {
   projectIds: ProjectId[];
   projectById: Record<ProjectId, Project>;
 
+  // TODO(CLIENT-RUNTIME MIGRATION - DO NOT EXPAND THIS WEB-ONLY COPY):
+  // Web still stores shell snapshots and thread details in this denormalized
+  // Zustand shape. Mobile uses createShellSnapshotManager and
+  // createThreadDetailManager from @t3tools/client-runtime. New shared behavior
+  // belongs in those managers/reducers, with a web adapter layered on top.
+  //
   // ---------------------------------------------------------------------------
   // Thread bookkeeping — written by BOTH shell stream and detail stream.
   // Both streams ensure the thread is registered here; the bookkeeping is
@@ -74,6 +82,7 @@ export interface EnvironmentState {
   activityByThreadId: Record<ThreadId, Record<string, OrchestrationThreadActivity>>;
   proposedPlanIdsByThreadId: Record<ThreadId, string[]>;
   proposedPlanByThreadId: Record<ThreadId, Record<string, ProposedPlan>>;
+  contextBindingsByThreadId?: Record<ThreadId, ThreadContextBinding[]>;
   turnDiffIdsByThreadId: Record<ThreadId, TurnId[]>;
   turnDiffSummaryByThreadId: Record<ThreadId, Record<TurnId, TurnDiffSummary>>;
 
@@ -108,6 +117,7 @@ const initialEnvironmentState: EnvironmentState = {
   activityByThreadId: {},
   proposedPlanIdsByThreadId: {},
   proposedPlanByThreadId: {},
+  contextBindingsByThreadId: {},
   turnDiffIdsByThreadId: {},
   turnDiffSummaryByThreadId: {},
   sidebarThreadSummaryById: {},
@@ -230,6 +240,7 @@ function mapProject(
 }
 
 function mapThread(thread: OrchestrationThread, environmentId: EnvironmentId): Thread {
+  const contextBindings = thread.contextBindings ?? [];
   return {
     id: thread.id,
     environmentId,
@@ -242,6 +253,8 @@ function mapThread(thread: OrchestrationThread, environmentId: EnvironmentId): T
     session: thread.session ? mapSession(thread.session) : null,
     messages: thread.messages.map((message) => mapMessage(environmentId, message)),
     proposedPlans: thread.proposedPlans.map(mapProposedPlan),
+    contextBindings: contextBindings.map((binding) => ({ ...binding })),
+    contextBindingCount: contextBindings.length,
     error: sanitizeThreadErrorMessage(thread.session?.lastError),
     createdAt: thread.createdAt,
     archivedAt: thread.archivedAt,
@@ -279,6 +292,7 @@ function mapThreadShell(
     updatedAt: thread.updatedAt,
     branch: thread.branch,
     worktreePath: thread.worktreePath,
+    contextBindingCount: thread.contextBindingCount ?? 0,
   };
   const session = thread.session ? mapSession(thread.session) : null;
   const turnState: ThreadTurnState = {
@@ -302,6 +316,7 @@ function mapThreadShell(
     hasPendingApprovals: thread.hasPendingApprovals,
     hasPendingUserInput: thread.hasPendingUserInput,
     hasActionableProposedPlan: thread.hasActionableProposedPlan,
+    contextBindingCount: thread.contextBindingCount ?? 0,
   };
   return {
     shell,
@@ -327,6 +342,7 @@ function toThreadShell(thread: Thread): ThreadShell {
     updatedAt: thread.updatedAt,
     branch: thread.branch,
     worktreePath: thread.worktreePath,
+    contextBindingCount: thread.contextBindingCount ?? thread.contextBindings?.length ?? 0,
   };
 }
 
@@ -402,7 +418,8 @@ function sidebarThreadSummariesEqual(
     left.latestUserMessageAt === right.latestUserMessageAt &&
     left.hasPendingApprovals === right.hasPendingApprovals &&
     left.hasPendingUserInput === right.hasPendingUserInput &&
-    left.hasActionableProposedPlan === right.hasActionableProposedPlan
+    left.hasActionableProposedPlan === right.hasActionableProposedPlan &&
+    (left.contextBindingCount ?? 0) === (right.contextBindingCount ?? 0)
   );
 }
 
@@ -422,7 +439,8 @@ function threadShellsEqual(left: ThreadShell | undefined, right: ThreadShell): b
     left.archivedAt === right.archivedAt &&
     left.updatedAt === right.updatedAt &&
     left.branch === right.branch &&
-    left.worktreePath === right.worktreePath
+    left.worktreePath === right.worktreePath &&
+    (left.contextBindingCount ?? 0) === (right.contextBindingCount ?? 0)
   );
 }
 
@@ -661,6 +679,17 @@ function writeThreadState(
     };
   }
 
+  const nextContextBindings = nextThread.contextBindings ?? [];
+  if (previousThread?.contextBindings !== nextThread.contextBindings) {
+    nextState = {
+      ...nextState,
+      contextBindingsByThreadId: {
+        ...nextState.contextBindingsByThreadId,
+        [nextThread.id]: nextContextBindings,
+      },
+    };
+  }
+
   if (previousThread?.turnDiffSummaries !== nextThread.turnDiffSummaries) {
     const nextTurnDiffSlice = buildTurnDiffSlice(nextThread);
     nextState = {
@@ -801,6 +830,8 @@ function removeThreadState(state: EnvironmentState, threadId: ThreadId): Environ
   const { [threadId]: _removedPlanIds, ...proposedPlanIdsByThreadId } =
     state.proposedPlanIdsByThreadId;
   const { [threadId]: _removedPlans, ...proposedPlanByThreadId } = state.proposedPlanByThreadId;
+  const { [threadId]: _removedContextBindings, ...contextBindingsByThreadId } =
+    state.contextBindingsByThreadId ?? {};
   const { [threadId]: _removedTurnDiffIds, ...turnDiffIdsByThreadId } = state.turnDiffIdsByThreadId;
   const { [threadId]: _removedTurnDiffs, ...turnDiffSummaryByThreadId } =
     state.turnDiffSummaryByThreadId;
@@ -820,6 +851,7 @@ function removeThreadState(state: EnvironmentState, threadId: ThreadId): Environ
     activityByThreadId,
     proposedPlanIdsByThreadId,
     proposedPlanByThreadId,
+    contextBindingsByThreadId,
     turnDiffIdsByThreadId,
     turnDiffSummaryByThreadId,
     sidebarThreadSummaryById,
@@ -1006,7 +1038,7 @@ function toLegacySessionStatus(
 }
 
 function toLegacyProvider(providerName: string | null): ProviderDriverKind {
-  if (Schema.is(ProviderDriverKind)(providerName)) {
+  if (isProviderDriverKindValue(providerName)) {
     return providerName;
   }
   return ProviderDriverKind.make("codex");
@@ -1099,6 +1131,10 @@ function syncEnvironmentShellSnapshot(
       nextThreadIds,
     ),
     proposedPlanByThreadId: retainThreadScopedRecord(state.proposedPlanByThreadId, nextThreadIds),
+    contextBindingsByThreadId: retainThreadScopedRecord(
+      state.contextBindingsByThreadId ?? {},
+      nextThreadIds,
+    ),
     turnDiffIdsByThreadId: retainThreadScopedRecord(state.turnDiffIdsByThreadId, nextThreadIds),
     turnDiffSummaryByThreadId: retainThreadScopedRecord(
       state.turnDiffSummaryByThreadId,
@@ -1119,6 +1155,9 @@ export function syncServerShellSnapshot(
   snapshot: OrchestrationShellSnapshot,
   environmentId: EnvironmentId,
 ): AppState {
+  // TODO(CLIENT-RUNTIME MIGRATION - DO NOT EXPAND THIS WEB-ONLY COPY):
+  // Keep web-specific projection here only until the store can consume
+  // createShellSnapshotManager or a shared adapter over its reducer.
   return commitEnvironmentState(
     state,
     environmentId,
@@ -1135,6 +1174,9 @@ export function syncServerThreadDetail(
   thread: OrchestrationThread,
   environmentId: EnvironmentId,
 ): AppState {
+  // TODO(CLIENT-RUNTIME MIGRATION - DO NOT EXPAND THIS WEB-ONLY COPY):
+  // Keep web-specific projection here only until the store can consume
+  // createThreadDetailManager or a shared adapter over its reducer.
   const environmentState = getStoredEnvironmentState(state, environmentId);
   const previousThread = getThreadFromEnvironmentState(environmentState, thread.id);
   return commitEnvironmentState(
@@ -1265,6 +1307,7 @@ function applyEnvironmentOrchestrationEvent(
           deletedAt: null,
           messages: [],
           proposedPlans: [],
+          contextBindings: [],
           activities: [],
           checkpoints: [],
           session: null,
@@ -1318,6 +1361,38 @@ function applyEnvironmentOrchestrationEvent(
         interactionMode: event.payload.interactionMode,
         updatedAt: event.payload.updatedAt,
       }));
+
+    case "thread.context-binding-added":
+      return updateThreadState(state, event.payload.threadId, (thread) => {
+        const contextBindings = [
+          ...(thread.contextBindings ?? []).filter(
+            (binding) => binding.id !== event.payload.binding.id,
+          ),
+          { ...event.payload.binding },
+        ].toSorted(
+          (left, right) =>
+            left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id),
+        );
+        return {
+          ...thread,
+          contextBindings,
+          contextBindingCount: contextBindings.length,
+          updatedAt: event.occurredAt,
+        };
+      });
+
+    case "thread.context-binding-removed":
+      return updateThreadState(state, event.payload.threadId, (thread) => {
+        const contextBindings = (thread.contextBindings ?? []).filter(
+          (binding) => binding.id !== event.payload.bindingId,
+        );
+        return {
+          ...thread,
+          contextBindings,
+          contextBindingCount: contextBindings.length,
+          updatedAt: event.occurredAt,
+        };
+      });
 
     case "thread.turn-start-requested":
       return updateThreadState(state, event.payload.threadId, (thread) => ({

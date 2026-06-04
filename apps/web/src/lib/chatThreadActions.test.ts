@@ -1,8 +1,11 @@
-import { scopeProjectRef } from "@t3tools/client-runtime";
-import { EnvironmentId, ProjectId } from "@t3tools/contracts";
+import { scopeProjectRef, scopeThreadRef } from "@t3tools/client-runtime";
+import { EnvironmentId, ProjectId, ThreadId } from "@t3tools/contracts";
 import { describe, expect, it, vi } from "vitest";
+import { DraftId } from "../composerDraftStore";
+import { useChatWorkspaceControllerStore } from "../workspace/chatWorkspaceController";
 import {
   resolveThreadActionProjectRef,
+  startNewThreadInActiveWorkspacePanel,
   startNewLocalThreadFromContext,
   startNewThreadFromContext,
   type ChatThreadActionContext,
@@ -11,6 +14,8 @@ import {
 const ENVIRONMENT_ID = EnvironmentId.make("environment-1");
 const PROJECT_ID = ProjectId.make("project-1");
 const FALLBACK_PROJECT_ID = ProjectId.make("project-2");
+const THREAD_ID = ThreadId.make("thread-1");
+const DRAFT_ID = DraftId.make("draft-1");
 
 function createContext(overrides: Partial<ChatThreadActionContext> = {}): ChatThreadActionContext {
   return {
@@ -74,6 +79,32 @@ describe("chatThreadActions", () => {
     });
   });
 
+  it("can force a fresh contextual draft thread", async () => {
+    const handleNewThread = vi.fn<ChatThreadActionContext["handleNewThread"]>(async () => {});
+
+    const didStart = await startNewThreadFromContext(
+      createContext({
+        activeDraftThread: {
+          environmentId: ENVIRONMENT_ID,
+          projectId: PROJECT_ID,
+          branch: "feature/refactor",
+          worktreePath: "/tmp/worktree",
+          envMode: "worktree",
+        },
+        handleNewThread,
+      }),
+      { forceNewDraft: true },
+    );
+
+    expect(didStart).toBe(true);
+    expect(handleNewThread).toHaveBeenCalledWith(scopeProjectRef(ENVIRONMENT_ID, PROJECT_ID), {
+      branch: "feature/refactor",
+      worktreePath: "/tmp/worktree",
+      envMode: "worktree",
+      forceNewDraft: true,
+    });
+  });
+
   it("starts a local thread with the configured default env mode", async () => {
     const handleNewThread = vi.fn<ChatThreadActionContext["handleNewThread"]>(async () => {});
 
@@ -103,5 +134,41 @@ describe("chatThreadActions", () => {
 
     expect(didStart).toBe(false);
     expect(handleNewThread).not.toHaveBeenCalled();
+  });
+
+  it("can start a fresh workspace draft in the active panel", async () => {
+    const projectRef = scopeProjectRef(ENVIRONMENT_ID, PROJECT_ID);
+    const handleNewThread = vi.fn<ChatThreadActionContext["handleNewThread"]>(async () => {});
+    const createDraftThreadPanel = vi.fn(() => ({
+      draftId: DRAFT_ID,
+      ref: scopeThreadRef(ENVIRONMENT_ID, THREAD_ID),
+    }));
+    const unregisterController = useChatWorkspaceControllerStore.getState().registerController({
+      createDraftThreadPanel,
+      openWorkspaceTarget: vi.fn(() => null),
+    });
+
+    try {
+      const didStart = await startNewThreadInActiveWorkspacePanel({
+        handleNewThread,
+        projectRef,
+        options: {
+          envMode: "worktree",
+        },
+      });
+
+      expect(didStart).toBe(true);
+      expect(createDraftThreadPanel).toHaveBeenCalledWith({
+        projectRef,
+        options: {
+          envMode: "worktree",
+          forceNewDraft: true,
+        },
+        disposition: "active-panel",
+      });
+      expect(handleNewThread).not.toHaveBeenCalled();
+    } finally {
+      unregisterController();
+    }
   });
 });

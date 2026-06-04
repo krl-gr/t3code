@@ -38,7 +38,7 @@ interface ElectronAppCalls {
 const makeElectronAppLayer = (calls: ElectronAppCalls) =>
   Layer.succeed(ElectronApp.ElectronApp, {
     metadata: Effect.die("unexpected metadata read"),
-    name: Effect.succeed("T3 Code"),
+    name: Effect.succeed("Up.computer"),
     whenReady: Effect.void,
     quit: Effect.void,
     exit: () => Effect.void,
@@ -89,6 +89,8 @@ const makeEnvironmentLayer = (overrides: TestEnvironmentInput = {}) => {
   );
 };
 
+const normalizePath = (value: string) => value.replaceAll("\\", "/");
+
 const withIdentity = <A, E, R>(
   effect: Effect.Effect<
     A,
@@ -138,7 +140,10 @@ describe("DesktopAppIdentity", () => {
         const identity = yield* DesktopAppIdentity.DesktopAppIdentity;
         const userDataPath = yield* identity.resolveUserDataPath;
 
-        assert.equal(userDataPath, "/Users/alice/Library/Application Support/T3 Code (Alpha)");
+        assert.equal(
+          normalizePath(userDataPath),
+          "/Users/alice/Library/Application Support/T3 Code (Alpha)",
+        );
       }),
       { legacyPathExists: true },
     ),
@@ -156,17 +161,46 @@ describe("DesktopAppIdentity", () => {
         const identity = yield* DesktopAppIdentity.DesktopAppIdentity;
         yield* identity.configure;
 
-        assert.deepEqual(calls.setName, ["T3 Code (Alpha)"]);
-        assert.equal(calls.setAboutPanelOptions[0]?.applicationName, "T3 Code (Alpha)");
+        assert.deepEqual(calls.setName, ["Up.computer (Alpha)"]);
+        assert.equal(calls.setAboutPanelOptions[0]?.applicationName, "Up.computer (Alpha)");
         assert.equal(calls.setAboutPanelOptions[0]?.applicationVersion, "1.2.3");
         assert.equal(calls.setAboutPanelOptions[0]?.version, "0123456789ab");
-        assert.deepEqual(calls.setDockIcon, ["/icon.png"]);
+        assert.deepEqual(calls.setDockIcon, []);
       }),
       {
         calls,
         environment: {
           env: {
             T3CODE_COMMIT_HASH: "0123456789abcdef",
+          },
+        },
+        pngIconPath: Option.some("/icon.png"),
+      },
+    );
+  });
+
+  it.effect("keeps the PNG Dock icon override for development launches", () => {
+    const calls: ElectronAppCalls = {
+      setAboutPanelOptions: [],
+      setDockIcon: [],
+      setName: [],
+    };
+
+    return withIdentity(
+      Effect.gen(function* () {
+        const identity = yield* DesktopAppIdentity.DesktopAppIdentity;
+        yield* identity.configure;
+
+        assert.deepEqual(calls.setDockIcon, ["/icon.png"]);
+      }),
+      {
+        calls,
+        environment: {
+          isPackaged: false,
+          appPath: "/repo",
+          resourcesPath: "/repo/apps/desktop/resources",
+          env: {
+            VITE_DEV_SERVER_URL: "http://localhost:5173",
           },
         },
         pngIconPath: Option.some("/icon.png"),

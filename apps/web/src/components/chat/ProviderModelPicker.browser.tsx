@@ -5,7 +5,7 @@ import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
 
-import { ProviderModelPicker } from "./ProviderModelPicker";
+import { ComposerProviderModelPicker, ProviderModelPicker } from "./ProviderModelPicker";
 import { getCustomModelOptionsByInstance } from "../../modelSelection";
 import {
   deriveProviderInstanceEntries,
@@ -213,6 +213,7 @@ const TEST_PROVIDERS: ReadonlyArray<ServerProvider> = [
 const CODEX_INSTANCE_ID = ProviderInstanceId.make("codex");
 const CLAUDE_INSTANCE_ID = ProviderInstanceId.make("claudeAgent");
 const OPENCODE_INSTANCE_ID = ProviderInstanceId.make("opencode");
+const PI_INSTANCE_ID = ProviderInstanceId.make("pi-openai");
 
 function buildCodexProvider(models: ServerProvider["models"]): ServerProvider {
   return {
@@ -669,6 +670,113 @@ describe("ProviderModelPicker", () => {
       });
     } finally {
       await mounted.cleanup();
+    }
+  });
+
+  it("renders the composer trigger as harness, plan, and model text without provider icon", async () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const onInstanceModelChange = vi.fn();
+    const providers: ReadonlyArray<ServerProvider> = [
+      {
+        driver: ProviderDriverKind.make("pi"),
+        instanceId: PI_INSTANCE_ID,
+        displayName: "Pi",
+        enabled: true,
+        installed: true,
+        version: "1.0.0",
+        status: "ready",
+        auth: { status: "authenticated" },
+        checkedAt: new Date().toISOString(),
+        slashCommands: [],
+        skills: [],
+        models: [
+          {
+            slug: "openai/gpt-5.5",
+            name: "GPT-5.5",
+            shortName: "GPT-5.5",
+            subProvider: "OpenAI",
+            isCustom: false,
+            capabilities: createModelCapabilities({ optionDescriptors: [] }),
+          },
+        ],
+      },
+    ];
+    const instanceEntries = sortProviderInstanceEntries(deriveProviderInstanceEntries(providers));
+    const screen = await render(
+      <ComposerProviderModelPicker
+        activeInstanceId={PI_INSTANCE_ID}
+        model="openai/gpt-5.5"
+        lockedProvider={null}
+        instanceEntries={instanceEntries}
+        modelOptionsByInstance={
+          new Map<ProviderInstanceId, ReadonlyArray<ModelEsque>>([
+            [
+              PI_INSTANCE_ID,
+              [
+                {
+                  slug: "openai/gpt-5.5",
+                  name: "GPT-5.5",
+                  shortName: "GPT-5.5",
+                  subProvider: "OpenAI",
+                },
+              ],
+            ],
+          ])
+        }
+        onInstanceModelChange={onInstanceModelChange}
+      />,
+      { container: host },
+    );
+
+    try {
+      const trigger = document.querySelector<HTMLElement>(
+        '[data-chat-provider-model-picker="true"]',
+      );
+      expect(trigger).not.toBeNull();
+      expect(trigger?.textContent).toBe("Pi · OpenAI · GPT-5.5");
+      expect(trigger?.querySelector("svg")).toBeNull();
+    } finally {
+      await screen.unmount();
+      host.remove();
+    }
+  });
+
+  it("deduplicates provider text in the composer trigger", async () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const onInstanceModelChange = vi.fn();
+    const instanceEntries = sortProviderInstanceEntries(
+      deriveProviderInstanceEntries(TEST_PROVIDERS),
+    );
+    const screen = await render(
+      <ComposerProviderModelPicker
+        activeInstanceId={CODEX_INSTANCE_ID}
+        model="gpt-5.5"
+        lockedProvider={null}
+        instanceEntries={instanceEntries}
+        modelOptionsByInstance={
+          new Map<ProviderInstanceId, ReadonlyArray<ModelEsque>>([
+            [
+              CODEX_INSTANCE_ID,
+              [{ slug: "gpt-5.5", name: "GPT-5.5", shortName: "GPT-5.5", subProvider: "Codex" }],
+            ],
+          ])
+        }
+        onInstanceModelChange={onInstanceModelChange}
+      />,
+      { container: host },
+    );
+
+    try {
+      const trigger = document.querySelector<HTMLElement>(
+        '[data-chat-provider-model-picker="true"]',
+      );
+      expect(trigger).not.toBeNull();
+      expect(trigger?.textContent).toBe("Codex · GPT-5.5");
+    } finally {
+      await screen.unmount();
+      host.remove();
     }
   });
 

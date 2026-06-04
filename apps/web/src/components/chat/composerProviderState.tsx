@@ -1,5 +1,6 @@
 import {
   type ProviderDriverKind,
+  type ProviderInstanceId,
   type ProviderOptionSelection,
   type ScopedThreadRef,
   type ServerProviderModel,
@@ -14,7 +15,12 @@ import type { ReactNode } from "react";
 
 import type { DraftId } from "../../composerDraftStore";
 import { getProviderModelCapabilities } from "../../providerModels";
-import { shouldRenderTraitsControls, TraitsMenuContent, TraitsPicker } from "./TraitsPicker";
+import {
+  ComposerTraitsPicker,
+  shouldRenderTraitsControls,
+  TraitsMenuContent,
+  TraitsPicker,
+} from "./TraitsPicker";
 
 export type ComposerProviderStateInput = {
   provider: ProviderDriverKind;
@@ -35,6 +41,7 @@ export type ComposerProviderState = {
 
 type TraitsRenderInput = {
   provider: ProviderDriverKind;
+  instanceId?: ProviderInstanceId;
   threadRef?: ScopedThreadRef;
   draftId?: DraftId;
   model: string;
@@ -73,11 +80,20 @@ export function getComposerProviderState(input: ComposerProviderStateInput): Com
 }
 
 function renderTraitsControl(
-  Component: typeof TraitsMenuContent | typeof TraitsPicker,
+  Component: typeof ComposerTraitsPicker | typeof TraitsMenuContent | typeof TraitsPicker,
   input: TraitsRenderInput,
 ): ReactNode {
-  const { provider, threadRef, draftId, model, models, modelOptions, prompt, onPromptChange } =
-    input;
+  const {
+    provider,
+    instanceId,
+    threadRef,
+    draftId,
+    model,
+    models,
+    modelOptions,
+    prompt,
+    onPromptChange,
+  } = input;
   const hasTarget = threadRef !== undefined || draftId !== undefined;
   if (
     !hasTarget ||
@@ -88,6 +104,7 @@ function renderTraitsControl(
   return (
     <Component
       provider={provider}
+      {...(instanceId ? { instanceId } : {})}
       models={models}
       {...(threadRef ? { threadRef } : {})}
       {...(draftId ? { draftId } : {})}
@@ -105,4 +122,8 @@ export function renderProviderTraitsMenuContent(input: TraitsRenderInput): React
 
 export function renderProviderTraitsPicker(input: TraitsRenderInput): ReactNode {
   return renderTraitsControl(TraitsPicker, input);
+}
+
+export function renderComposerProviderTraitsPicker(input: TraitsRenderInput): ReactNode {
+  return renderTraitsControl(ComposerTraitsPicker, input);
 }

@@ -1,5 +1,6 @@
 import {
   type ProviderDriverKind,
+  type ProviderInstanceId,
   type ProviderOptionDescriptor,
   type ProviderOptionSelection,
   type ScopedThreadRef,
@@ -29,6 +30,7 @@ import {
 import { useComposerDraftStore, DraftId } from "../../composerDraftStore";
 import { getProviderModelCapabilities } from "../../providerModels";
 import { cn } from "~/lib/utils";
+import { COMPOSER_CONTROL_TEXT_TRIGGER_CLASS } from "./composerControlStyles";
 
 type ProviderOptions = ReadonlyArray<ProviderOptionSelection>;
 
@@ -196,6 +198,7 @@ export function shouldRenderTraitsControls(input: {
 
 export interface TraitsMenuContentProps {
   provider: ProviderDriverKind;
+  instanceId?: ProviderInstanceId;
   models: ReadonlyArray<ServerProviderModel>;
   model: string | null | undefined;
   prompt: string;
@@ -208,6 +211,7 @@ export interface TraitsMenuContentProps {
 
 export const TraitsMenuContent = memo(function TraitsMenuContentImpl({
   provider,
+  instanceId,
   models,
   model,
   prompt,
@@ -228,11 +232,12 @@ export const TraitsMenuContent = memo(function TraitsMenuContentImpl({
         return;
       }
       setProviderModelOptions(threadTarget, provider, nextOptions, {
+        ...(instanceId ? { instanceId } : {}),
         model,
         persistSticky: true,
       });
     },
-    [model, persistence, provider, setProviderModelOptions],
+    [instanceId, model, persistence, provider, setProviderModelOptions],
   );
   const {
     descriptors,
@@ -343,6 +348,112 @@ export const TraitsMenuContent = memo(function TraitsMenuContentImpl({
 
 export const TraitsPicker = memo(function TraitsPicker({
   provider,
+  instanceId,
+  models,
+  model,
+  prompt,
+  onPromptChange,
+  modelOptions,
+  allowPromptInjectedEffort = true,
+  triggerVariant,
+  triggerClassName,
+  ...persistence
+}: TraitsMenuContentProps & TraitsPersistence) {
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const { descriptors, primarySelectDescriptor, ultrathinkPromptControlled } =
+    getTraitsSectionVisibility({
+      provider,
+      models,
+      model,
+      prompt,
+      modelOptions,
+      allowPromptInjectedEffort,
+    });
+  if (
+    !shouldRenderTraitsControls({
+      provider,
+      models,
+      model,
+      prompt,
+      modelOptions,
+      allowPromptInjectedEffort,
+    })
+  ) {
+    return null;
+  }
+
+  const triggerLabels: Array<string> = [];
+  for (const descriptor of descriptors) {
+    const label =
+      ultrathinkPromptControlled && descriptor.id === primarySelectDescriptor?.id
+        ? "Ultrathink"
+        : descriptor.type === "boolean"
+          ? descriptor.id === "fastMode"
+            ? descriptor.currentValue === true
+              ? "Fast"
+              : "Normal"
+            : `${descriptor.label} ${descriptor.currentValue === true ? "On" : "Off"}`
+          : getProviderOptionCurrentLabel(descriptor);
+    if (typeof label === "string" && label.length > 0) {
+      triggerLabels.push(label);
+    }
+  }
+  const triggerLabel = triggerLabels.join(" · ");
+
+  const isCodexStyle = provider === "codex";
+
+  return (
+    <Menu
+      open={isMenuOpen}
+      onOpenChange={(open) => {
+        setIsMenuOpen(open);
+      }}
+    >
+      <MenuTrigger
+        render={
+          <Button
+            size="sm"
+            variant={triggerVariant ?? "ghost"}
+            className={cn(
+              isCodexStyle
+                ? "min-w-0 max-w-40 shrink justify-start overflow-hidden whitespace-nowrap px-2 text-muted-foreground/70 hover:text-foreground/80 sm:max-w-48 sm:px-3 [&_svg]:mx-0"
+                : "shrink-0 whitespace-nowrap px-2 text-muted-foreground/70 hover:text-foreground/80 sm:px-3",
+              triggerClassName,
+            )}
+          />
+        }
+      >
+        {isCodexStyle ? (
+          <span className="flex min-w-0 w-full items-center gap-2 overflow-hidden">
+            {triggerLabel}
+            <ChevronDownIcon aria-hidden="true" className="size-3 shrink-0 opacity-60" />
+          </span>
+        ) : (
+          <>
+            <span>{triggerLabel}</span>
+            <ChevronDownIcon aria-hidden="true" className="size-3 opacity-60" />
+          </>
+        )}
+      </MenuTrigger>
+      <MenuPopup align="start">
+        <TraitsMenuContent
+          provider={provider}
+          {...(instanceId ? { instanceId } : {})}
+          models={models}
+          model={model}
+          prompt={prompt}
+          onPromptChange={onPromptChange}
+          modelOptions={modelOptions}
+          allowPromptInjectedEffort={allowPromptInjectedEffort}
+          {...persistence}
+        />
+      </MenuPopup>
+    </Menu>
+  );
+});
+
+export const ComposerTraitsPicker = memo(function ComposerTraitsPicker({
+  provider,
   models,
   model,
   prompt,
@@ -409,23 +520,17 @@ export const TraitsPicker = memo(function TraitsPicker({
             variant={triggerVariant ?? "ghost"}
             className={cn(
               isCodexStyle
-                ? "min-w-0 max-w-40 shrink justify-start overflow-hidden whitespace-nowrap px-2 text-muted-foreground/70 hover:text-foreground/80 sm:max-w-48 sm:px-3 [&_svg]:mx-0"
-                : "shrink-0 whitespace-nowrap px-2 text-muted-foreground/70 hover:text-foreground/80 sm:px-3",
+                ? cn(COMPOSER_CONTROL_TEXT_TRIGGER_CLASS, "max-w-40 sm:max-w-48")
+                : COMPOSER_CONTROL_TEXT_TRIGGER_CLASS,
               triggerClassName,
             )}
           />
         }
       >
         {isCodexStyle ? (
-          <span className="flex min-w-0 w-full items-center gap-2 overflow-hidden">
-            {triggerLabel}
-            <ChevronDownIcon aria-hidden="true" className="size-3 shrink-0 opacity-60" />
-          </span>
+          <span className="flex min-w-0 w-full items-center overflow-hidden">{triggerLabel}</span>
         ) : (
-          <>
-            <span>{triggerLabel}</span>
-            <ChevronDownIcon aria-hidden="true" className="size-3 opacity-60" />
-          </>
+          <span>{triggerLabel}</span>
         )}
       </MenuTrigger>
       <MenuPopup align="start">

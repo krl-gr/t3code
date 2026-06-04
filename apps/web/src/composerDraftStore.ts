@@ -42,11 +42,13 @@ import { useShallow } from "zustand/react/shallow";
 import { createDebouncedStorage, createMemoryStorage } from "./lib/storage";
 import { getDefaultServerModel } from "./providerModels";
 import { UnifiedSettings } from "@t3tools/contracts/settings";
+import { isProviderInteractionMode } from "./interactionModes";
+const isRuntimeMode = Schema.is(RuntimeMode);
+const isProviderDriverKind = Schema.is(ProviderDriverKind);
 
 export const COMPOSER_DRAFT_STORAGE_KEY = "t3code:composer-drafts:v1";
 const COMPOSER_DRAFT_STORAGE_VERSION = 6;
 const DraftThreadEnvModeSchema = Schema.Literals(["local", "worktree"]);
-const isRuntimeMode = Schema.is(RuntimeMode);
 export type DraftThreadEnvMode = typeof DraftThreadEnvModeSchema.Type;
 
 export const DraftId = Schema.String.pipe(Schema.brand("DraftId"));
@@ -370,6 +372,7 @@ interface ComposerDraftStoreState {
     provider: ProviderDriverKind,
     nextProviderOptions: ReadonlyArray<ProviderOptionSelection> | null | undefined,
     options?: {
+      instanceId?: ProviderInstanceId | null | undefined;
       model?: string | null | undefined;
       persistSticky?: boolean;
     },
@@ -449,11 +452,13 @@ function cloneModelSelection(selection: ModelSelection): DeepMutable<ModelSelect
 function compactModelSelectionByProvider(
   selections: Partial<Record<ProviderInstanceId, ModelSelection>>,
 ): DeepMutable<Record<ProviderInstanceId, ModelSelection>> {
-  return Object.fromEntries(
-    Object.entries(selections)
-      .filter((entry): entry is [string, ModelSelection] => entry[1] !== undefined)
-      .map(([provider, selection]) => [provider, cloneModelSelection(selection)]),
-  ) as DeepMutable<Record<ProviderInstanceId, ModelSelection>>;
+  const entries: Array<[string, DeepMutable<ModelSelection>]> = [];
+  for (const [provider, selection] of Object.entries(selections)) {
+    if (selection !== undefined) {
+      entries.push([provider, cloneModelSelection(selection)]);
+    }
+  }
+  return Object.fromEntries(entries) as DeepMutable<Record<ProviderInstanceId, ModelSelection>>;
 }
 
 const EMPTY_PERSISTED_DRAFT_STORE_STATE = Object.freeze<PersistedComposerDraftStoreState>({
@@ -575,7 +580,7 @@ function shouldRemoveDraft(draft: ComposerThreadDraftState): boolean {
 }
 
 function normalizeProviderDriverKind(value: unknown): ProviderDriverKind | null {
-  return Schema.is(ProviderDriverKind)(value) ? value : null;
+  return isProviderDriverKind(value) ? value : null;
 }
 
 /**
@@ -1356,11 +1361,9 @@ function normalizePersistedDraftThreads(
         runtimeMode: isRuntimeMode(candidateDraftThread.runtimeMode)
           ? candidateDraftThread.runtimeMode
           : DEFAULT_RUNTIME_MODE,
-        interactionMode:
-          candidateDraftThread.interactionMode === "plan" ||
-          candidateDraftThread.interactionMode === "default"
-            ? candidateDraftThread.interactionMode
-            : DEFAULT_INTERACTION_MODE,
+        interactionMode: isProviderInteractionMode(candidateDraftThread.interactionMode)
+          ? candidateDraftThread.interactionMode
+          : DEFAULT_INTERACTION_MODE,
         branch: typeof branch === "string" ? branch : null,
         worktreePath: normalizedWorktreePath,
         envMode: normalizeDraftThreadEnvMode(candidateDraftThread.envMode, normalizedWorktreePath),
@@ -1477,10 +1480,9 @@ function normalizePersistedDraftsByThreadId(
     const runtimeMode = isRuntimeMode(draftCandidate.runtimeMode)
       ? draftCandidate.runtimeMode
       : null;
-    const interactionMode =
-      draftCandidate.interactionMode === "plan" || draftCandidate.interactionMode === "default"
-        ? draftCandidate.interactionMode
-        : null;
+    const interactionMode = isProviderInteractionMode(draftCandidate.interactionMode)
+      ? draftCandidate.interactionMode
+      : null;
     const prompt = ensureInlineTerminalContextPlaceholders(
       promptCandidate,
       terminalContexts.length,
@@ -1807,9 +1809,12 @@ function verifyPersistedAttachments(
     const persistedAttachments = attachments.filter(
       (attachment) => imageIdSet.has(attachment.id) && persistedIdSet.has(attachment.id),
     );
-    const nonPersistedImageIds = current.images
-      .map((image) => image.id)
-      .filter((imageId) => !persistedIdSet.has(imageId));
+    const nonPersistedImageIds: string[] = [];
+    for (const image of current.images) {
+      if (!persistedIdSet.has(image.id)) {
+        nonPersistedImageIds.push(image.id);
+      }
+    }
     const nextDraft: ComposerThreadDraftState = {
       ...current,
       persistedAttachments,
@@ -2455,7 +2460,7 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
           if (normalizedProvider === null) {
             return;
           }
-          const instanceKey = defaultInstanceIdForDriver(normalizedProvider);
+          const instanceKey = options?.instanceId ?? defaultInstanceIdForDriver(normalizedProvider);
           const fallbackModel =
             normalizeModelSlug(options?.model, normalizedProvider) ??
             DEFAULT_MODEL_BY_PROVIDER[normalizedProvider] ??
@@ -2500,7 +2505,9 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
                 const { options: _, ...rest } = stickyBase;
                 nextStickyMap[instanceKey] = rest as ModelSelection;
               }
-              nextStickyActiveProvider = base.activeProvider ?? instanceKey;
+              nextStickyActiveProvider = options.instanceId
+                ? instanceKey
+                : (base.activeProvider ?? instanceKey);
             }
 
             if (
@@ -2513,6 +2520,7 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
 
             const nextDraft: ComposerThreadDraftState = {
               ...base,
+              ...(options?.instanceId ? { activeProvider: instanceKey } : {}),
               modelSelectionByProvider: nextMap,
             };
             const nextDraftsByThreadKey = { ...state.draftsByThreadKey };
@@ -2566,8 +2574,9 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
           if (threadKey.length === 0) {
             return;
           }
-          const nextInteractionMode =
-            interactionMode === "plan" || interactionMode === "default" ? interactionMode : null;
+          const nextInteractionMode = isProviderInteractionMode(interactionMode)
+            ? interactionMode
+            : null;
           set((state) => {
             const existing = state.draftsByThreadKey[threadKey];
             if (!existing && nextInteractionMode === null) {

@@ -1,6 +1,7 @@
 import type { ContextMenuItem, LocalApi } from "@t3tools/contracts";
+import type { WsRpcClient } from "@t3tools/client-runtime";
 
-import { resetGitStatusStateForTests } from "./lib/gitStatusState";
+import { resetVcsStatusStateForTests } from "./lib/vcsStatusState";
 import { resetSourceControlDiscoveryStateForTests } from "./lib/sourceControlDiscoveryState";
 import { resetRequestLatencyStateForTests } from "./rpc/requestLatencyState";
 import { resetServerStateForTests } from "./rpc/serverState";
@@ -14,16 +15,17 @@ import {
   resetEnvironmentServiceForTests,
 } from "./environments/runtime";
 import { getPrimaryKnownEnvironment } from "./environments/primary";
-import { type WsRpcClient } from "./rpc/wsRpcClient";
 import { showContextMenuFallback } from "./contextMenuFallback";
 import {
   readBrowserClientSettings,
   readBrowserSavedEnvironmentRegistry,
   readBrowserSavedEnvironmentSecret,
+  readBrowserThreadPromptDrafts,
   removeBrowserSavedEnvironmentSecret,
   writeBrowserClientSettings,
   writeBrowserSavedEnvironmentRegistry,
   writeBrowserSavedEnvironmentSecret,
+  writeBrowserThreadPromptDrafts,
 } from "./clientPersistenceStorage";
 
 let cachedApi: LocalApi | undefined;
@@ -38,6 +40,10 @@ function createBrowserLocalApi(rpcClient?: WsRpcClient): LocalApi {
       pickFolder: async (options) => {
         if (!window.desktopBridge) return null;
         return window.desktopBridge.pickFolder(options);
+      },
+      pickFileSystemEntries: async (options) => {
+        if (!window.desktopBridge?.pickFileSystemEntries) return null;
+        return window.desktopBridge.pickFileSystemEntries(options);
       },
       confirm: async (message) => {
         if (window.desktopBridge) {
@@ -117,6 +123,18 @@ function createBrowserLocalApi(rpcClient?: WsRpcClient): LocalApi {
         }
         removeBrowserSavedEnvironmentSecret(environmentId);
       },
+      getThreadPromptDrafts: async (environmentId, threadId) => {
+        if (window.desktopBridge) {
+          return window.desktopBridge.getThreadPromptDrafts(environmentId, threadId);
+        }
+        return readBrowserThreadPromptDrafts(environmentId, threadId);
+      },
+      setThreadPromptDrafts: async (environmentId, threadId, drafts) => {
+        if (window.desktopBridge) {
+          return window.desktopBridge.setThreadPromptDrafts(environmentId, threadId, drafts);
+        }
+        writeBrowserThreadPromptDrafts(environmentId, threadId, drafts);
+      },
     },
     server: {
       getConfig: () =>
@@ -155,9 +173,49 @@ function createBrowserLocalApi(rpcClient?: WsRpcClient): LocalApi {
         rpcClient
           ? rpcClient.server.getProcessDiagnostics()
           : Promise.reject(unavailableLocalBackendError()),
+      getProcessResourceHistory: (input) =>
+        rpcClient
+          ? rpcClient.server.getProcessResourceHistory(input)
+          : Promise.reject(unavailableLocalBackendError()),
       signalProcess: (input) =>
         rpcClient
           ? rpcClient.server.signalProcess(input)
+          : Promise.reject(unavailableLocalBackendError()),
+      getBrowserProfileSnapshot: () =>
+        rpcClient
+          ? rpcClient.server.getBrowserProfileSnapshot()
+          : Promise.reject(unavailableLocalBackendError()),
+      openBrowserLoginWindow: (input) =>
+        rpcClient
+          ? rpcClient.server.openBrowserLoginWindow(input ?? {})
+          : Promise.reject(unavailableLocalBackendError()),
+      closeBrowserProfile: () =>
+        rpcClient
+          ? rpcClient.server.closeBrowserProfile()
+          : Promise.reject(unavailableLocalBackendError()),
+      clearBrowserProfile: () =>
+        rpcClient
+          ? rpcClient.server.clearBrowserProfile()
+          : Promise.reject(unavailableLocalBackendError()),
+      getComputerUseSnapshot: () =>
+        rpcClient
+          ? rpcClient.server.getComputerUseSnapshot()
+          : Promise.reject(unavailableLocalBackendError()),
+      restartComputerUse: () =>
+        rpcClient
+          ? rpcClient.server.restartComputerUse()
+          : Promise.reject(unavailableLocalBackendError()),
+      stopComputerUse: () =>
+        rpcClient
+          ? rpcClient.server.stopComputerUse()
+          : Promise.reject(unavailableLocalBackendError()),
+      refreshComputerUseTools: () =>
+        rpcClient
+          ? rpcClient.server.refreshComputerUseTools()
+          : Promise.reject(unavailableLocalBackendError()),
+      runComputerUseDoctor: () =>
+        rpcClient
+          ? rpcClient.server.runComputerUseDoctor()
           : Promise.reject(unavailableLocalBackendError()),
     },
   };
@@ -196,7 +254,7 @@ export async function __resetLocalApiForTests() {
   const { __resetClientSettingsPersistenceForTests } = await import("./hooks/useSettings");
   __resetClientSettingsPersistenceForTests();
   await resetEnvironmentServiceForTests();
-  resetGitStatusStateForTests();
+  resetVcsStatusStateForTests();
   resetSourceControlDiscoveryStateForTests();
   resetRequestLatencyStateForTests();
   resetSavedEnvironmentRegistryStoreForTests();

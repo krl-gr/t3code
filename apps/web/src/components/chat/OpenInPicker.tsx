@@ -1,11 +1,26 @@
-import { EditorId, type ResolvedKeybindingsConfig } from "@t3tools/contracts";
+import { EditorId, type EnvironmentId, type ResolvedKeybindingsConfig } from "@t3tools/contracts";
 import { memo, useCallback, useEffect, useMemo } from "react";
 import { isOpenFavoriteEditorShortcut, shortcutLabelForCommand } from "../../keybindings";
 import { usePreferredEditor } from "../../editorPreferences";
 import { ChevronDownIcon, FolderClosedIcon } from "lucide-react";
 import { Button } from "../ui/button";
+import { ContextActionMenuItem } from "../ContextActionMenuItem";
 import { Group, GroupSeparator } from "../ui/group";
-import { Menu, MenuItem, MenuPopup, MenuShortcut, MenuTrigger } from "../ui/menu";
+import {
+  Menu,
+  MenuGroup,
+  MenuGroupLabel,
+  MenuItem,
+  MenuPopup,
+  MenuShortcut,
+  MenuTrigger,
+} from "../ui/menu";
+import { CONTEXT_BAR_TEXT_TRIGGER_CLASS } from "../BranchToolbar.styles";
+import {
+  CONTEXT_PREFERRED_OPEN_QUICK_ACTION_ID,
+  contextOpenEditorActionId,
+  type ContextQuickActionId,
+} from "~/contextQuickActions";
 import {
   AntigravityIcon,
   CursorIcon,
@@ -146,17 +161,26 @@ const resolveOptions = (platform: string, availableEditors: ReadonlyArray<Editor
       value: "file-manager",
     },
   ];
-  return baseOptions.filter((option) => availableEditors.includes(option.value));
+  const availableEditorSet = new Set(availableEditors);
+  return baseOptions.filter((option) => availableEditorSet.has(option.value));
 };
 
 export const OpenInPicker = memo(function OpenInPicker({
   keybindings,
   availableEditors,
   openInCwd,
+  presentation = "header",
+  composerEditorId,
+  pinnedContextActionIds,
+  onContextActionPinnedChange,
 }: {
   keybindings: ResolvedKeybindingsConfig;
   availableEditors: ReadonlyArray<EditorId>;
   openInCwd: string | null;
+  presentation?: "header" | "composer-bar" | "composer-menu";
+  composerEditorId?: EditorId | undefined;
+  pinnedContextActionIds?: ReadonlySet<ContextQuickActionId>;
+  onContextActionPinnedChange?: (actionId: ContextQuickActionId, pinned: boolean) => void;
 }) {
   const [preferredEditor, setPreferredEditor] = usePreferredEditor(availableEditors);
   const options = useMemo(
@@ -196,6 +220,62 @@ export const OpenInPicker = memo(function OpenInPicker({
     return () => window.removeEventListener("keydown", handler);
   }, [preferredEditor, keybindings, openInCwd]);
 
+  if (presentation === "composer-bar") {
+    const editorId = composerEditorId ?? preferredEditor;
+    const option = options.find(({ value }) => value === editorId) ?? null;
+    return (
+      <Button
+        size="xs"
+        variant="ghost"
+        className={`${CONTEXT_BAR_TEXT_TRIGGER_CLASS} max-w-36 truncate`}
+        disabled={!editorId || !openInCwd || !option}
+        onClick={() => openInEditor(editorId)}
+      >
+        <span className="truncate">{option ? `Open in ${option.label}` : "Open in editor"}</span>
+      </Button>
+    );
+  }
+
+  if (presentation === "composer-menu") {
+    const PreferredEditorIcon = primaryOption?.Icon ?? FolderClosedIcon;
+    return (
+      <MenuGroup>
+        <MenuGroupLabel>Open project</MenuGroupLabel>
+        {options.length === 0 ? (
+          <MenuItem disabled>No installed editors found</MenuItem>
+        ) : (
+          <>
+            <ContextActionMenuItem
+              actionId={CONTEXT_PREFERRED_OPEN_QUICK_ACTION_ID}
+              checked={pinnedContextActionIds?.has(CONTEXT_PREFERRED_OPEN_QUICK_ACTION_ID) ?? false}
+              disabled={!preferredEditor || !openInCwd}
+              icon={<PreferredEditorIcon aria-hidden="true" className="size-4" />}
+              shortcutLabel={openFavoriteEditorShortcutLabel}
+              onCheckedChange={onContextActionPinnedChange}
+              onSelect={() => openInEditor(preferredEditor)}
+            >
+              Open in preferred editor
+            </ContextActionMenuItem>
+            {options.map(({ label, Icon, value }) => (
+              <ContextActionMenuItem
+                key={value}
+                actionId={contextOpenEditorActionId(value)}
+                checked={pinnedContextActionIds?.has(contextOpenEditorActionId(value)) ?? false}
+                disabled={!openInCwd}
+                icon={<Icon aria-hidden="true" className="size-4" />}
+                shortcutLabel={value === preferredEditor ? openFavoriteEditorShortcutLabel : null}
+                onCheckedChange={onContextActionPinnedChange}
+                onSelect={() => openInEditor(value)}
+              >
+                {`Open in ${label}`}
+              </ContextActionMenuItem>
+            ))}
+          </>
+        )}
+      </MenuGroup>
+    );
+  }
+
   return (
     <Group aria-label="Subscription actions">
       <Button
@@ -230,3 +310,15 @@ export const OpenInPicker = memo(function OpenInPicker({
     </Group>
   );
 });
+
+export function shouldShowOpenInPicker(input: {
+  readonly activeProjectName: string | undefined;
+  readonly activeThreadEnvironmentId: EnvironmentId;
+  readonly primaryEnvironmentId: EnvironmentId | null;
+}): boolean {
+  return (
+    Boolean(input.activeProjectName) &&
+    input.primaryEnvironmentId !== null &&
+    input.activeThreadEnvironmentId === input.primaryEnvironmentId
+  );
+}

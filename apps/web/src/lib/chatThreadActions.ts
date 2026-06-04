@@ -1,6 +1,10 @@
 import { scopeProjectRef } from "@t3tools/client-runtime";
 import type { EnvironmentId, ProjectId, ScopedProjectRef } from "@t3tools/contracts";
 import type { DraftThreadEnvMode } from "../composerDraftStore";
+import {
+  createChatWorkspaceDraftThread,
+  type ChatWorkspaceOpenDisposition,
+} from "../workspace/chatWorkspaceController";
 
 interface ThreadContextLike {
   environmentId: EnvironmentId;
@@ -20,11 +24,18 @@ interface NewThreadHandler {
       branch?: string | null;
       worktreePath?: string | null;
       envMode?: DraftThreadEnvMode;
+      forceNewDraft?: boolean;
     },
   ): Promise<void>;
 }
 
 type NewThreadOptions = NonNullable<Parameters<NewThreadHandler>[1]>;
+
+interface WorkspaceNewThreadHandlerInput {
+  readonly handleNewThread: NewThreadHandler;
+  readonly options?: NewThreadOptions;
+  readonly projectRef: ScopedProjectRef;
+}
 
 export interface ChatThreadActionContext {
   readonly activeDraftThread: DraftThreadContextLike | null;
@@ -49,7 +60,14 @@ export function resolveThreadActionProjectRef(
   return context.defaultProjectRef;
 }
 
-function buildContextualThreadOptions(context: ChatThreadActionContext): NewThreadOptions {
+interface StartThreadActionOptions {
+  readonly forceNewDraft?: boolean;
+}
+
+export function buildContextualThreadOptions(
+  context: ChatThreadActionContext,
+  options?: StartThreadActionOptions,
+): NewThreadOptions {
   return {
     branch: context.activeThread?.branch ?? context.activeDraftThread?.branch ?? null,
     worktreePath:
@@ -57,6 +75,7 @@ function buildContextualThreadOptions(context: ChatThreadActionContext): NewThre
     envMode:
       context.activeDraftThread?.envMode ??
       (context.activeThread?.worktreePath ? "worktree" : "local"),
+    ...(options?.forceNewDraft ? { forceNewDraft: true } : {}),
   };
 }
 
@@ -69,11 +88,53 @@ function buildDefaultThreadOptions(context: ChatThreadActionContext): NewThreadO
 export async function startNewThreadInProjectFromContext(
   context: ChatThreadActionContext,
   projectRef: ScopedProjectRef,
+  options?: StartThreadActionOptions,
 ): Promise<void> {
-  await context.handleNewThread(projectRef, buildContextualThreadOptions(context));
+  await context.handleNewThread(projectRef, buildContextualThreadOptions(context, options));
 }
 
-export async function startNewThreadFromContext(
+async function startNewThreadWithWorkspaceDisposition(
+  input: WorkspaceNewThreadHandlerInput,
+  disposition: Extract<ChatWorkspaceOpenDisposition, "active-panel" | "new-panel">,
+) {
+  const options: NewThreadOptions = {
+    ...input.options,
+    forceNewDraft: true,
+  };
+  const createdDraftThread = createChatWorkspaceDraftThread({
+    projectRef: input.projectRef,
+    options,
+    disposition,
+  });
+  if (createdDraftThread) {
+    return true;
+  }
+
+  await input.handleNewThread(input.projectRef, options);
+  return true;
+}
+
+export async function startNewThreadInWorkspacePanel(input: WorkspaceNewThreadHandlerInput) {
+  return startNewThreadWithWorkspaceDisposition(input, "new-panel");
+}
+
+export async function startNewThreadInActiveWorkspacePanel(input: WorkspaceNewThreadHandlerInput) {
+  return startNewThreadWithWorkspaceDisposition(input, "active-panel");
+}
+
+export async function startNewThreadInProjectWorkspacePanelFromContext(
+  context: ChatThreadActionContext,
+  projectRef: ScopedProjectRef,
+  options?: StartThreadActionOptions,
+): Promise<boolean> {
+  return startNewThreadInWorkspacePanel({
+    handleNewThread: context.handleNewThread,
+    projectRef,
+    options: buildContextualThreadOptions(context, { ...options, forceNewDraft: true }),
+  });
+}
+
+export async function startNewLocalThreadInWorkspacePanelFromContext(
   context: ChatThreadActionContext,
 ): Promise<boolean> {
   const projectRef = resolveThreadActionProjectRef(context);
@@ -81,7 +142,35 @@ export async function startNewThreadFromContext(
     return false;
   }
 
-  await startNewThreadInProjectFromContext(context, projectRef);
+  return startNewThreadInWorkspacePanel({
+    handleNewThread: context.handleNewThread,
+    projectRef,
+    options: buildDefaultThreadOptions(context),
+  });
+}
+
+export async function startNewThreadInWorkspacePanelFromContext(
+  context: ChatThreadActionContext,
+  options?: StartThreadActionOptions,
+): Promise<boolean> {
+  const projectRef = resolveThreadActionProjectRef(context);
+  if (!projectRef) {
+    return false;
+  }
+
+  return startNewThreadInProjectWorkspacePanelFromContext(context, projectRef, options);
+}
+
+export async function startNewThreadFromContext(
+  context: ChatThreadActionContext,
+  options?: StartThreadActionOptions,
+): Promise<boolean> {
+  const projectRef = resolveThreadActionProjectRef(context);
+  if (!projectRef) {
+    return false;
+  }
+
+  await startNewThreadInProjectFromContext(context, projectRef, options);
   return true;
 }
 

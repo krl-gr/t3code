@@ -1,4 +1,9 @@
-import { Context, Effect, Layer, Result, Schema, SchemaIssue } from "effect";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as SchemaIssue from "effect/SchemaIssue";
 
 import {
   TrimmedNonEmptyString,
@@ -88,7 +93,7 @@ export interface GitHubCliShape {
 }
 
 export class GitHubCli extends Context.Service<GitHubCli, GitHubCliShape>()(
-  "t3/source-control/GitHubCli",
+  "t3/sourceControl/GitHubCli",
 ) {}
 
 function errorText(error: VcsError | unknown): string {

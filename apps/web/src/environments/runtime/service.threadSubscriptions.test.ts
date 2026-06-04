@@ -1,4 +1,5 @@
 import { QueryClient } from "@tanstack/react-query";
+import type { WsRpcClient } from "@t3tools/client-runtime";
 import {
   EnvironmentId,
   ProjectId,
@@ -20,6 +21,8 @@ const mockReadSavedEnvironmentBearerToken = vi.fn();
 const mockSavedEnvironmentRegistrySubscribe = vi.fn();
 const mockGetPrimaryKnownEnvironment = vi.hoisted(() => vi.fn());
 const mockFetchRemoteSessionState = vi.fn();
+const mockResolveRemoteWebSocketConnectionUrl = vi.fn(async () => "ws://remote.example.test/ws");
+const mockRemoteHttpRunPromise = vi.fn((effect: Promise<unknown>) => effect);
 const mockConnectionReconnects: Array<ReturnType<typeof vi.fn>> = [];
 let savedEnvironmentRegistryListener: (() => void) | null = null;
 
@@ -31,12 +34,10 @@ vi.mock("../primary", () => ({
   getPrimaryKnownEnvironment: mockGetPrimaryKnownEnvironment,
 }));
 
-vi.mock("../remote/api", () => ({
-  bootstrapRemoteBearerSession: vi.fn(),
-  fetchRemoteEnvironmentDescriptor: vi.fn(),
-  fetchRemoteSessionState: mockFetchRemoteSessionState,
-  isRemoteEnvironmentAuthHttpError: vi.fn(() => false),
-  resolveRemoteWebSocketConnectionUrl: vi.fn(async () => "ws://remote.example.test/ws"),
+vi.mock("../../lib/runtime", () => ({
+  remoteHttpRuntime: {
+    runPromise: mockRemoteHttpRunPromise,
+  },
 }));
 
 vi.mock("./catalog", () => ({
@@ -66,13 +67,105 @@ vi.mock("./catalog", () => ({
   writeSavedEnvironmentBearerToken: vi.fn(),
 }));
 
-vi.mock("./connection", () => ({
+vi.mock("./connection", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./connection")>()),
   createEnvironmentConnection: mockCreateEnvironmentConnection,
 }));
 
-vi.mock("../../rpc/wsRpcClient", () => ({
-  createWsRpcClient: mockCreateWsRpcClient,
-}));
+vi.mock("@t3tools/client-runtime", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@t3tools/client-runtime")>();
+  const stubWsClient: WsRpcClient = {
+    dispose: async () => undefined,
+    reconnect: async () => undefined,
+    isHeartbeatFresh: () => false,
+    orchestration: {
+      dispatchCommand: vi.fn(),
+      getTurnDiff: vi.fn(),
+      getFullThreadDiff: vi.fn(),
+      getArchivedShellSnapshot: vi.fn(),
+      subscribeShell: vi.fn(() => () => undefined),
+      subscribeThread: mockSubscribeThread,
+    },
+    terminal: {
+      open: vi.fn(),
+      attach: vi.fn(() => () => undefined),
+      write: vi.fn(),
+      resize: vi.fn(),
+      clear: vi.fn(),
+      restart: vi.fn(),
+      close: vi.fn(),
+      onEvent: vi.fn(() => () => undefined),
+      onMetadata: vi.fn(() => () => undefined),
+    },
+    projects: {
+      searchEntries: vi.fn(),
+      writeFile: vi.fn(),
+    },
+    filesystem: {
+      browse: vi.fn(),
+    },
+    sourceControl: {
+      lookupRepository: vi.fn(),
+      cloneRepository: vi.fn(),
+      publishRepository: vi.fn(),
+    },
+    shell: {
+      openInEditor: vi.fn(),
+    },
+    vcs: {
+      pull: vi.fn(),
+      refreshStatus: vi.fn(),
+      onStatus: vi.fn(() => () => undefined),
+      listRefs: vi.fn(),
+      createWorktree: vi.fn(),
+      removeWorktree: vi.fn(),
+      createRef: vi.fn(),
+      switchRef: vi.fn(),
+      init: vi.fn(),
+    },
+    git: {
+      runStackedAction: vi.fn(),
+      resolvePullRequest: vi.fn(),
+      preparePullRequestThread: vi.fn(),
+    },
+    review: {
+      getDiffPreview: vi.fn(),
+    },
+    server: {
+      getConfig: vi.fn(),
+      refreshProviders: vi.fn(),
+      discoverSourceControl: vi.fn(),
+      updateProvider: vi.fn(),
+      upsertKeybinding: vi.fn(),
+      removeKeybinding: vi.fn(),
+      getSettings: vi.fn(),
+      updateSettings: vi.fn(),
+      getBrowserProfileSnapshot: vi.fn(),
+      openBrowserLoginWindow: vi.fn(),
+      closeBrowserProfile: vi.fn(),
+      clearBrowserProfile: vi.fn(),
+      getComputerUseSnapshot: vi.fn(),
+      restartComputerUse: vi.fn(),
+      stopComputerUse: vi.fn(),
+      refreshComputerUseTools: vi.fn(),
+      runComputerUseDoctor: vi.fn(),
+      subscribeConfig: vi.fn(() => () => undefined),
+      subscribeLifecycle: vi.fn(() => () => undefined),
+      subscribeAuthAccess: vi.fn(() => () => undefined),
+      getTraceDiagnostics: vi.fn(),
+      getProcessDiagnostics: vi.fn(),
+      getProcessResourceHistory: vi.fn(),
+      signalProcess: vi.fn(),
+    },
+  };
+  return {
+    ...actual,
+    createWsRpcClient: vi.fn(() => stubWsClient),
+    fetchRemoteSessionState: mockFetchRemoteSessionState,
+    isRemoteEnvironmentAuthHttpError: vi.fn(() => false),
+    resolveRemoteWebSocketConnectionUrl: mockResolveRemoteWebSocketConnectionUrl,
+  };
+});
 
 vi.mock("../../rpc/wsTransport", () => ({
   WsTransport: MockWsTransport,
@@ -176,6 +269,7 @@ describe("retainThreadDetailSubscription", () => {
           },
         })),
       },
+      isHeartbeatFresh: vi.fn(() => true),
       orchestration: {
         subscribeThread: mockSubscribeThread,
       },
@@ -183,6 +277,17 @@ describe("retainThreadDetailSubscription", () => {
     mockCreateEnvironmentConnection.mockImplementation((input) => {
       const reconnect = vi.fn(async () => undefined);
       mockConnectionReconnects.push(reconnect);
+      queueMicrotask(() => {
+        input.onConfigSnapshot?.({
+          environment: {
+            environmentId: input.knownEnvironment.environmentId,
+            label: input.knownEnvironment.label,
+            platform: { os: "darwin", arch: "arm64" },
+            serverVersion: "0.0.0-test",
+            capabilities: { repositoryIdentity: true },
+          },
+        });
+      });
       return {
         kind: input.kind,
         environmentId: input.knownEnvironment.environmentId,
@@ -352,13 +457,13 @@ describe("retainThreadDetailSubscription", () => {
     const stop = startEnvironmentConnectionService(new QueryClient());
     savedEnvironmentRegistryListener?.();
     await vi.waitFor(() => {
-      expect(mockCreateEnvironmentConnection).toHaveBeenCalledTimes(2);
       expect(
         listEnvironmentConnections().some(
           (connection) => connection.environmentId === environmentId,
         ),
       ).toBe(true);
     });
+    const createConnectionCallsBeforeReconnect = mockCreateEnvironmentConnection.mock.calls.length;
 
     const release = retainThreadDetailSubscription(environmentId, threadId);
     expect(mockSubscribeThread).toHaveBeenCalledTimes(1);
@@ -373,7 +478,9 @@ describe("retainThreadDetailSubscription", () => {
     await vi.advanceTimersByTimeAsync(200);
     await reconnectPromise;
     await vi.waitFor(() => {
-      expect(mockCreateEnvironmentConnection).toHaveBeenCalledTimes(3);
+      expect(mockCreateEnvironmentConnection).toHaveBeenCalledTimes(
+        createConnectionCallsBeforeReconnect + 1,
+      );
       expect(mockSubscribeThread).toHaveBeenCalledTimes(2);
     });
 
@@ -382,7 +489,7 @@ describe("retainThreadDetailSubscription", () => {
     await resetEnvironmentServiceForTests();
   });
 
-  it("reconnects environment streams when the browser resumes from the background", async () => {
+  it("keeps healthy environment streams connected when the browser resumes from the background", async () => {
     let visibilityState: DocumentVisibilityState = "visible";
     const documentTarget = new EventTarget();
     const windowTarget = new EventTarget();
@@ -396,6 +503,84 @@ describe("retainThreadDetailSubscription", () => {
     vi.stubGlobal("window", {
       addEventListener: windowTarget.addEventListener.bind(windowTarget),
       removeEventListener: windowTarget.removeEventListener.bind(windowTarget),
+    });
+
+    const { resetEnvironmentServiceForTests, startEnvironmentConnectionService } =
+      await import("./service");
+    mockCreateEnvironmentConnection.mockImplementation((input) => {
+      const reconnect = vi.fn(async () => undefined);
+      mockConnectionReconnects.push(reconnect);
+      queueMicrotask(() => {
+        input.onConfigSnapshot?.({
+          environment: {
+            environmentId: input.knownEnvironment.environmentId,
+            label: input.knownEnvironment.label,
+            platform: { os: "darwin", arch: "arm64" },
+            serverVersion: "0.0.0-test",
+            capabilities: { repositoryIdentity: true },
+          },
+        });
+      });
+      return {
+        kind: input.kind,
+        environmentId: input.knownEnvironment.environmentId,
+        knownEnvironment: input.knownEnvironment,
+        client: {
+          ...input.client,
+          isHeartbeatFresh: vi.fn(() => true),
+        },
+        ensureBootstrapped: vi.fn(async () => undefined),
+        reconnect,
+        dispose: vi.fn(async () => undefined),
+      };
+    });
+
+    const stop = startEnvironmentConnectionService(new QueryClient());
+    expect(mockConnectionReconnects).toHaveLength(1);
+
+    visibilityState = "hidden";
+    documentTarget.dispatchEvent(new Event("visibilitychange"));
+    expect(mockConnectionReconnects[0]).not.toHaveBeenCalled();
+
+    visibilityState = "visible";
+    documentTarget.dispatchEvent(new Event("visibilitychange"));
+    expect(mockConnectionReconnects[0]).not.toHaveBeenCalled();
+
+    stop();
+    await resetEnvironmentServiceForTests();
+  });
+
+  it("reconnects stale environment streams when the browser resumes from the background", async () => {
+    let visibilityState: DocumentVisibilityState = "visible";
+    const documentTarget = new EventTarget();
+    const windowTarget = new EventTarget();
+    vi.stubGlobal("document", {
+      addEventListener: documentTarget.addEventListener.bind(documentTarget),
+      removeEventListener: documentTarget.removeEventListener.bind(documentTarget),
+      get visibilityState() {
+        return visibilityState;
+      },
+    });
+    vi.stubGlobal("window", {
+      addEventListener: windowTarget.addEventListener.bind(windowTarget),
+      removeEventListener: windowTarget.removeEventListener.bind(windowTarget),
+    });
+    mockCreateWsRpcClient.mockReturnValue({
+      server: {
+        getConfig: vi.fn(async () => ({
+          environment: {
+            environmentId: EnvironmentId.make("env-remote"),
+            label: "Remote env",
+            platform: { os: "darwin", arch: "arm64" },
+            serverVersion: "0.0.0-test",
+            capabilities: { repositoryIdentity: true },
+          },
+        })),
+      },
+      isHeartbeatFresh: vi.fn(() => false),
+      orchestration: {
+        subscribeThread: mockSubscribeThread,
+      },
     });
 
     const { resetEnvironmentServiceForTests, startEnvironmentConnectionService } =

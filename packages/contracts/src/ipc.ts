@@ -1,10 +1,6 @@
 import type {
-  VcsSwitchRefInput,
-  VcsSwitchRefResult,
   VcsCreateRefInput,
-  GitPreparePullRequestThreadInput,
-  GitPreparePullRequestThreadResult,
-  GitPullRequestRefInput,
+  VcsCreateRefResult,
   VcsCreateWorktreeInput,
   VcsCreateWorktreeResult,
   VcsInitInput,
@@ -13,12 +9,19 @@ import type {
   VcsPullInput,
   VcsPullResult,
   VcsRemoveWorktreeInput,
+  VcsSwitchRefInput,
+  VcsSwitchRefResult,
+  GitPreparePullRequestThreadInput,
+  GitPreparePullRequestThreadResult,
+  GitPullRequestRefInput,
   GitResolvePullRequestResult,
   VcsStatusInput,
   VcsStatusResult,
-  VcsCreateRefResult,
 } from "./git.ts";
+import type { ReviewDiffPreviewInput, ReviewDiffPreviewResult } from "./review.ts";
 import type { FilesystemBrowseInput, FilesystemBrowseResult } from "./filesystem.ts";
+import type { BrowserOpenLoginWindowInput, BrowserProfileSnapshot } from "./browser.ts";
+import type { ComputerUseDoctorResult, ComputerUseSnapshot } from "./computerUse.ts";
 import type {
   ProjectSearchEntriesInput,
   ProjectSearchEntriesResult,
@@ -29,6 +32,8 @@ import type { ProviderInstanceId } from "./providerInstance.ts";
 import type {
   ServerConfig,
   ServerProcessDiagnosticsResult,
+  ServerProcessResourceHistoryInput,
+  ServerProcessResourceHistoryResult,
   ServerProviderUpdateInput,
   ServerProviderUpdatedPayload,
   ServerRemoveKeybindingResult,
@@ -38,9 +43,11 @@ import type {
   ServerUpsertKeybindingResult,
 } from "./server.ts";
 import type {
+  TerminalAttachInput,
+  TerminalAttachStreamEvent,
   TerminalClearInput,
   TerminalCloseInput,
-  TerminalEvent,
+  TerminalMetadataStreamEvent,
   TerminalOpenInput,
   TerminalResizeInput,
   TerminalRestartInput,
@@ -55,11 +62,12 @@ import type {
   OrchestrationGetFullThreadDiffResult,
   OrchestrationGetTurnDiffInput,
   OrchestrationGetTurnDiffResult,
+  OrchestrationShellSnapshot,
   OrchestrationShellStreamItem,
   OrchestrationSubscribeThreadInput,
   OrchestrationThreadStreamItem,
 } from "./orchestration.ts";
-import { EnvironmentId } from "./baseSchemas.ts";
+import { EnvironmentId, IsoDateTime, ThreadId } from "./baseSchemas.ts";
 import { AuthBearerBootstrapResult, AuthSessionState, AuthWebSocketTokenResult } from "./auth.ts";
 import { AdvertisedEndpoint } from "./remoteAccess.ts";
 import { EditorId } from "./editor.ts";
@@ -116,7 +124,7 @@ export type DesktopUpdateStatus =
 export type DesktopRuntimeArch = "arm64" | "x64" | "other";
 export type DesktopTheme = "light" | "dark" | "system";
 export type DesktopUpdateChannel = "latest" | "nightly";
-export type DesktopAppStageLabel = "Alpha" | "Dev" | "Nightly";
+export type DesktopAppStageLabel = "Alpha" | "Dev" | "Local" | "Nightly";
 
 export const DesktopUpdateStatusSchema = Schema.Literals([
   "disabled",
@@ -131,7 +139,7 @@ export const DesktopUpdateStatusSchema = Schema.Literals([
 export const DesktopRuntimeArchSchema = Schema.Literals(["arm64", "x64", "other"]);
 export const DesktopThemeSchema = Schema.Literals(["light", "dark", "system"]);
 export const DesktopUpdateChannelSchema = Schema.Literals(["latest", "nightly"]);
-export const DesktopAppStageLabelSchema = Schema.Literals(["Alpha", "Dev", "Nightly"]);
+export const DesktopAppStageLabelSchema = Schema.Literals(["Alpha", "Dev", "Local", "Nightly"]);
 
 export interface DesktopAppBranding {
   baseName: string;
@@ -366,6 +374,27 @@ export const PickFolderOptionsSchema = Schema.Struct({
   initialPath: Schema.optionalKey(Schema.NullOr(Schema.String)),
 });
 
+export interface PickFileSystemEntriesOptions {
+  initialPath?: string | null;
+}
+
+export const PickFileSystemEntriesOptionsSchema = Schema.Struct({
+  initialPath: Schema.optionalKey(Schema.NullOr(Schema.String)),
+});
+
+export const ThreadPromptDraftId = Schema.String.pipe(Schema.brand("ThreadPromptDraftId"));
+export type ThreadPromptDraftId = typeof ThreadPromptDraftId.Type;
+
+export const ThreadPromptDraftSchema = Schema.Struct({
+  id: ThreadPromptDraftId,
+  environmentId: EnvironmentId,
+  threadId: ThreadId,
+  body: Schema.String,
+  createdAt: IsoDateTime,
+  updatedAt: IsoDateTime,
+});
+export type ThreadPromptDraft = typeof ThreadPromptDraftSchema.Type;
+
 export interface DesktopBridge {
   getAppBranding: () => DesktopAppBranding | null;
   getLocalEnvironmentBootstrap: () => DesktopEnvironmentBootstrap | null;
@@ -378,6 +407,15 @@ export interface DesktopBridge {
   getSavedEnvironmentSecret: (environmentId: EnvironmentId) => Promise<string | null>;
   setSavedEnvironmentSecret: (environmentId: EnvironmentId, secret: string) => Promise<boolean>;
   removeSavedEnvironmentSecret: (environmentId: EnvironmentId) => Promise<void>;
+  getThreadPromptDrafts: (
+    environmentId: EnvironmentId,
+    threadId: ThreadId,
+  ) => Promise<readonly ThreadPromptDraft[]>;
+  setThreadPromptDrafts: (
+    environmentId: EnvironmentId,
+    threadId: ThreadId,
+    drafts: readonly ThreadPromptDraft[],
+  ) => Promise<void>;
   discoverSshHosts: () => Promise<readonly DesktopDiscoveredSshHost[]>;
   ensureSshEnvironment: (
     target: DesktopSshEnvironmentTarget,
@@ -404,6 +442,9 @@ export interface DesktopBridge {
   }) => Promise<DesktopServerExposureState>;
   getAdvertisedEndpoints: () => Promise<readonly AdvertisedEndpoint[]>;
   pickFolder: (options?: PickFolderOptions) => Promise<string | null>;
+  pickFileSystemEntries?: (
+    options?: PickFileSystemEntriesOptions,
+  ) => Promise<readonly string[] | null>;
   confirm: (message: string) => Promise<boolean>;
   setTheme: (theme: DesktopTheme) => Promise<void>;
   showContextMenu: <T extends string>(
@@ -433,6 +474,9 @@ export interface DesktopBridge {
 export interface LocalApi {
   dialogs: {
     pickFolder: (options?: PickFolderOptions) => Promise<string | null>;
+    pickFileSystemEntries?: (
+      options?: PickFileSystemEntriesOptions,
+    ) => Promise<readonly string[] | null>;
     confirm: (message: string) => Promise<boolean>;
   };
   shell: {
@@ -455,6 +499,15 @@ export interface LocalApi {
     getSavedEnvironmentSecret: (environmentId: EnvironmentId) => Promise<string | null>;
     setSavedEnvironmentSecret: (environmentId: EnvironmentId, secret: string) => Promise<boolean>;
     removeSavedEnvironmentSecret: (environmentId: EnvironmentId) => Promise<void>;
+    getThreadPromptDrafts: (
+      environmentId: EnvironmentId,
+      threadId: ThreadId,
+    ) => Promise<readonly ThreadPromptDraft[]>;
+    setThreadPromptDrafts: (
+      environmentId: EnvironmentId,
+      threadId: ThreadId,
+      drafts: readonly ThreadPromptDraft[],
+    ) => Promise<void>;
   };
   server: {
     getConfig: () => Promise<ServerConfig>;
@@ -474,7 +527,21 @@ export interface LocalApi {
     discoverSourceControl: () => Promise<SourceControlDiscoveryResult>;
     getTraceDiagnostics: () => Promise<ServerTraceDiagnosticsResult>;
     getProcessDiagnostics: () => Promise<ServerProcessDiagnosticsResult>;
+    getProcessResourceHistory: (
+      input: ServerProcessResourceHistoryInput,
+    ) => Promise<ServerProcessResourceHistoryResult>;
     signalProcess: (input: ServerSignalProcessInput) => Promise<ServerSignalProcessResult>;
+    getBrowserProfileSnapshot?: () => Promise<BrowserProfileSnapshot>;
+    openBrowserLoginWindow?: (
+      input?: BrowserOpenLoginWindowInput,
+    ) => Promise<BrowserProfileSnapshot>;
+    closeBrowserProfile?: () => Promise<BrowserProfileSnapshot>;
+    clearBrowserProfile?: () => Promise<BrowserProfileSnapshot>;
+    getComputerUseSnapshot?: () => Promise<ComputerUseSnapshot>;
+    restartComputerUse?: () => Promise<ComputerUseSnapshot>;
+    stopComputerUse?: () => Promise<ComputerUseSnapshot>;
+    refreshComputerUseTools?: () => Promise<ComputerUseSnapshot>;
+    runComputerUseDoctor?: () => Promise<ComputerUseDoctorResult>;
   };
 }
 
@@ -490,12 +557,24 @@ export interface LocalApi {
 export interface EnvironmentApi {
   terminal: {
     open: (input: typeof TerminalOpenInput.Encoded) => Promise<TerminalSessionSnapshot>;
+    attach: (
+      input: typeof TerminalAttachInput.Encoded,
+      callback: (event: TerminalAttachStreamEvent) => void,
+      options?: {
+        onResubscribe?: () => void;
+      },
+    ) => () => void;
     write: (input: typeof TerminalWriteInput.Encoded) => Promise<void>;
     resize: (input: typeof TerminalResizeInput.Encoded) => Promise<void>;
     clear: (input: typeof TerminalClearInput.Encoded) => Promise<void>;
     restart: (input: typeof TerminalRestartInput.Encoded) => Promise<TerminalSessionSnapshot>;
     close: (input: typeof TerminalCloseInput.Encoded) => Promise<void>;
-    onEvent: (callback: (event: TerminalEvent) => void) => () => void;
+    onMetadata: (
+      callback: (event: TerminalMetadataStreamEvent) => void,
+      options?: {
+        onResubscribe?: () => void;
+      },
+    ) => () => void;
   };
   projects: {
     searchEntries: (input: ProjectSearchEntriesInput) => Promise<ProjectSearchEntriesResult>;
@@ -538,12 +617,16 @@ export interface EnvironmentApi {
       input: GitPreparePullRequestThreadInput,
     ) => Promise<GitPreparePullRequestThreadResult>;
   };
+  review: {
+    getDiffPreview: (input: ReviewDiffPreviewInput) => Promise<ReviewDiffPreviewResult>;
+  };
   orchestration: {
     dispatchCommand: (command: ClientOrchestrationCommand) => Promise<{ sequence: number }>;
     getTurnDiff: (input: OrchestrationGetTurnDiffInput) => Promise<OrchestrationGetTurnDiffResult>;
     getFullThreadDiff: (
       input: OrchestrationGetFullThreadDiffInput,
     ) => Promise<OrchestrationGetFullThreadDiffResult>;
+    getArchivedShellSnapshot: () => Promise<OrchestrationShellSnapshot>;
     subscribeShell: (
       callback: (event: OrchestrationShellStreamItem) => void,
       options?: {

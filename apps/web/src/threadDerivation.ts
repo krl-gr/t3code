@@ -13,6 +13,7 @@ import type {
 const EMPTY_MESSAGES: ChatMessage[] = [];
 const EMPTY_ACTIVITIES: Thread["activities"] = [];
 const EMPTY_PROPOSED_PLANS: ProposedPlan[] = [];
+const EMPTY_CONTEXT_BINDINGS: NonNullable<Thread["contextBindings"]> = [];
 const EMPTY_TURN_DIFF_SUMMARIES: TurnDiffSummary[] = [];
 const EMPTY_MESSAGE_MAP: Record<MessageId, ChatMessage> = {};
 const EMPTY_ACTIVITY_MAP: Record<string, Thread["activities"][number]> = {};
@@ -28,6 +29,7 @@ const threadCache = new WeakMap<
     messages: Thread["messages"];
     activities: Thread["activities"];
     proposedPlans: Thread["proposedPlans"];
+    contextBindings: Thread["contextBindings"];
     turnDiffSummaries: Thread["turnDiffSummaries"];
     thread: Thread;
   }
@@ -112,6 +114,7 @@ export function getThreadFromEnvironmentState(
   const messages = selectThreadMessages(state, threadId);
   const activities = selectThreadActivities(state, threadId);
   const proposedPlans = selectThreadProposedPlans(state, threadId);
+  const contextBindings = state.contextBindingsByThreadId?.[threadId] ?? EMPTY_CONTEXT_BINDINGS;
   const turnDiffSummaries = selectThreadTurnDiffSummaries(state, threadId);
   const cached = threadCache.get(shell);
 
@@ -122,6 +125,7 @@ export function getThreadFromEnvironmentState(
     cached.messages === messages &&
     cached.activities === activities &&
     cached.proposedPlans === proposedPlans &&
+    cached.contextBindings === contextBindings &&
     cached.turnDiffSummaries === turnDiffSummaries
   ) {
     return cached.thread;
@@ -135,6 +139,7 @@ export function getThreadFromEnvironmentState(
     messages,
     activities,
     proposedPlans,
+    contextBindings,
     turnDiffSummaries,
   };
 
@@ -144,6 +149,7 @@ export function getThreadFromEnvironmentState(
     messages,
     activities,
     proposedPlans,
+    contextBindings,
     turnDiffSummaries,
     thread,
   });

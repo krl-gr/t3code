@@ -1,7 +1,11 @@
-import { OrchestrationCheckpointFile } from "@t3tools/contracts";
+import { OrchestrationCheckpointFile, ThreadContextMaterialization } from "@t3tools/contracts";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as SqlSchema from "effect/unstable/sql/SqlSchema";
-import { Effect, Layer, Option, Schema, Struct } from "effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import * as Struct from "effect/Struct";
 
 import { toPersistenceDecodeError, toPersistenceSqlError } from "../Errors.ts";
 import {
@@ -20,12 +24,20 @@ import {
 const ProjectionTurnDbRowSchema = ProjectionTurn.mapFields(
   Struct.assign({
     checkpointFiles: Schema.fromJsonString(Schema.Array(OrchestrationCheckpointFile)),
+    contextBlocks: Schema.fromJsonString(Schema.Array(ThreadContextMaterialization)),
   }),
 );
 
 const ProjectionTurnByIdDbRowSchema = ProjectionTurnById.mapFields(
   Struct.assign({
     checkpointFiles: Schema.fromJsonString(Schema.Array(OrchestrationCheckpointFile)),
+    contextBlocks: Schema.fromJsonString(Schema.Array(ThreadContextMaterialization)),
+  }),
+);
+
+const ProjectionPendingTurnStartDbRowSchema = ProjectionPendingTurnStart.mapFields(
+  Struct.assign({
+    contextBlocks: Schema.fromJsonString(Schema.Array(ThreadContextMaterialization)),
   }),
 );
 
@@ -57,7 +69,8 @@ const makeProjectionTurnRepository = Effect.gen(function* () {
           checkpoint_turn_count,
           checkpoint_ref,
           checkpoint_status,
-          checkpoint_files_json
+          checkpoint_files_json,
+          context_blocks_json
         )
         VALUES (
           ${row.threadId},
@@ -73,7 +86,8 @@ const makeProjectionTurnRepository = Effect.gen(function* () {
           ${row.checkpointTurnCount},
           ${row.checkpointRef},
           ${row.checkpointStatus},
-          ${row.checkpointFiles}
+          ${row.checkpointFiles},
+          ${row.contextBlocks}
         )
         ON CONFLICT (thread_id, turn_id)
         DO UPDATE SET
@@ -88,7 +102,8 @@ const makeProjectionTurnRepository = Effect.gen(function* () {
           checkpoint_turn_count = excluded.checkpoint_turn_count,
           checkpoint_ref = excluded.checkpoint_ref,
           checkpoint_status = excluded.checkpoint_status,
-          checkpoint_files_json = excluded.checkpoint_files_json
+          checkpoint_files_json = excluded.checkpoint_files_json,
+          context_blocks_json = excluded.context_blocks_json
       `,
   });
 
@@ -122,7 +137,8 @@ const makeProjectionTurnRepository = Effect.gen(function* () {
           checkpoint_turn_count,
           checkpoint_ref,
           checkpoint_status,
-          checkpoint_files_json
+          checkpoint_files_json,
+          context_blocks_json
         )
         VALUES (
           ${row.threadId},
@@ -138,14 +154,15 @@ const makeProjectionTurnRepository = Effect.gen(function* () {
           NULL,
           NULL,
           NULL,
-          '[]'
+          '[]',
+          ${JSON.stringify(row.contextBlocks)}
         )
       `,
   });
 
   const getPendingProjectionTurn = SqlSchema.findOneOption({
     Request: GetProjectionPendingTurnStartInput,
-    Result: ProjectionPendingTurnStart,
+    Result: ProjectionPendingTurnStartDbRowSchema,
     execute: ({ threadId }) =>
       sql`
         SELECT
@@ -153,6 +170,7 @@ const makeProjectionTurnRepository = Effect.gen(function* () {
           pending_message_id AS "messageId",
           source_proposed_plan_thread_id AS "sourceProposedPlanThreadId",
           source_proposed_plan_id AS "sourceProposedPlanId",
+          context_blocks_json AS "contextBlocks",
           requested_at AS "requestedAt"
         FROM projection_turns
         WHERE thread_id = ${threadId}
@@ -184,7 +202,8 @@ const makeProjectionTurnRepository = Effect.gen(function* () {
           checkpoint_turn_count AS "checkpointTurnCount",
           checkpoint_ref AS "checkpointRef",
           checkpoint_status AS "checkpointStatus",
-          checkpoint_files_json AS "checkpointFiles"
+          checkpoint_files_json AS "checkpointFiles",
+          context_blocks_json AS "contextBlocks"
         FROM projection_turns
         WHERE thread_id = ${threadId}
         ORDER BY
@@ -217,7 +236,8 @@ const makeProjectionTurnRepository = Effect.gen(function* () {
           checkpoint_turn_count AS "checkpointTurnCount",
           checkpoint_ref AS "checkpointRef",
           checkpoint_status AS "checkpointStatus",
-          checkpoint_files_json AS "checkpointFiles"
+          checkpoint_files_json AS "checkpointFiles",
+          context_blocks_json AS "contextBlocks"
         FROM projection_turns
         WHERE thread_id = ${threadId}
           AND turn_id = ${turnId}

@@ -19,6 +19,8 @@ import { Route as SettingsKeybindingsRouteImport } from './routes/settings.keybi
 import { Route as SettingsGeneralRouteImport } from './routes/settings.general'
 import { Route as SettingsDiagnosticsRouteImport } from './routes/settings.diagnostics'
 import { Route as SettingsConnectionsRouteImport } from './routes/settings.connections'
+import { Route as SettingsComputerUseRouteImport } from './routes/settings.computer-use'
+import { Route as SettingsBrowserRouteImport } from './routes/settings.browser'
 import { Route as SettingsArchivedRouteImport } from './routes/settings.archived'
 import { Route as ChatDraftDraftIdRouteImport } from './routes/_chat.draft.$draftId'
 import { Route as ChatEnvironmentIdThreadIdRouteImport } from './routes/_chat.$environmentId.$threadId'
@@ -72,6 +74,16 @@ const SettingsConnectionsRoute = SettingsConnectionsRouteImport.update({
   path: '/connections',
   getParentRoute: () => SettingsRoute,
 } as any)
+const SettingsComputerUseRoute = SettingsComputerUseRouteImport.update({
+  id: '/computer-use',
+  path: '/computer-use',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const SettingsBrowserRoute = SettingsBrowserRouteImport.update({
+  id: '/browser',
+  path: '/browser',
+  getParentRoute: () => SettingsRoute,
+} as any)
 const SettingsArchivedRoute = SettingsArchivedRouteImport.update({
   id: '/archived',
   path: '/archived',
@@ -94,6 +106,8 @@ export interface FileRoutesByFullPath {
   '/pair': typeof PairRoute
   '/settings': typeof SettingsRouteWithChildren
   '/settings/archived': typeof SettingsArchivedRoute
+  '/settings/browser': typeof SettingsBrowserRoute
+  '/settings/computer-use': typeof SettingsComputerUseRoute
   '/settings/connections': typeof SettingsConnectionsRoute
   '/settings/diagnostics': typeof SettingsDiagnosticsRoute
   '/settings/general': typeof SettingsGeneralRoute
@@ -107,6 +121,8 @@ export interface FileRoutesByTo {
   '/pair': typeof PairRoute
   '/settings': typeof SettingsRouteWithChildren
   '/settings/archived': typeof SettingsArchivedRoute
+  '/settings/browser': typeof SettingsBrowserRoute
+  '/settings/computer-use': typeof SettingsComputerUseRoute
   '/settings/connections': typeof SettingsConnectionsRoute
   '/settings/diagnostics': typeof SettingsDiagnosticsRoute
   '/settings/general': typeof SettingsGeneralRoute
@@ -123,6 +139,8 @@ export interface FileRoutesById {
   '/pair': typeof PairRoute
   '/settings': typeof SettingsRouteWithChildren
   '/settings/archived': typeof SettingsArchivedRoute
+  '/settings/browser': typeof SettingsBrowserRoute
+  '/settings/computer-use': typeof SettingsComputerUseRoute
   '/settings/connections': typeof SettingsConnectionsRoute
   '/settings/diagnostics': typeof SettingsDiagnosticsRoute
   '/settings/general': typeof SettingsGeneralRoute
@@ -140,6 +158,8 @@ export interface FileRouteTypes {
     | '/pair'
     | '/settings'
     | '/settings/archived'
+    | '/settings/browser'
+    | '/settings/computer-use'
     | '/settings/connections'
     | '/settings/diagnostics'
     | '/settings/general'
@@ -153,6 +173,8 @@ export interface FileRouteTypes {
     | '/pair'
     | '/settings'
     | '/settings/archived'
+    | '/settings/browser'
+    | '/settings/computer-use'
     | '/settings/connections'
     | '/settings/diagnostics'
     | '/settings/general'
@@ -168,6 +190,8 @@ export interface FileRouteTypes {
     | '/pair'
     | '/settings'
     | '/settings/archived'
+    | '/settings/browser'
+    | '/settings/computer-use'
     | '/settings/connections'
     | '/settings/diagnostics'
     | '/settings/general'
@@ -257,6 +281,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsConnectionsRouteImport
       parentRoute: typeof SettingsRoute
     }
+    '/settings/computer-use': {
+      id: '/settings/computer-use'
+      path: '/computer-use'
+      fullPath: '/settings/computer-use'
+      preLoaderRoute: typeof SettingsComputerUseRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/browser': {
+      id: '/settings/browser'
+      path: '/browser'
+      fullPath: '/settings/browser'
+      preLoaderRoute: typeof SettingsBrowserRouteImport
+      parentRoute: typeof SettingsRoute
+    }
     '/settings/archived': {
       id: '/settings/archived'
       path: '/archived'
@@ -297,6 +335,8 @@ const ChatRouteWithChildren = ChatRoute._addFileChildren(ChatRouteChildren)
 
 interface SettingsRouteChildren {
   SettingsArchivedRoute: typeof SettingsArchivedRoute
+  SettingsBrowserRoute: typeof SettingsBrowserRoute
+  SettingsComputerUseRoute: typeof SettingsComputerUseRoute
   SettingsConnectionsRoute: typeof SettingsConnectionsRoute
   SettingsDiagnosticsRoute: typeof SettingsDiagnosticsRoute
   SettingsGeneralRoute: typeof SettingsGeneralRoute
@@ -307,6 +347,8 @@ interface SettingsRouteChildren {
 
 const SettingsRouteChildren: SettingsRouteChildren = {
   SettingsArchivedRoute: SettingsArchivedRoute,
+  SettingsBrowserRoute: SettingsBrowserRoute,
+  SettingsComputerUseRoute: SettingsComputerUseRoute,
   SettingsConnectionsRoute: SettingsConnectionsRoute,
   SettingsDiagnosticsRoute: SettingsDiagnosticsRoute,
   SettingsGeneralRoute: SettingsGeneralRoute,

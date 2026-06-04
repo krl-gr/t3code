@@ -4,8 +4,10 @@ import {
   OrchestrationMessage,
   OrchestrationSession,
   OrchestrationThread,
+  ThreadContextBinding,
 } from "@t3tools/contracts";
-import { Effect, Schema } from "effect";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 
 import { toProjectorDecodeError, type OrchestrationProjectorDecodeError } from "./Errors.ts";
 import {
@@ -18,6 +20,8 @@ import {
   ThreadCreatedPayload,
   ThreadDeletedPayload,
   ThreadInteractionModeSetPayload,
+  ThreadContextBindingAddedPayload,
+  ThreadContextBindingRemovedPayload,
   ThreadMetaUpdatedPayload,
   ThreadProposedPlanUpsertedPayload,
   ThreadRuntimeModeSetPayload,
@@ -46,15 +50,14 @@ function updateThread(
 }
 
 function decodeForEvent<A>(
-  schema: Schema.Schema<A>,
+  schema: Schema.Decoder<A, never>,
   value: unknown,
   eventType: OrchestrationEvent["type"],
   field: string,
 ): Effect.Effect<A, OrchestrationProjectorDecodeError> {
-  return Effect.try({
-    try: () => Schema.decodeUnknownSync(schema as any)(value),
-    catch: (error) => toProjectorDecodeError(`${eventType}:${field}`)(error as Schema.SchemaError),
-  });
+  return Schema.decodeUnknownEffect(schema)(value).pipe(
+    Effect.mapError(toProjectorDecodeError(`${eventType}:${field}`)),
+  );
 }
 
 function retainThreadMessagesAfterRevert(
@@ -265,6 +268,8 @@ export function projectEvent(
             archivedAt: null,
             deletedAt: null,
             messages: [],
+            proposedPlans: [],
+            contextBindings: [],
             activities: [],
             checkpoints: [],
             session: null,
@@ -498,6 +503,64 @@ export function projectEvent(
           }),
         };
       });
+
+    case "thread.context-binding-added":
+      return Effect.gen(function* () {
+        const payload = yield* decodeForEvent(
+          ThreadContextBindingAddedPayload,
+          event.payload,
+          event.type,
+          "payload",
+        );
+        const thread = nextBase.threads.find((entry) => entry.id === payload.threadId);
+        if (!thread) {
+          return nextBase;
+        }
+        const binding = yield* decodeForEvent(
+          ThreadContextBinding,
+          payload.binding,
+          event.type,
+          "binding",
+        );
+        const contextBindings = [
+          ...(thread.contextBindings ?? []).filter((entry) => entry.id !== binding.id),
+          binding,
+        ].toSorted(
+          (left, right) =>
+            left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id),
+        );
+        return {
+          ...nextBase,
+          threads: updateThread(nextBase.threads, payload.threadId, {
+            contextBindings,
+            updatedAt: event.occurredAt,
+          }),
+        };
+      });
+
+    case "thread.context-binding-removed":
+      return decodeForEvent(
+        ThreadContextBindingRemovedPayload,
+        event.payload,
+        event.type,
+        "payload",
+      ).pipe(
+        Effect.map((payload) => {
+          const thread = nextBase.threads.find((entry) => entry.id === payload.threadId);
+          if (!thread) {
+            return nextBase;
+          }
+          return {
+            ...nextBase,
+            threads: updateThread(nextBase.threads, payload.threadId, {
+              contextBindings: (thread.contextBindings ?? []).filter(
+                (binding) => binding.id !== payload.bindingId,
+              ),
+              updatedAt: event.occurredAt,
+            }),
+          };
+        }),
+      );
 
     case "thread.turn-diff-completed":
       return Effect.gen(function* () {

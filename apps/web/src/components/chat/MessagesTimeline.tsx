@@ -16,17 +16,25 @@ import {
   type ReactNode,
 } from "react";
 import { LegendList, type LegendListRef } from "@legendapp/list/react";
+import { FileDiff } from "@pierre/diffs/react";
 import { deriveTimelineEntries, formatElapsed } from "../../session-logic";
 import { type TurnDiffSummary } from "../../types";
 import { summarizeTurnDiffStats } from "../../lib/turnDiffTree";
+import {
+  getRenderablePatch,
+  resolveDiffThemeName,
+  resolveFileDiffPath,
+} from "../../lib/diffRendering";
 import ChatMarkdown from "../ChatMarkdown";
 import {
   BotIcon,
   CheckIcon,
   CircleAlertIcon,
   EyeIcon,
+  GitBranchIcon,
   GlobeIcon,
   HammerIcon,
+  MousePointer2Icon,
   type LucideIcon,
   SquarePenIcon,
   TerminalIcon,
@@ -67,9 +75,14 @@ import {
 } from "./userMessageTerminalContexts";
 import { SkillInlineText } from "./SkillInlineText";
 import { formatWorkspaceRelativePath } from "../../filePathDisplay";
+import {
+  buildReviewCommentRenderablePatch,
+  parseReviewCommentMessageSegments,
+  type ReviewCommentContext,
+} from "../../reviewCommentContext";
 
 // ---------------------------------------------------------------------------
-// Context — shared state consumed by every row component via useContext.
+// Context — shared state consumed by every row component via Context.
 // Propagates through LegendList's memo boundaries for shared callbacks and
 // non-row-scoped state. `nowIso` is intentionally excluded — self-ticking
 // components (WorkingTimer, LiveElapsed) handle it.
@@ -84,16 +97,14 @@ interface TimelineRowSharedState {
   skills: ReadonlyArray<Pick<ServerProviderSkill, "name" | "displayName">>;
   activeThreadEnvironmentId: EnvironmentId;
   onRevertUserMessage: (messageId: MessageId) => void;
+  onForkAssistantMessage: (messageId: MessageId) => void;
   onImageExpand: (preview: ExpandedImagePreview) => void;
   onOpenTurnDiff: (turnId: TurnId, filePath?: string) => void;
 }
 
 interface TimelineRowActivityState {
-  activeTurnInProgress: boolean;
-  activeTurnId: TurnId | null;
   isWorking: boolean;
   isRevertingCheckpoint: boolean;
-  completionSummary: string | null;
 }
 
 const TimelineRowCtx = createContext<TimelineRowSharedState>(null!);
@@ -120,9 +131,11 @@ interface MessagesTimelineProps {
   onOpenTurnDiff: (turnId: TurnId, filePath?: string) => void;
   revertTurnCountByUserMessageId: Map<MessageId, number>;
   onRevertUserMessage: (messageId: MessageId) => void;
+  onForkAssistantMessage?: (messageId: MessageId) => void;
   isRevertingCheckpoint: boolean;
   onImageExpand: (preview: ExpandedImagePreview) => void;
   activeThreadEnvironmentId: EnvironmentId;
+  activeProjectName?: string | undefined;
   markdownCwd: string | undefined;
   resolvedTheme: "light" | "dark";
   timestampFormat: TimestampFormat;
@@ -149,9 +162,11 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   onOpenTurnDiff,
   revertTurnCountByUserMessageId,
   onRevertUserMessage,
+  onForkAssistantMessage = () => undefined,
   isRevertingCheckpoint,
   onImageExpand,
   activeThreadEnvironmentId,
+  activeProjectName,
   markdownCwd,
   resolvedTheme,
   timestampFormat,
@@ -164,7 +179,10 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       deriveMessagesTimelineRows({
         timelineEntries,
         completionDividerBeforeEntryId,
+        completionSummary,
         isWorking,
+        activeTurnInProgress,
+        activeTurnId: activeTurnId ?? null,
         activeTurnStartedAt,
         turnDiffSummaryByAssistantMessageId,
         revertTurnCountByUserMessageId,
@@ -172,7 +190,10 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     [
       timelineEntries,
       completionDividerBeforeEntryId,
+      completionSummary,
       isWorking,
+      activeTurnInProgress,
+      activeTurnId,
       activeTurnStartedAt,
       turnDiffSummaryByAssistantMessageId,
       revertTurnCountByUserMessageId,
@@ -215,6 +236,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       skills,
       activeThreadEnvironmentId,
       onRevertUserMessage,
+      onForkAssistantMessage,
       onImageExpand,
       onOpenTurnDiff,
     }),
@@ -227,19 +249,17 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       skills,
       activeThreadEnvironmentId,
       onRevertUserMessage,
+      onForkAssistantMessage,
       onImageExpand,
       onOpenTurnDiff,
     ],
   );
   const activityState = useMemo<TimelineRowActivityState>(
     () => ({
-      activeTurnInProgress,
-      activeTurnId: activeTurnId ?? null,
       isWorking,
       isRevertingCheckpoint,
-      completionSummary,
     }),
-    [activeTurnInProgress, activeTurnId, completionSummary, isRevertingCheckpoint, isWorking],
+    [isRevertingCheckpoint, isWorking],
   );
 
   // Stable renderItem — no closure deps. Row components read shared state
@@ -254,18 +274,22 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   );
 
   if (rows.length === 0 && !isWorking) {
+    const emptyPrompt = activeProjectName?.trim()
+      ? `What should we do in ${activeProjectName.trim()} today?`
+      : "What should we do today?";
+
     return (
       <div className="flex h-full items-center justify-center">
-        <p className="text-sm text-muted-foreground/30">
-          Send a message to start the conversation.
+        <p className="max-w-[min(32rem,calc(100%-2rem))] truncate bg-gradient-to-b from-muted-foreground/45 to-muted-foreground/20 bg-clip-text text-center text-2xl font-medium text-transparent tracking-normal">
+          {emptyPrompt}
         </p>
       </div>
     );
   }
 
   return (
-    <TimelineRowCtx.Provider value={sharedState}>
-      <TimelineRowActivityCtx.Provider value={activityState}>
+    <TimelineRowCtx value={sharedState}>
+      <TimelineRowActivityCtx value={activityState}>
         <LegendList<MessagesTimelineRow>
           ref={listRef}
           data={rows}
@@ -281,8 +305,8 @@ export const MessagesTimeline = memo(function MessagesTimeline({
           ListHeaderComponent={TIMELINE_LIST_HEADER}
           ListFooterComponent={TIMELINE_LIST_FOOTER}
         />
-      </TimelineRowActivityCtx.Provider>
-    </TimelineRowCtx.Provider>
+      </TimelineRowActivityCtx>
+    </TimelineRowCtx>
   );
 });
 
@@ -365,24 +389,24 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
             ))}
           </div>
         )}
-        {(displayedUserMessage.visibleText.trim().length > 0 || terminalContexts.length > 0) && (
-          <UserMessageBody
-            text={displayedUserMessage.visibleText}
-            terminalContexts={terminalContexts}
-            skills={ctx.skills}
-          />
-        )}
-        <div className="mt-1.5 flex items-center justify-end gap-2">
-          <div className="flex items-center gap-1.5 opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover:opacity-100">
-            {displayedUserMessage.copyText && (
-              <MessageCopyButton text={displayedUserMessage.copyText} />
-            )}
-            {canRevertAgentWork && <RevertUserMessageButton messageId={row.message.id} />}
-          </div>
-          <p className="text-right text-xs text-muted-foreground/50">
-            {formatTimestamp(row.message.createdAt, ctx.timestampFormat)}
-          </p>
-        </div>
+        <CollapsibleUserMessageBody
+          text={displayedUserMessage.visibleText}
+          terminalContexts={terminalContexts}
+          skills={ctx.skills}
+          footer={
+            <>
+              <div className="flex items-center gap-1.5 opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover:opacity-100">
+                {displayedUserMessage.copyText && (
+                  <MessageCopyButton text={displayedUserMessage.copyText} />
+                )}
+                {canRevertAgentWork && <RevertUserMessageButton messageId={row.message.id} />}
+              </div>
+              <p className="text-right text-xs text-muted-foreground/50">
+                {formatTimestamp(row.message.createdAt, ctx.timestampFormat)}
+              </p>
+            </>
+          }
+        />
       </div>
     </div>
   );
@@ -412,7 +436,9 @@ function AssistantTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "mess
 
   return (
     <>
-      {row.showCompletionDivider && <AssistantCompletionDivider />}
+      {row.showCompletionDivider && (
+        <AssistantCompletionDivider completionSummary={row.completionSummary} />
+      )}
       <div className="min-w-0 px-1 py-0.5">
         <ChatMarkdown
           text={messageText}
@@ -442,6 +468,9 @@ function AssistantTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "mess
               )
             )}
           </p>
+          {!row.message.streaming ? (
+            <ForkAssistantMessageButton messageId={row.message.id} />
+          ) : null}
           <AssistantCopyButton row={row} />
         </div>
       </div>
@@ -449,14 +478,33 @@ function AssistantTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "mess
   );
 }
 
-function AssistantCompletionDivider() {
+function ForkAssistantMessageButton({ messageId }: { messageId: MessageId }) {
+  const ctx = use(TimelineRowCtx);
   const activity = use(TimelineRowActivityCtx);
 
+  return (
+    <div className="flex items-center opacity-0 transition-opacity duration-200 group-hover/assistant:opacity-100">
+      <Button
+        type="button"
+        size="icon-xs"
+        variant="outline"
+        disabled={activity.isWorking || activity.isRevertingCheckpoint}
+        className="border-border/50 bg-background/35 text-muted-foreground/45 shadow-none hover:border-border/70 hover:bg-background/55 hover:text-muted-foreground/70"
+        onClick={() => ctx.onForkAssistantMessage(messageId)}
+        title="Fork from message"
+      >
+        <GitBranchIcon className="size-3" />
+      </Button>
+    </div>
+  );
+}
+
+function AssistantCompletionDivider({ completionSummary }: { completionSummary: string | null }) {
   return (
     <div className="my-3 flex items-center gap-3">
       <span className="h-px flex-1 bg-border" />
       <span className="rounded-full border border-border bg-background px-2.5 py-1 text-[10px] uppercase tracking-[0.14em] text-muted-foreground/80">
-        {activity.completionSummary ? `Response • ${activity.completionSummary}` : "Response"}
+        {completionSummary ? `Response • ${completionSummary}` : "Response"}
       </span>
       <span className="h-px flex-1 bg-border" />
     </div>
@@ -464,15 +512,10 @@ function AssistantCompletionDivider() {
 }
 
 function AssistantCopyButton({ row }: { row: Extract<TimelineRow, { kind: "message" }> }) {
-  const activity = use(TimelineRowActivityCtx);
-  const assistantTurnStillInProgress =
-    activity.activeTurnInProgress &&
-    activity.activeTurnId !== null &&
-    row.message.turnId === activity.activeTurnId;
   const assistantCopyState = resolveAssistantMessageCopyState({
     text: row.message.text ?? null,
     showCopyButton: row.showAssistantCopyButton,
-    streaming: row.message.streaming || assistantTurnStillInProgress,
+    streaming: row.assistantCopyStreaming,
   });
 
   if (!assistantCopyState.visible) {
@@ -755,11 +798,112 @@ const UserMessageTerminalContextInlineLabel = memo(
   },
 );
 
+const MAX_COLLAPSED_USER_MESSAGE_LINES = 8;
+const MAX_COLLAPSED_USER_MESSAGE_LENGTH = 600;
+const COLLAPSED_USER_MESSAGE_FADE_HEIGHT_REM = 1.75;
+const COLLAPSED_USER_MESSAGE_FADE_MASK = `linear-gradient(to bottom, black calc(100% - ${COLLAPSED_USER_MESSAGE_FADE_HEIGHT_REM}rem), transparent)`;
+
+function shouldCollapseUserMessage(text: string): boolean {
+  if (text.trim().length === 0) {
+    return false;
+  }
+
+  return (
+    text.length > MAX_COLLAPSED_USER_MESSAGE_LENGTH ||
+    text.split("\n").length > MAX_COLLAPSED_USER_MESSAGE_LINES
+  );
+}
+
+const CollapsibleUserMessageBody = memo(function CollapsibleUserMessageBody(props: {
+  text: string;
+  terminalContexts: ParsedTerminalContextEntry[];
+  skills: ReadonlyArray<Pick<ServerProviderSkill, "name" | "displayName">>;
+  footer?: ReactNode;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const hasVisibleBody = props.text.trim().length > 0 || props.terminalContexts.length > 0;
+  const canCollapse = hasVisibleBody && shouldCollapseUserMessage(props.text);
+  const isCollapsed = canCollapse && !expanded;
+
+  return (
+    <div>
+      {hasVisibleBody ? (
+        <div
+          className={cn("relative", isCollapsed && "max-h-44 overflow-hidden")}
+          data-user-message-body="true"
+          data-user-message-collapsed={isCollapsed ? "true" : "false"}
+          data-user-message-collapsible={canCollapse ? "true" : "false"}
+          data-user-message-fade={isCollapsed ? "true" : "false"}
+          style={
+            isCollapsed
+              ? {
+                  WebkitMaskImage: COLLAPSED_USER_MESSAGE_FADE_MASK,
+                  maskImage: COLLAPSED_USER_MESSAGE_FADE_MASK,
+                }
+              : undefined
+          }
+        >
+          <UserMessageBody
+            text={props.text}
+            terminalContexts={props.terminalContexts}
+            skills={props.skills}
+          />
+        </div>
+      ) : null}
+      {canCollapse || props.footer ? (
+        <div
+          className={cn(
+            "mt-1.5 flex items-center gap-2",
+            canCollapse && props.footer ? "justify-between" : "justify-end",
+          )}
+          data-user-message-footer="true"
+        >
+          {canCollapse ? (
+            <Button
+              type="button"
+              size="xs"
+              variant="ghost"
+              aria-expanded={expanded}
+              data-scroll-anchor-ignore
+              onClick={() => setExpanded((value) => !value)}
+              className="-ml-1 h-6 rounded-md px-1.5 text-xs text-muted-foreground/72 hover:bg-muted/55 hover:text-foreground/85"
+            >
+              {expanded ? "Show less" : "Show full message"}
+            </Button>
+          ) : null}
+          {props.footer ? (
+            <div className="ml-auto flex items-center gap-2">{props.footer}</div>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+});
+
 const UserMessageBody = memo(function UserMessageBody(props: {
   text: string;
   terminalContexts: ParsedTerminalContextEntry[];
   skills: ReadonlyArray<Pick<ServerProviderSkill, "name" | "displayName">>;
 }) {
+  const reviewCommentSegments = parseReviewCommentMessageSegments(props.text);
+  if (reviewCommentSegments.some((segment) => segment.kind === "review-comment")) {
+    return (
+      <div className="space-y-3 text-sm leading-relaxed text-foreground">
+        {reviewCommentSegments.map((segment) =>
+          segment.kind === "text" ? (
+            segment.text.trim().length > 0 ? (
+              <div key={segment.id} className="whitespace-pre-wrap wrap-break-word">
+                <SkillInlineText text={segment.text.trim()} skills={props.skills} />
+              </div>
+            ) : null
+          ) : (
+            <UserMessageReviewCommentCard key={segment.comment.id} comment={segment.comment} />
+          ),
+        )}
+      </div>
+    );
+  }
+
   if (props.terminalContexts.length > 0) {
     const hasEmbeddedInlineLabels = textContainsInlineTerminalContextLabels(
       props.text,
@@ -852,6 +996,49 @@ const UserMessageBody = memo(function UserMessageBody(props: {
     </div>
   );
 });
+
+function UserMessageReviewCommentCard({ comment }: { comment: ReviewCommentContext }) {
+  const ctx = use(TimelineRowCtx);
+  const renderablePatch = getRenderablePatch(
+    buildReviewCommentRenderablePatch(comment),
+    `review-comment:${comment.id}`,
+  );
+
+  return (
+    <div className="space-y-2 rounded-lg border border-border/70 bg-background/70 p-3">
+      <div className="space-y-1">
+        <div className="text-xs font-medium text-foreground">
+          {formatWorkspaceRelativePath(comment.filePath, ctx.workspaceRoot)}
+        </div>
+        <div className="text-[11px] text-muted-foreground">
+          {comment.sectionTitle} · {comment.rangeLabel}
+        </div>
+      </div>
+      {comment.text.length > 0 && (
+        <div className="whitespace-pre-wrap wrap-break-word text-sm">
+          <SkillInlineText text={comment.text} skills={ctx.skills} />
+        </div>
+      )}
+      {renderablePatch?.kind === "files" &&
+        renderablePatch.files.map((fileDiff) => (
+          <FileDiff
+            key={resolveFileDiffPath(fileDiff)}
+            fileDiff={fileDiff}
+            options={{
+              collapsed: false,
+              diffStyle: "unified",
+              theme: resolveDiffThemeName(ctx.resolvedTheme),
+            }}
+          />
+        ))}
+      {renderablePatch?.kind === "raw" && (
+        <pre className="overflow-x-auto rounded-md bg-muted/40 p-2 text-xs">
+          {renderablePatch.text}
+        </pre>
+      )}
+    </div>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Structural sharing — reuse old row references when data hasn't changed
@@ -986,6 +1173,7 @@ function workEntryIcon(workEntry: TimelineWorkEntry): LucideIcon {
   if (workEntry.requestKind === "command") return TerminalIcon;
   if (workEntry.requestKind === "file-read") return EyeIcon;
   if (workEntry.requestKind === "file-change") return SquarePenIcon;
+  if (workEntry.requestKind === "dynamic-tool") return MousePointer2Icon;
 
   if (workEntry.itemType === "command_execution" || workEntry.command) {
     return TerminalIcon;

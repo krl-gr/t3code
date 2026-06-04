@@ -1,12 +1,15 @@
 {
   "name": "@t3tools/shared",
-  "version": "0.0.0-alpha.1",
   "private": true,
   "type": "module",
   "exports": {
     "./model": {
       "types": "./src/model.ts",
       "import": "./src/model.ts"
+    },
+    "./advertisedEndpoint": {
+      "types": "./src/advertisedEndpoint.ts",
+      "import": "./src/advertisedEndpoint.ts"
     },
     "./git": {
       "types": "./src/git.ts",
@@ -27,6 +30,10 @@
     "./shell": {
       "types": "./src/shell.ts",
       "import": "./src/shell.ts"
+    },
+    "./semver": {
+      "types": "./src/semver.ts",
+      "import": "./src/semver.ts"
     },
     "./Net": {
       "types": "./src/Net.ts",
@@ -64,6 +71,14 @@
       "types": "./src/projectScripts.ts",
       "import": "./src/projectScripts.ts"
     },
+    "./orchestrationTiming": {
+      "types": "./src/orchestrationTiming.ts",
+      "import": "./src/orchestrationTiming.ts"
+    },
+    "./remote": {
+      "types": "./src/remote.ts",
+      "import": "./src/remote.ts"
+    },
     "./searchRanking": {
       "types": "./src/searchRanking.ts",
       "import": "./src/searchRanking.ts"
@@ -83,10 +98,22 @@
     "./keybindings": {
       "types": "./src/keybindings.ts",
       "import": "./src/keybindings.ts"
+    },
+    "./branding": {
+      "types": "./src/branding.ts",
+      "import": "./src/branding.ts"
+    },
+    "./composerTrigger": {
+      "types": "./src/composerTrigger.ts",
+      "import": "./src/composerTrigger.ts"
+    },
+    "./terminalLabels": {
+      "types": "./src/terminalLabels.ts",
+      "import": "./src/terminalLabels.ts"
     }
   },
   "scripts": {
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsgo --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
@@ -94,10 +121,9 @@
     "effect": "catalog:"
   },
   "devDependencies": {
-    "@effect/language-service": "catalog:",
+    "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
     "@types/node": "catalog:",
-    "typescript": "catalog:",
     "vitest": "catalog:"
   }
 }

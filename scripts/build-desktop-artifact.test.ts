@@ -1,9 +1,15 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
-import { ConfigProvider, Effect, Option } from "effect";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 
 import {
+  resolveDesktopRuntimeDependencies,
   resolveBuildOptions,
+  resolveDesktopAppId,
+  resolveDesktopArtifactName,
+  resolveDesktopBuildVersion,
   resolveDesktopBuildIconAssets,
   resolveDesktopProductName,
   resolveDesktopUpdateChannel,
@@ -19,8 +25,21 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
   });
 
   it("switches desktop packaging product names to nightly for nightly builds", () => {
-    assert.equal(resolveDesktopProductName("0.0.17"), "T3 Code (Alpha)");
-    assert.equal(resolveDesktopProductName("0.0.17-nightly.20260413.42"), "T3 Code (Nightly)");
+    assert.equal(resolveDesktopProductName("0.0.17"), "Up.computer (Alpha)");
+    assert.equal(resolveDesktopProductName("0.0.17-local"), "Up.computer (Local)");
+    assert.equal(resolveDesktopProductName("0.0.17-nightly.20260413.42"), "Up.computer (Nightly)");
+  });
+
+  it("separates local desktop package identity from release builds", () => {
+    assert.equal(resolveDesktopBuildVersion("0.0.17", "release"), "0.0.17");
+    assert.equal(resolveDesktopBuildVersion("0.0.17", "local"), "0.0.17-local");
+    assert.equal(resolveDesktopAppId("0.0.17"), "com.t3tools.t3code");
+    assert.equal(resolveDesktopAppId("0.0.17-local"), "com.t3tools.t3code.local");
+    assert.equal(resolveDesktopArtifactName("0.0.17"), "Up.computer-${version}-${arch}.${ext}");
+    assert.equal(
+      resolveDesktopArtifactName("0.0.17-local"),
+      "Up.computer-Local-${version}-${arch}.${ext}",
+    );
   });
 
   it("switches desktop packaging icons to the nightly artwork for nightly versions", () => {
@@ -35,6 +54,36 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
       linuxIconPng: BRAND_ASSET_PATHS.nightlyLinuxIconPng,
       windowsIconIco: BRAND_ASSET_PATHS.nightlyWindowsIconIco,
     });
+
+    assert.deepStrictEqual(resolveDesktopBuildIconAssets("0.0.17-local"), {
+      macIconPng: BRAND_ASSET_PATHS.developmentDesktopIconPng,
+      linuxIconPng: BRAND_ASSET_PATHS.developmentDesktopIconPng,
+      windowsIconIco: BRAND_ASSET_PATHS.developmentWindowsIconIco,
+    });
+  });
+
+  it("omits bundled workspace packages from staged desktop dependencies", () => {
+    assert.deepStrictEqual(
+      resolveDesktopRuntimeDependencies(
+        {
+          "@effect/platform-node": "catalog:",
+          "@t3tools/contracts": "workspace:*",
+          "@t3tools/shared": "workspace:*",
+          "@t3tools/ssh": "workspace:*",
+          "@t3tools/tailscale": "workspace:*",
+          effect: "catalog:",
+          electron: "41.5.0",
+        },
+        {
+          "@effect/platform-node": "4.0.0-beta.59",
+          effect: "4.0.0-beta.59",
+        },
+      ),
+      {
+        "@effect/platform-node": "4.0.0-beta.59",
+        effect: "4.0.0-beta.59",
+      },
+    );
   });
 
   it("falls back to the default mock update port when the configured port is blank", () => {
@@ -67,6 +116,7 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
         platform: Option.some("mac"),
         target: Option.none(),
         arch: Option.some("arm64"),
+        variant: Option.none(),
         buildVersion: Option.none(),
         outputDir: Option.some("release-test"),
         skipBuild: Option.some(false),

@@ -2,8 +2,10 @@ import * as Schema from "effect/Schema";
 import * as Rpc from "effect/unstable/rpc/Rpc";
 import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 
-import { OpenError, OpenInEditorInput } from "./editor.ts";
+import { ExternalLauncherError, LaunchEditorInput } from "./editor.ts";
 import { AuthAccessStreamEvent } from "./auth.ts";
+import { BrowserOpenLoginWindowInput, BrowserProfileSnapshot } from "./browser.ts";
+import { ComputerUseDoctorResult, ComputerUseSnapshot } from "./computerUse.ts";
 import {
   FilesystemBrowseInput,
   FilesystemBrowseResult,
@@ -34,6 +36,11 @@ import {
   VcsStatusResult,
   VcsStatusStreamEvent,
 } from "./git.ts";
+import {
+  ReviewDiffPreviewError,
+  ReviewDiffPreviewInput,
+  ReviewDiffPreviewResult,
+} from "./review.ts";
 import { KeybindingsConfigError } from "./keybindings.ts";
 import {
   ClientOrchestrationCommand,
@@ -58,10 +65,13 @@ import {
   ProjectWriteFileResult,
 } from "./project.ts";
 import {
+  TerminalAttachInput,
+  TerminalAttachStreamEvent,
   TerminalClearInput,
   TerminalCloseInput,
   TerminalError,
   TerminalEvent,
+  TerminalMetadataStreamEvent,
   TerminalOpenInput,
   TerminalResizeInput,
   TerminalRestartInput,
@@ -79,6 +89,8 @@ import {
   ServerProviderUpdatedPayload,
   ServerTraceDiagnosticsResult,
   ServerProcessDiagnosticsResult,
+  ServerProcessResourceHistoryInput,
+  ServerProcessResourceHistoryResult,
   ServerSignalProcessInput,
   ServerSignalProcessResult,
   ServerUpsertKeybindingInput,
@@ -126,8 +138,12 @@ export const WS_METHODS = {
   gitResolvePullRequest: "git.resolvePullRequest",
   gitPreparePullRequestThread: "git.preparePullRequestThread",
 
+  // Review methods
+  reviewGetDiffPreview: "review.getDiffPreview",
+
   // Terminal methods
   terminalOpen: "terminal.open",
+  terminalAttach: "terminal.attach",
   terminalWrite: "terminal.write",
   terminalResize: "terminal.resize",
   terminalClear: "terminal.clear",
@@ -145,7 +161,21 @@ export const WS_METHODS = {
   serverDiscoverSourceControl: "server.discoverSourceControl",
   serverGetTraceDiagnostics: "server.getTraceDiagnostics",
   serverGetProcessDiagnostics: "server.getProcessDiagnostics",
+  serverGetProcessResourceHistory: "server.getProcessResourceHistory",
   serverSignalProcess: "server.signalProcess",
+
+  // Browser profile methods
+  browserProfileSnapshot: "browser.profile.snapshot",
+  browserProfileOpenLoginWindow: "browser.profile.openLoginWindow",
+  browserProfileClose: "browser.profile.close",
+  browserProfileClear: "browser.profile.clear",
+
+  // Computer use methods
+  computerUseSnapshot: "computerUse.snapshot",
+  computerUseRestart: "computerUse.restart",
+  computerUseStop: "computerUse.stop",
+  computerUseRefreshTools: "computerUse.refreshTools",
+  computerUseDoctor: "computerUse.doctor",
 
   // Source control methods
   sourceControlLookupRepository: "sourceControl.lookupRepository",
@@ -155,6 +185,7 @@ export const WS_METHODS = {
   // Streaming subscriptions
   subscribeVcsStatus: "subscribeVcsStatus",
   subscribeTerminalEvents: "subscribeTerminalEvents",
+  subscribeTerminalMetadata: "subscribeTerminalMetadata",
   subscribeServerConfig: "subscribeServerConfig",
   subscribeServerLifecycle: "subscribeServerLifecycle",
   subscribeAuthAccess: "subscribeAuthAccess",
@@ -224,9 +255,65 @@ export const WsServerGetProcessDiagnosticsRpc = Rpc.make(WS_METHODS.serverGetPro
   success: ServerProcessDiagnosticsResult,
 });
 
+export const WsServerGetProcessResourceHistoryRpc = Rpc.make(
+  WS_METHODS.serverGetProcessResourceHistory,
+  {
+    payload: ServerProcessResourceHistoryInput,
+    success: ServerProcessResourceHistoryResult,
+  },
+);
+
 export const WsServerSignalProcessRpc = Rpc.make(WS_METHODS.serverSignalProcess, {
   payload: ServerSignalProcessInput,
   success: ServerSignalProcessResult,
+});
+
+export const WsBrowserProfileSnapshotRpc = Rpc.make(WS_METHODS.browserProfileSnapshot, {
+  payload: Schema.Struct({}),
+  success: BrowserProfileSnapshot,
+});
+
+export const WsBrowserProfileOpenLoginWindowRpc = Rpc.make(
+  WS_METHODS.browserProfileOpenLoginWindow,
+  {
+    payload: BrowserOpenLoginWindowInput,
+    success: BrowserProfileSnapshot,
+  },
+);
+
+export const WsBrowserProfileCloseRpc = Rpc.make(WS_METHODS.browserProfileClose, {
+  payload: Schema.Struct({}),
+  success: BrowserProfileSnapshot,
+});
+
+export const WsBrowserProfileClearRpc = Rpc.make(WS_METHODS.browserProfileClear, {
+  payload: Schema.Struct({}),
+  success: BrowserProfileSnapshot,
+});
+
+export const WsComputerUseSnapshotRpc = Rpc.make(WS_METHODS.computerUseSnapshot, {
+  payload: Schema.Struct({}),
+  success: ComputerUseSnapshot,
+});
+
+export const WsComputerUseRestartRpc = Rpc.make(WS_METHODS.computerUseRestart, {
+  payload: Schema.Struct({}),
+  success: ComputerUseSnapshot,
+});
+
+export const WsComputerUseStopRpc = Rpc.make(WS_METHODS.computerUseStop, {
+  payload: Schema.Struct({}),
+  success: ComputerUseSnapshot,
+});
+
+export const WsComputerUseRefreshToolsRpc = Rpc.make(WS_METHODS.computerUseRefreshTools, {
+  payload: Schema.Struct({}),
+  success: ComputerUseSnapshot,
+});
+
+export const WsComputerUseDoctorRpc = Rpc.make(WS_METHODS.computerUseDoctor, {
+  payload: Schema.Struct({}),
+  success: ComputerUseDoctorResult,
 });
 
 export const WsSourceControlLookupRepositoryRpc = Rpc.make(
@@ -266,8 +353,8 @@ export const WsProjectsWriteFileRpc = Rpc.make(WS_METHODS.projectsWriteFile, {
 });
 
 export const WsShellOpenInEditorRpc = Rpc.make(WS_METHODS.shellOpenInEditor, {
-  payload: OpenInEditorInput,
-  error: OpenError,
+  payload: LaunchEditorInput,
+  error: ExternalLauncherError,
 });
 
 export const WsFilesystemBrowseRpc = Rpc.make(WS_METHODS.filesystemBrowse, {
@@ -348,10 +435,28 @@ export const WsVcsInitRpc = Rpc.make(WS_METHODS.vcsInit, {
   error: VcsError,
 });
 
+/**
+ * Ephemeral live diff preview for compact/mobile surfaces.
+ * Not the persisted T3 Review model. Future review sessions should use
+ * review.open* + review.getSnapshot.
+ */
+export const WsReviewGetDiffPreviewRpc = Rpc.make(WS_METHODS.reviewGetDiffPreview, {
+  payload: ReviewDiffPreviewInput,
+  success: ReviewDiffPreviewResult,
+  error: ReviewDiffPreviewError,
+});
+
 export const WsTerminalOpenRpc = Rpc.make(WS_METHODS.terminalOpen, {
   payload: TerminalOpenInput,
   success: TerminalSessionSnapshot,
   error: TerminalError,
+});
+
+export const WsTerminalAttachRpc = Rpc.make(WS_METHODS.terminalAttach, {
+  payload: TerminalAttachInput,
+  success: TerminalAttachStreamEvent,
+  error: TerminalError,
+  stream: true,
 });
 
 export const WsTerminalWriteRpc = Rpc.make(WS_METHODS.terminalWrite, {
@@ -410,6 +515,15 @@ export const WsOrchestrationReplayEventsRpc = Rpc.make(ORCHESTRATION_WS_METHODS.
   error: OrchestrationReplayEventsError,
 });
 
+export const WsOrchestrationGetArchivedShellSnapshotRpc = Rpc.make(
+  ORCHESTRATION_WS_METHODS.getArchivedShellSnapshot,
+  {
+    payload: OrchestrationRpcSchemas.getArchivedShellSnapshot.input,
+    success: OrchestrationRpcSchemas.getArchivedShellSnapshot.output,
+    error: OrchestrationGetSnapshotError,
+  },
+);
+
 export const WsOrchestrationSubscribeShellRpc = Rpc.make(ORCHESTRATION_WS_METHODS.subscribeShell, {
   payload: OrchestrationRpcSchemas.subscribeShell.input,
   success: OrchestrationRpcSchemas.subscribeShell.output,
@@ -430,6 +544,12 @@ export const WsOrchestrationSubscribeThreadRpc = Rpc.make(
 export const WsSubscribeTerminalEventsRpc = Rpc.make(WS_METHODS.subscribeTerminalEvents, {
   payload: Schema.Struct({}),
   success: TerminalEvent,
+  stream: true,
+});
+
+export const WsSubscribeTerminalMetadataRpc = Rpc.make(WS_METHODS.subscribeTerminalMetadata, {
+  payload: Schema.Struct({}),
+  success: TerminalMetadataStreamEvent,
   stream: true,
 });
 
@@ -463,7 +583,17 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerDiscoverSourceControlRpc,
   WsServerGetTraceDiagnosticsRpc,
   WsServerGetProcessDiagnosticsRpc,
+  WsServerGetProcessResourceHistoryRpc,
   WsServerSignalProcessRpc,
+  WsBrowserProfileSnapshotRpc,
+  WsBrowserProfileOpenLoginWindowRpc,
+  WsBrowserProfileCloseRpc,
+  WsBrowserProfileClearRpc,
+  WsComputerUseSnapshotRpc,
+  WsComputerUseRestartRpc,
+  WsComputerUseStopRpc,
+  WsComputerUseRefreshToolsRpc,
+  WsComputerUseDoctorRpc,
   WsSourceControlLookupRepositoryRpc,
   WsSourceControlCloneRepositoryRpc,
   WsSourceControlPublishRepositoryRpc,
@@ -483,13 +613,16 @@ export const WsRpcGroup = RpcGroup.make(
   WsVcsCreateRefRpc,
   WsVcsSwitchRefRpc,
   WsVcsInitRpc,
+  WsReviewGetDiffPreviewRpc,
   WsTerminalOpenRpc,
+  WsTerminalAttachRpc,
   WsTerminalWriteRpc,
   WsTerminalResizeRpc,
   WsTerminalClearRpc,
   WsTerminalRestartRpc,
   WsTerminalCloseRpc,
   WsSubscribeTerminalEventsRpc,
+  WsSubscribeTerminalMetadataRpc,
   WsSubscribeServerConfigRpc,
   WsSubscribeServerLifecycleRpc,
   WsSubscribeAuthAccessRpc,
@@ -497,6 +630,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsOrchestrationGetTurnDiffRpc,
   WsOrchestrationGetFullThreadDiffRpc,
   WsOrchestrationReplayEventsRpc,
+  WsOrchestrationGetArchivedShellSnapshotRpc,
   WsOrchestrationSubscribeShellRpc,
   WsOrchestrationSubscribeThreadRpc,
 );

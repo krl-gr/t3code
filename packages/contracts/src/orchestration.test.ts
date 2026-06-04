@@ -1,5 +1,4 @@
-import assert from "node:assert/strict";
-import { it } from "@effect/vitest";
+import { assert, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
@@ -12,11 +11,14 @@ import {
   OrchestrationGetFullThreadDiffInput,
   OrchestrationGetTurnDiffInput,
   OrchestrationLatestTurn,
+  OrchestrationThread,
+  OrchestrationThreadShell,
   ProjectCreatedPayload,
   ProjectMetaUpdatedPayload,
   OrchestrationProposedPlan,
   OrchestrationSession,
   ProjectCreateCommand,
+  ProviderInteractionMode,
   ThreadMetaUpdatedPayload,
   ThreadTurnStartCommand,
   ThreadCreatedPayload,
@@ -36,8 +38,12 @@ const decodeThreadTurnStartRequestedPayload = Schema.decodeUnknownEffect(
   ThreadTurnStartRequestedPayload,
 );
 const decodeOrchestrationLatestTurn = Schema.decodeUnknownEffect(OrchestrationLatestTurn);
+const decodeOrchestrationThread = Schema.decodeUnknownEffect(OrchestrationThread);
+const decodeOrchestrationThreadShell = Schema.decodeUnknownEffect(OrchestrationThreadShell);
 const decodeOrchestrationProposedPlan = Schema.decodeUnknownEffect(OrchestrationProposedPlan);
 const decodeOrchestrationSession = Schema.decodeUnknownEffect(OrchestrationSession);
+const decodeProviderInteractionMode = Schema.decodeUnknownEffect(ProviderInteractionMode);
+const encodeThreadCreatedPayload = Schema.encodeEffect(ThreadCreatedPayload);
 
 function getOptionValue(
   options: ReadonlyArray<{ id: string; value: unknown }> | undefined,
@@ -222,6 +228,54 @@ it.effect("decodes thread.turn.start defaults for provider and runtime mode", ()
   }),
 );
 
+it.effect("decodes ask provider interaction mode", () =>
+  Effect.gen(function* () {
+    const parsed = yield* decodeProviderInteractionMode("ask");
+    assert.strictEqual(parsed, "ask");
+  }),
+);
+
+it.effect("accepts ask interaction mode in thread.create commands", () =>
+  Effect.gen(function* () {
+    const parsed = yield* decodeOrchestrationCommand({
+      type: "thread.create",
+      commandId: "cmd-thread-ask",
+      threadId: "thread-ask",
+      projectId: "project-1",
+      title: "Ask thread",
+      modelSelection: {
+        provider: "codex",
+        model: "gpt-5.4",
+      },
+      runtimeMode: "full-access",
+      interactionMode: "ask",
+      branch: null,
+      worktreePath: null,
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+    if (parsed.type !== "thread.create") {
+      throw new Error(`Expected thread.create command, received ${parsed.type}`);
+    }
+    assert.strictEqual(parsed.interactionMode, "ask");
+  }),
+);
+
+it.effect("accepts ask interaction mode in thread interaction mode commands", () =>
+  Effect.gen(function* () {
+    const parsed = yield* decodeOrchestrationCommand({
+      type: "thread.interaction-mode.set",
+      commandId: "cmd-thread-mode-ask",
+      threadId: "thread-ask",
+      interactionMode: "ask",
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+    if (parsed.type !== "thread.interaction-mode.set") {
+      throw new Error(`Expected thread.interaction-mode.set command, received ${parsed.type}`);
+    }
+    assert.strictEqual(parsed.interactionMode, "ask");
+  }),
+);
+
 it.effect("preserves explicit provider and runtime mode in thread.turn.start", () =>
   Effect.gen(function* () {
     const parsed = yield* decodeThreadTurnStartCommand({
@@ -378,7 +432,9 @@ it.effect("decodes thread archived and unarchived events", () =>
       },
     });
 
-    assert.strictEqual(archived.type, "thread.archived");
+    if (archived.type !== "thread.archived") {
+      assert.fail(`Expected thread.archived event, received ${archived.type}.`);
+    }
     assert.strictEqual(archived.payload.archivedAt, "2026-01-01T00:00:00.000Z");
     assert.strictEqual(unarchived.type, "thread.unarchived");
   }),
@@ -485,7 +541,7 @@ it.effect(
         updatedAt: "2026-01-01T00:00:00.000Z",
       });
 
-      const encoded = yield* Schema.encodeEffect(ThreadCreatedPayload)(decoded);
+      const encoded = yield* encodeThreadCreatedPayload(decoded);
       assert.deepStrictEqual(encoded.modelSelection.options, [{ id: "fastMode", value: true }]);
     }),
 );
@@ -577,6 +633,167 @@ it.effect("decodes thread.turn-start-requested title seed when present", () =>
       createdAt: "2026-01-01T00:00:00.000Z",
     });
     assert.strictEqual(parsed.titleSeed, "Investigate reconnect failures");
+  }),
+);
+
+it.effect("decodes historical thread payloads with empty context bindings", () =>
+  Effect.gen(function* () {
+    const parsed = yield* decodeOrchestrationThread({
+      id: "thread-1",
+      projectId: "project-1",
+      title: "Thread title",
+      modelSelection: {
+        provider: "codex",
+        model: "gpt-5.4",
+      },
+      runtimeMode: "full-access",
+      interactionMode: "default",
+      branch: null,
+      worktreePath: null,
+      latestTurn: null,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      archivedAt: null,
+      deletedAt: null,
+      messages: [],
+      proposedPlans: [],
+      activities: [],
+      checkpoints: [],
+      session: null,
+    });
+
+    assert.deepStrictEqual(parsed.contextBindings, []);
+  }),
+);
+
+it.effect("decodes historical thread shells with zero context binding count", () =>
+  Effect.gen(function* () {
+    const parsed = yield* decodeOrchestrationThreadShell({
+      id: "thread-1",
+      projectId: "project-1",
+      title: "Thread title",
+      modelSelection: {
+        provider: "codex",
+        model: "gpt-5.4",
+      },
+      runtimeMode: "full-access",
+      interactionMode: "default",
+      branch: null,
+      worktreePath: null,
+      latestTurn: null,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      archivedAt: null,
+      session: null,
+      latestUserMessageAt: null,
+      hasPendingApprovals: false,
+      hasPendingUserInput: false,
+      hasActionableProposedPlan: false,
+    });
+
+    assert.strictEqual(parsed.contextBindingCount, 0);
+  }),
+);
+
+it.effect("decodes thread context binding commands", () =>
+  Effect.gen(function* () {
+    const add = yield* decodeOrchestrationCommand({
+      type: "thread.context-binding.add",
+      commandId: "cmd-context-add",
+      threadId: "thread-target",
+      bindingId: "ctx-1",
+      sourceThreadId: "thread-source",
+      mode: "snapshot",
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+    const remove = yield* decodeOrchestrationCommand({
+      type: "thread.context-binding.remove",
+      commandId: "cmd-context-remove",
+      threadId: "thread-target",
+      bindingId: "ctx-1",
+      createdAt: "2026-01-01T00:00:01.000Z",
+    });
+    const fork = yield* decodeOrchestrationCommand({
+      type: "thread.context-fork.create",
+      commandId: "cmd-context-fork",
+      threadId: "thread-fork",
+      projectId: "project-1",
+      title: "Fork: Source",
+      modelSelection: {
+        provider: "codex",
+        model: "gpt-5.4",
+      },
+      runtimeMode: "full-access",
+      interactionMode: "default",
+      branch: null,
+      worktreePath: null,
+      sourceThreadId: "thread-source",
+      sourceMessageId: "message-1",
+      createdAt: "2026-01-01T00:00:02.000Z",
+    });
+
+    if (add.type !== "thread.context-binding.add") {
+      throw new Error(`Expected thread.context-binding.add command, received ${add.type}`);
+    }
+    assert.strictEqual(add.mode, "snapshot");
+    assert.strictEqual(remove.type, "thread.context-binding.remove");
+    if (fork.type !== "thread.context-fork.create") {
+      throw new Error(`Expected thread.context-fork.create command, received ${fork.type}`);
+    }
+    assert.strictEqual(fork.sourceMessageId, "message-1");
+  }),
+);
+
+it.effect("decodes thread context binding events and turn context blocks", () =>
+  Effect.gen(function* () {
+    const added = yield* decodeOrchestrationEvent({
+      sequence: 1,
+      eventId: "event-context-added",
+      aggregateKind: "thread",
+      aggregateId: "thread-target",
+      type: "thread.context-binding-added",
+      occurredAt: "2026-01-01T00:00:00.000Z",
+      commandId: "cmd-context-add",
+      causationEventId: null,
+      correlationId: "cmd-context-add",
+      metadata: {},
+      payload: {
+        threadId: "thread-target",
+        binding: {
+          id: "ctx-1",
+          targetThreadId: "thread-target",
+          sourceThreadId: "thread-source",
+          sourceProjectId: "project-1",
+          sourceThreadTitle: "Source",
+          mode: "snapshot",
+          snapshotText: "USER:\nhello",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+      },
+    });
+    const turnStart = yield* decodeThreadTurnStartRequestedPayload({
+      threadId: "thread-target",
+      messageId: "message-current",
+      contextBlocks: [
+        {
+          bindingId: "ctx-1",
+          sourceThreadId: "thread-source",
+          sourceThreadTitle: "Source",
+          mode: "snapshot",
+          messagesIncluded: 1,
+          omittedMessages: 0,
+          text: "<attached_chat_context>USER:\nhello</attached_chat_context>",
+        },
+      ],
+      createdAt: "2026-01-01T00:00:02.000Z",
+    });
+
+    if (added.type !== "thread.context-binding-added") {
+      throw new Error(`Expected thread.context-binding-added event, received ${added.type}`);
+    }
+    assert.strictEqual(added.payload.binding.mode, "snapshot");
+    assert.strictEqual(turnStart.contextBlocks?.[0]?.sourceThreadTitle, "Source");
   }),
 );
 

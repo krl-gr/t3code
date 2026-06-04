@@ -4,6 +4,8 @@ import {
   EventId,
   type ModelSelection,
   type OrchestrationEvent,
+  type ThreadContextMaterialization,
+  type ProviderInteractionMode,
   ProviderDriverKind,
   type ProjectId,
   type OrchestrationSession,
@@ -13,7 +15,16 @@ import {
   type TurnId,
 } from "@t3tools/contracts";
 import { isTemporaryWorktreeBranch, WORKTREE_BRANCH_PREFIX } from "@t3tools/shared/git";
-import { Cache, Cause, Duration, Effect, Equal, Layer, Option, Schema, Stream } from "effect";
+import * as Cache from "effect/Cache";
+import * as Cause from "effect/Cause";
+import * as Crypto from "effect/Crypto";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Equal from "effect/Equal";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 import { makeDrainableWorker } from "@t3tools/shared/DrainableWorker";
 
 import { resolveThreadWorkspaceCwd } from "../../checkpointing/Utils.ts";
@@ -31,6 +42,9 @@ import {
 import { ServerSettingsService } from "../../serverSettings.ts";
 import { VcsStatusBroadcaster } from "../../vcs/VcsStatusBroadcaster.ts";
 import { GitWorkflowService } from "../../git/GitWorkflowService.ts";
+import { prependThreadContextBlocksToPrompt } from "../threadContext.ts";
+const isProviderAdapterRequestError = Schema.is(ProviderAdapterRequestError);
+const isProviderDriverKind = Schema.is(ProviderDriverKind);
 
 type ProviderIntentEvent = Extract<
   OrchestrationEvent,
@@ -71,9 +85,6 @@ function mapProviderSessionStatusToOrchestrationStatus(
 const turnStartKeyForEvent = (event: ProviderIntentEvent): string =>
   event.commandId !== null ? `command:${event.commandId}` : `event:${event.eventId}`;
 
-const serverCommandId = (tag: string): CommandId =>
-  CommandId.make(`server:${tag}:${crypto.randomUUID()}`);
-
 const HANDLED_TURN_START_KEY_MAX = 10_000;
 const HANDLED_TURN_START_KEY_TTL = Duration.minutes(30);
 const DEFAULT_RUNTIME_MODE: RuntimeMode = "full-access";
@@ -110,7 +121,7 @@ function findProviderAdapterRequestError(
   cause: Cause.Cause<ProviderServiceError>,
 ): ProviderAdapterRequestError | undefined {
   const failReason = cause.reasons.find(Cause.isFailReason);
-  return Schema.is(ProviderAdapterRequestError)(failReason?.error) ? failReason.error : undefined;
+  return isProviderAdapterRequestError(failReason?.error) ? failReason.error : undefined;
 }
 
 function isUnknownPendingApprovalRequestError(cause: Cause.Cause<ProviderServiceError>): boolean {
@@ -168,6 +179,7 @@ function buildGeneratedWorktreeBranchName(raw: string): string {
 }
 
 const make = Effect.gen(function* () {
+  const crypto = yield* Crypto.Crypto;
   const orchestrationEngine = yield* OrchestrationEngineService;
   const projectionSnapshotQuery = yield* ProjectionSnapshotQuery;
   const providerService = yield* ProviderService;
@@ -175,6 +187,9 @@ const make = Effect.gen(function* () {
   const vcsStatusBroadcaster = yield* VcsStatusBroadcaster;
   const textGeneration = yield* TextGeneration;
   const serverSettingsService = yield* ServerSettingsService;
+  const serverCommandId = (tag: string) =>
+    crypto.randomUUIDv4.pipe(Effect.map((uuid) => CommandId.make(`server:${tag}:${uuid}`)));
+  const serverEventId = () => crypto.randomUUIDv4.pipe(Effect.map(EventId.make));
   const handledTurnStartKeys = yield* Cache.make<string, true>({
     capacity: HANDLED_TURN_START_KEY_MAX,
     timeToLive: HANDLED_TURN_START_KEY_TTL,
@@ -204,28 +219,35 @@ const make = Effect.gen(function* () {
     readonly createdAt: string;
     readonly requestId?: string;
   }) =>
-    orchestrationEngine.dispatch({
-      type: "thread.activity.append",
+    Effect.all({
       commandId: serverCommandId("provider-failure-activity"),
-      threadId: input.threadId,
-      activity: {
-        id: EventId.make(crypto.randomUUID()),
-        tone: "error",
-        kind: input.kind,
-        summary: input.summary,
-        payload: {
-          detail: input.detail,
-          ...(input.requestId ? { requestId: input.requestId } : {}),
-        },
-        turnId: input.turnId,
-        createdAt: input.createdAt,
-      },
-      createdAt: input.createdAt,
-    });
+      eventId: serverEventId(),
+    }).pipe(
+      Effect.flatMap(({ commandId, eventId }) =>
+        orchestrationEngine.dispatch({
+          type: "thread.activity.append",
+          commandId,
+          threadId: input.threadId,
+          activity: {
+            id: eventId,
+            tone: "error",
+            kind: input.kind,
+            summary: input.summary,
+            payload: {
+              detail: input.detail,
+              ...(input.requestId ? { requestId: input.requestId } : {}),
+            },
+            turnId: input.turnId,
+            createdAt: input.createdAt,
+          },
+          createdAt: input.createdAt,
+        }),
+      ),
+    );
 
   const formatFailureDetail = (cause: Cause.Cause<unknown>): string => {
     const failReason = cause.reasons.find(Cause.isFailReason);
-    const providerError = Schema.is(ProviderAdapterRequestError)(failReason?.error)
+    const providerError = isProviderAdapterRequestError(failReason?.error)
       ? failReason.error
       : undefined;
     if (providerError) {
@@ -239,13 +261,17 @@ const make = Effect.gen(function* () {
     readonly session: OrchestrationSession;
     readonly createdAt: string;
   }) =>
-    orchestrationEngine.dispatch({
-      type: "thread.session.set",
-      commandId: serverCommandId("provider-session-set"),
-      threadId: input.threadId,
-      session: input.session,
-      createdAt: input.createdAt,
-    });
+    serverCommandId("provider-session-set").pipe(
+      Effect.flatMap((commandId) =>
+        orchestrationEngine.dispatch({
+          type: "thread.session.set",
+          commandId,
+          threadId: input.threadId,
+          session: input.session,
+          createdAt: input.createdAt,
+        }),
+      ),
+    );
 
   const setThreadSessionErrorOnTurnStartFailure = Effect.fnUntraced(function* (input: {
     readonly threadId: ThreadId;
@@ -353,7 +379,7 @@ const make = Effect.gen(function* () {
       ),
     );
     const desiredDriverKind = desiredInfo.driverKind;
-    if (!Schema.is(ProviderDriverKind)(desiredDriverKind)) {
+    if (!isProviderDriverKind(desiredDriverKind)) {
       return yield* new ProviderAdapterRequestError({
         provider: providerErrorLabel(String(desiredDriverKind)),
         method: "thread.turn.start",
@@ -505,9 +531,10 @@ const make = Effect.gen(function* () {
   const buildSendTurnRequestForThread = Effect.fnUntraced(function* (input: {
     readonly threadId: ThreadId;
     readonly messageText: string;
+    readonly contextBlocks?: ReadonlyArray<ThreadContextMaterialization>;
     readonly attachments?: ReadonlyArray<ChatAttachment>;
     readonly modelSelection?: ModelSelection;
-    readonly interactionMode?: "default" | "plan";
+    readonly interactionMode?: ProviderInteractionMode;
     readonly createdAt: string;
   }) {
     const thread = yield* resolveThread(input.threadId);
@@ -524,7 +551,11 @@ const make = Effect.gen(function* () {
     if (input.modelSelection !== undefined) {
       threadModelSelections.set(input.threadId, input.modelSelection);
     }
-    const normalizedInput = toNonEmptyProviderInput(input.messageText);
+    const messageText = prependThreadContextBlocksToPrompt({
+      prompt: input.messageText,
+      contextBlocks: input.contextBlocks ?? [],
+    });
+    const normalizedInput = toNonEmptyProviderInput(messageText);
     const normalizedAttachments = input.attachments ?? [];
     const activeSession = yield* providerService
       .listSessions()
@@ -600,7 +631,7 @@ const make = Effect.gen(function* () {
       const renamed = yield* gitWorkflow.renameBranch({ cwd, oldBranch, newBranch: targetBranch });
       yield* orchestrationEngine.dispatch({
         type: "thread.meta.update",
-        commandId: serverCommandId("worktree-branch-rename"),
+        commandId: yield* serverCommandId("worktree-branch-rename"),
         threadId: input.threadId,
         branch: renamed.branch,
         worktreePath: cwd,
@@ -647,7 +678,7 @@ const make = Effect.gen(function* () {
 
         yield* orchestrationEngine.dispatch({
           type: "thread.meta.update",
-          commandId: serverCommandId("thread-title-rename"),
+          commandId: yield* serverCommandId("thread-title-rename"),
           threadId: input.threadId,
           title: generated.title,
         });
@@ -759,6 +790,7 @@ const make = Effect.gen(function* () {
     const sendTurnRequest = yield* buildSendTurnRequestForThread({
       threadId: event.payload.threadId,
       messageText: message.text,
+      contextBlocks: event.payload.contextBlocks ?? [],
       ...(message.attachments !== undefined ? { attachments: message.attachments } : {}),
       ...(event.payload.modelSelection !== undefined
         ? { modelSelection: event.payload.modelSelection }

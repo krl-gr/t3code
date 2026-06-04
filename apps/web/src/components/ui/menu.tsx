@@ -23,6 +23,7 @@ function MenuTrigger({ className, children, ...props }: MenuPrimitive.Trigger.Pr
 function MenuPopup({
   children,
   className,
+  keepMounted = false,
   sideOffset = 4,
   align = "center",
   alignOffset,
@@ -35,9 +36,10 @@ function MenuPopup({
   alignOffset?: MenuPrimitive.Positioner.Props["alignOffset"];
   side?: MenuPrimitive.Positioner.Props["side"];
   anchor?: MenuPrimitive.Positioner.Props["anchor"];
+  keepMounted?: MenuPrimitive.Portal.Props["keepMounted"];
 }) {
   return (
-    <MenuPrimitive.Portal>
+    <MenuPrimitive.Portal keepMounted={keepMounted}>
       <MenuPrimitive.Positioner
         align={align}
         alignOffset={alignOffset}

@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER,
+  DEFAULT_MODEL_BY_PROVIDER,
   DEFAULT_MODEL,
   ProviderDriverKind,
   ProviderInstanceId,
+  PI_DEFAULT_MODEL,
   type ModelCapabilities,
 } from "@t3tools/contracts";
 
@@ -87,6 +90,12 @@ describe("normalizeModelSlug", () => {
 });
 
 describe("resolveModelSlugForProvider", () => {
+  it("uses the Pi chat default without enabling Pi for git text generation", () => {
+    const pi = ProviderDriverKind.make("pi");
+    expect(DEFAULT_MODEL_BY_PROVIDER[pi]).toBe(PI_DEFAULT_MODEL);
+    expect(DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER[pi]).toBeUndefined();
+  });
+
   it("returns defaults when the model is missing", () => {
     expect(resolveModelSlugForProvider(ProviderDriverKind.make("codex"), undefined)).toBe(
       DEFAULT_MODEL,

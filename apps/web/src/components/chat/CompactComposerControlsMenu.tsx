@@ -1,6 +1,7 @@
-import { ProviderInteractionMode, RuntimeMode } from "@t3tools/contracts";
+import { type ProviderInteractionMode, type RuntimeMode } from "@t3tools/contracts";
 import { memo, type ReactNode } from "react";
 import { EllipsisIcon, ListTodoIcon } from "lucide-react";
+import { INTERACTION_MODE_ORDER, interactionModeConfig } from "../../interactionModes";
 import { Button } from "../ui/button";
 import {
   Menu,
@@ -11,6 +12,7 @@ import {
   MenuSeparator as MenuDivider,
   MenuTrigger,
 } from "../ui/menu";
+import { COMPOSER_CONTROL_ICON_TRIGGER_CLASS } from "./composerControlStyles";
 
 export const CompactComposerControlsMenu = memo(function CompactComposerControlsMenu(props: {
   activePlan: boolean;
@@ -20,7 +22,7 @@ export const CompactComposerControlsMenu = memo(function CompactComposerControls
   runtimeMode: RuntimeMode;
   showInteractionModeToggle: boolean;
   traitsMenuContent?: ReactNode;
-  onToggleInteractionMode: () => void;
+  onInteractionModeChange: (mode: ProviderInteractionMode) => void;
   onTogglePlanSidebar: () => void;
   onRuntimeModeChange: (mode: RuntimeMode) => void;
 }) {
@@ -31,7 +33,7 @@ export const CompactComposerControlsMenu = memo(function CompactComposerControls
           <Button
             size="sm"
             variant="ghost"
-            className="shrink-0 px-2 text-muted-foreground/70 hover:text-foreground/80"
+            className={COMPOSER_CONTROL_ICON_TRIGGER_CLASS}
             aria-label="More composer controls"
           />
         }
@@ -52,11 +54,14 @@ export const CompactComposerControlsMenu = memo(function CompactComposerControls
               value={props.interactionMode}
               onValueChange={(value) => {
                 if (!value || value === props.interactionMode) return;
-                props.onToggleInteractionMode();
+                props.onInteractionModeChange(value as ProviderInteractionMode);
               }}
             >
-              <MenuRadioItem value="default">Chat</MenuRadioItem>
-              <MenuRadioItem value="plan">Plan</MenuRadioItem>
+              {INTERACTION_MODE_ORDER.map((mode) => (
+                <MenuRadioItem key={mode} value={mode}>
+                  {interactionModeConfig[mode].label}
+                </MenuRadioItem>
+              ))}
             </MenuRadioGroup>
             <MenuDivider />
           </>

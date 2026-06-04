@@ -12,8 +12,11 @@ packages/*/dist
 build/
 .logs/
 release/
+release-local/
+release-local-*/
 release-mock/
 .t3
+agents/skills/
 .idea/
 apps/web/.playwright
 apps/web/playwright-report
@@ -23,5 +26,6 @@ __screenshots__/
 .tanstack
 squashfs-root/
 .vercel
+.gstack/
 dist-electron/
 .electron-runtime/

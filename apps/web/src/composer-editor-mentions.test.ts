@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  formatComposerMentionToken,
   selectionTouchesMentionBoundary,
   splitPromptIntoComposerSegments,
 } from "./composer-editor-mentions";
@@ -27,6 +28,24 @@ describe("splitPromptIntoComposerSegments", () => {
       { type: "mention", path: "src/index.ts" },
       { type: "text", text: " \ntwo" },
     ]);
+  });
+
+  it("splits quoted mention tokens that contain spaces or at signs", () => {
+    expect(splitPromptIntoComposerSegments('Inspect @"src/My File @2.ts" please')).toEqual([
+      { type: "text", text: "Inspect " },
+      { type: "mention", path: "src/My File @2.ts" },
+      { type: "text", text: " please" },
+    ]);
+  });
+
+  it("decodes escaped quoted mention tokens", () => {
+    expect(splitPromptIntoComposerSegments('Inspect @"src/A \\"quoted\\" file.ts" please')).toEqual(
+      [
+        { type: "text", text: "Inspect " },
+        { type: "mention", path: 'src/A "quoted" file.ts' },
+        { type: "text", text: " please" },
+      ],
+    );
   });
 
   it("splits skill tokens followed by whitespace into skill segments", () => {
@@ -81,6 +100,16 @@ describe("splitPromptIntoComposerSegments", () => {
       { type: "mention", path: "AGENTS.md" },
       { type: "text", text: " " },
     ]);
+  });
+});
+
+describe("formatComposerMentionToken", () => {
+  it("keeps simple mention paths unquoted", () => {
+    expect(formatComposerMentionToken("src/index.ts")).toBe("@src/index.ts");
+  });
+
+  it("quotes mention paths that contain spaces or at signs", () => {
+    expect(formatComposerMentionToken("src/My File @2.ts")).toBe('@"src/My File @2.ts"');
   });
 });
 

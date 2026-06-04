@@ -21,6 +21,7 @@ import { createModelSelection } from "@t3tools/shared/model";
 // `stickyModelSelectionByProvider` maps are keyed by `ProviderInstanceId`
 // in production; these aliases keep the legacy-key migration tests concise.
 const CODEX_INSTANCE = ProviderInstanceId.make("codex");
+const CODEX_SECONDARY_INSTANCE = ProviderInstanceId.make("codex_secondary");
 const CLAUDE_AGENT_INSTANCE = ProviderInstanceId.make("claudeAgent");
 const CURSOR_INSTANCE = ProviderInstanceId.make("cursor");
 const CODEX_DRIVER = ProviderDriverKind.make("codex");
@@ -487,6 +488,32 @@ describe("composerDraftStore terminal contexts", () => {
         text: "",
       },
     ]);
+  });
+
+  it("hydrates ask interaction mode from persisted drafts", () => {
+    const persistApi = useComposerDraftStore.persist as unknown as {
+      getOptions: () => {
+        merge: (
+          persistedState: unknown,
+          currentState: ReturnType<typeof useComposerDraftStore.getState>,
+        ) => ReturnType<typeof useComposerDraftStore.getState>;
+      };
+    };
+    const mergedState = persistApi.getOptions().merge(
+      {
+        draftsByThreadId: {
+          [threadId]: {
+            prompt: "question",
+            interactionMode: "ask",
+          },
+        },
+        draftThreadsByThreadId: {},
+        projectDraftThreadIdByProjectKey: {},
+      },
+      useComposerDraftStore.getInitialState(),
+    );
+
+    expect(mergedState.draftsByThreadKey[threadKeyFor(threadId)]?.interactionMode).toBe("ask");
   });
 
   it("sanitizes malformed persisted drafts during merge", () => {
@@ -1201,6 +1228,43 @@ describe("composerDraftStore modelSelection", () => {
     );
   });
 
+  it("stores provider option changes on a selected custom instance", () => {
+    const store = useComposerDraftStore.getState();
+
+    store.setProviderModelOptions(
+      threadRef,
+      CODEX_DRIVER,
+      toSelections({ reasoningEffort: "low" }),
+      {
+        instanceId: CODEX_SECONDARY_INSTANCE,
+        model: "gpt-5-codex",
+        persistSticky: true,
+      },
+    );
+
+    expect(
+      draftFor(threadId, TEST_ENVIRONMENT_ID)?.modelSelectionByProvider[CODEX_SECONDARY_INSTANCE],
+    ).toEqual(
+      expect.objectContaining({
+        instanceId: CODEX_SECONDARY_INSTANCE,
+        options: [{ id: "reasoningEffort", value: "low" }],
+      }),
+    );
+    expect(draftFor(threadId, TEST_ENVIRONMENT_ID)?.activeProvider).toBe(CODEX_SECONDARY_INSTANCE);
+    expect(useComposerDraftStore.getState().stickyActiveProvider).toBe(CODEX_SECONDARY_INSTANCE);
+    expect(useComposerDraftStore.getState().stickyModelSelectionByProvider[CODEX_INSTANCE]).toBe(
+      undefined,
+    );
+    expect(
+      useComposerDraftStore.getState().stickyModelSelectionByProvider[CODEX_SECONDARY_INSTANCE],
+    ).toEqual(
+      expect.objectContaining({
+        instanceId: CODEX_SECONDARY_INSTANCE,
+        options: [{ id: "reasoningEffort", value: "low" }],
+      }),
+    );
+  });
+
   it("updates only the draft when sticky persistence is disabled", () => {
     const store = useComposerDraftStore.getState();
 
@@ -1374,9 +1438,9 @@ describe("composerDraftStore runtime and interaction settings", () => {
   it("stores interaction mode overrides in the composer draft", () => {
     const store = useComposerDraftStore.getState();
 
-    store.setInteractionMode(threadRef, "plan");
+    store.setInteractionMode(threadRef, "ask");
 
-    expect(draftFor(threadId, TEST_ENVIRONMENT_ID)?.interactionMode).toBe("plan");
+    expect(draftFor(threadId, TEST_ENVIRONMENT_ID)?.interactionMode).toBe("ask");
   });
 
   it("removes empty settings-only drafts when overrides are cleared", () => {

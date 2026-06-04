@@ -3,6 +3,7 @@ import {
   DesktopAppBrandingSchema,
   DesktopEnvironmentBootstrapSchema,
   DesktopThemeSchema,
+  PickFileSystemEntriesOptionsSchema,
   PickFolderOptionsSchema,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
@@ -77,6 +78,22 @@ export const pickFolder = makeIpcMethod({
       defaultPath: environment.resolvePickFolderDefaultPath(options),
     });
     return Option.getOrNull(selectedPath);
+  }),
+});
+
+export const pickFileSystemEntries = makeIpcMethod({
+  channel: IpcChannels.PICK_FILE_SYSTEM_ENTRIES_CHANNEL,
+  payload: Schema.UndefinedOr(PickFileSystemEntriesOptionsSchema),
+  result: Schema.NullOr(Schema.Array(Schema.String)),
+  handler: Effect.fn("desktop.ipc.window.pickFileSystemEntries")(function* (options) {
+    const dialog = yield* ElectronDialog.ElectronDialog;
+    const electronWindow = yield* ElectronWindow.ElectronWindow;
+    const environment = yield* DesktopEnvironment.DesktopEnvironment;
+    const selectedPaths = yield* dialog.pickFileSystemEntries({
+      owner: yield* electronWindow.focusedMainOrFirst,
+      defaultPath: environment.resolvePickFolderDefaultPath(options),
+    });
+    return Option.getOrNull(selectedPaths);
   }),
 });
 

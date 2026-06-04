@@ -7,14 +7,14 @@ import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
-import { TestClock } from "effect/testing";
+import * as TestClock from "effect/testing/TestClock";
 import { ChildProcessSpawner } from "effect/unstable/process";
 
 import {
   baseSshArgs,
   getLastNonEmptyOutputLine,
   parseSshResolveOutput,
-  resolveRemoteT3CliPackageSpec,
+  resolveRemoteUpcomputerCliPackageSpec,
   runSshCommand,
 } from "./command.ts";
 
@@ -78,37 +78,37 @@ describe("ssh command", () => {
     }),
   );
 
-  it.effect("resolves the remote t3 package spec from the desktop release channel", () =>
+  it.effect("resolves the remote upcomputer package spec from the desktop release channel", () =>
     Effect.sync(() => {
       assert.equal(
-        resolveRemoteT3CliPackageSpec({
+        resolveRemoteUpcomputerCliPackageSpec({
           appVersion: "0.0.17",
           updateChannel: "latest",
         }),
-        "t3@0.0.17",
+        "@updotcomputer/cli@0.0.17",
       );
       assert.equal(
-        resolveRemoteT3CliPackageSpec({
+        resolveRemoteUpcomputerCliPackageSpec({
           appVersion: "0.0.17-nightly.20260415.44",
           updateChannel: "nightly",
         }),
-        "t3@0.0.17-nightly.20260415.44",
+        "@updotcomputer/cli@0.0.17-nightly.20260415.44",
       );
       assert.equal(
-        resolveRemoteT3CliPackageSpec({
+        resolveRemoteUpcomputerCliPackageSpec({
           appVersion: "0.0.0-dev",
           updateChannel: "nightly",
           isDevelopment: true,
         }),
-        "t3@nightly",
+        "@updotcomputer/cli@nightly",
       );
       assert.equal(
-        resolveRemoteT3CliPackageSpec({
+        resolveRemoteUpcomputerCliPackageSpec({
           appVersion: "0.0.0-dev",
           updateChannel: "latest",
           isDevelopment: true,
         }),
-        "t3@nightly",
+        "@updotcomputer/cli@nightly",
       );
     }),
   );

@@ -50,7 +50,7 @@ Depending on your Tailscale setup, this may include:
 The Tailscale HTTPS endpoint uses the clean MagicDNS URL, such as
 `https://machine.tailnet.ts.net/`, and is disabled until the app verifies that the URL reaches this
 backend. Use **Setup** on the Tailscale HTTPS row to opt in. The desktop app restarts the backend
-with the same server-side behavior as `t3 serve --tailscale-serve`, then the server asks Tailscale
+with the same server-side behavior as `upcomputer serve --tailscale-serve`, then the server asks Tailscale
 Serve to proxy HTTPS traffic to the local backend.
 
 The Tailscale support is an endpoint provider add-on. The core remote model still works without Tailscale: LAN HTTP endpoints, custom HTTPS endpoints, future tunnels, and SSH-launched environments all use the same saved environment and pairing flow.
@@ -61,13 +61,13 @@ For `https://app.t3.codes`, prefer an HTTPS Tailnet or other HTTPS endpoint. A p
 
 Use this when you want to run the server without a GUI, for example on a remote machine over SSH.
 
-Run the server with `t3 serve`.
+Run the server with `upcomputer serve`.
 
 ```bash
-npx t3 serve --host "$(tailscale ip -4)"
+npx @updotcomputer/cli serve --host "$(tailscale ip -4)"
 ```
 
-`t3 serve` starts the server without opening a browser and prints:
+`upcomputer serve` starts the server without opening a browser and prints:
 
 - a connection string
 - a pairing token
@@ -81,24 +81,24 @@ From there, connect from another device in either of these ways:
 - in the desktop app, enter the host and token separately
 - in the hosted web app, open a hosted pairing URL when the backend is reachable over HTTPS
 
-Use `t3 serve --help` for the full flag reference. It supports the same general startup options as the normal server command, including an optional `cwd` argument.
+Use `upcomputer serve --help` for the full flag reference. It supports the same general startup options as the normal server command, including an optional `cwd` argument.
 
 For hosted web pairing over Tailscale HTTPS, opt in to Tailscale Serve:
 
 ```bash
-npx t3 serve --tailscale-serve
+npx @updotcomputer/cli serve --tailscale-serve
 ```
 
 By default this configures Tailscale Serve on HTTPS port 443 and advertises
 `https://machine.tailnet.ts.net/`. Advanced users can choose a different HTTPS port:
 
 ```bash
-npx t3 serve --tailscale-serve --tailscale-serve-port 8443
+npx @updotcomputer/cli serve --tailscale-serve --tailscale-serve-port 8443
 ```
 
 > Note
 > The GUIs do not currently support adding projects on remote environments.
-> For now, use `t3 project ...` on the server machine instead.
+> For now, use `upcomputer project ...` on the server machine instead.
 > Full GUI support for remote project management is coming soon.
 
 ### Option 3: Desktop-Managed SSH Launch
@@ -115,13 +115,50 @@ After setup, the renderer connects to a local forwarded HTTP/WebSocket endpoint.
 
 SSH launch is a desktop feature because it needs local process and SSH access. Once the environment is paired and saved, it uses the same environment list and connection model as direct LAN, Tailscale, HTTPS, or future tunnel-backed environments.
 
+#### SSH Launch Troubleshooting
+
+The desktop SSH launcher connects with a non-interactive `sh` session, writes a small launcher script under `~/.t3/ssh-launch/<host-key>/`, starts or reuses a remote T3 server, and forwards the remote loopback port back to your desktop.
+
+The remote host must have a compatible Node.js runtime. T3 Code uses the server package's `engines.node` requirement:
+
+```text
+^22.16 || ^23.11 || >=24.10
+```
+
+During SSH launch, T3 Code first checks whether `node` is already available on `PATH`. If it is missing, the launcher tries common non-interactive shell locations and version-manager shims/activation hooks:
+
+- `~/.local/bin`, `~/bin`, `/opt/homebrew/bin`, `/usr/local/bin`, `/usr/bin`, `/bin`
+- Volta via `~/.volta/bin`
+- asdf via `~/.asdf/shims`, `~/.asdf/bin`, or `~/.asdf/asdf.sh`
+- mise via `~/.local/share/mise/shims`, `~/.mise/shims`, or `mise activate sh`
+- fnm via `fnm env --use-on-cd --shell sh` or `fnm env --shell sh`
+- nodenv via `~/.nodenv/bin`, `~/.nodenv/shims`, or `nodenv init -`
+- nvm via `$NVM_DIR/nvm.sh`, then `nvm use default`, `nvm use node`, or `nvm use --lts`
+- installed nvm versions under `$NVM_DIR/versions/node/*/bin`
+
+If launch fails with `node: command not found`, a port-scan failure, or a message that the remote Node version does not satisfy the required range, SSH into the host and check the same non-interactive shell path T3 Code uses:
+
+```bash
+ssh user@example.com 'sh -lc "command -v node && node --version"'
+```
+
+If that does not print a compatible Node version, configure your version manager for non-interactive shells or install a compatible Node binary in one of the searched locations. For example, with nvm you may need a default alias:
+
+```bash
+nvm alias default 24
+```
+
+With mise/asdf/fnm/nodenv, make sure the tool's shim directory is installed and points at a Node version satisfying the range above.
+
+If reconnecting after an app update fails, retry the SSH launch once. The launcher now compares its generated runner script, stops stale launcher-managed remote servers, clears the SSH launch PID/port state, and starts a fresh remote server. You should not normally need to delete `~/.t3/ssh-launch` or kill `t3` processes manually.
+
 ## How Pairing Works
 
 The remote device does not need a long-lived secret up front.
 
 Instead:
 
-1. `t3 serve` issues a one-time owner pairing token.
+1. `upcomputer serve` issues a one-time owner pairing token.
 2. The remote device exchanges that token with the server.
 3. The server creates an authenticated session for that device.
 
@@ -143,7 +180,7 @@ Hosted pairing does not proxy traffic through T3 Code. The browser still connect
 
 ## Managing Access Later
 
-Use `t3 auth` to manage access after the initial pairing flow.
+Use `upcomputer auth` to manage access after the initial pairing flow.
 
 Typical uses:
 
@@ -151,7 +188,7 @@ Typical uses:
 - inspect active sessions
 - revoke old pairing links or sessions
 
-Use `t3 auth --help` and the nested subcommand help pages for the full reference.
+Use `upcomputer auth --help` and the nested subcommand help pages for the full reference.
 
 ## Security Notes
 
@@ -159,4 +196,4 @@ Use `t3 auth --help` and the nested subcommand help pages for the full reference
 - Prefer binding `--host` to a trusted private address, such as a Tailnet IP, instead of exposing the server broadly.
 - Anyone with a valid pairing credential can create a session until that credential expires or is revoked.
 - Hosted pairing links keep the credential in the URL hash so it is not sent to the hosted app server, but it can still be exposed through browser history, screenshots, logs, or copy/paste.
-- Use `t3 auth` to revoke credentials or sessions you no longer trust.
+- Use `upcomputer auth` to revoke credentials or sessions you no longer trust.

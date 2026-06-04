@@ -4,6 +4,7 @@ import type {
   DesktopRuntimeArch,
   DesktopRuntimeInfo,
 } from "@t3tools/contracts";
+import { PRODUCT_BASE_NAME } from "@t3tools/shared/branding";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -16,7 +17,7 @@ import {
   resolveDefaultDesktopSettings,
 } from "../settings/DesktopAppSettings.ts";
 import * as DesktopConfig from "./DesktopConfig.ts";
-import { isNightlyDesktopVersion } from "../updates/updateChannels.ts";
+import { isLocalDesktopVersion, isNightlyDesktopVersion } from "../updates/updateChannels.ts";
 
 export interface MakeDesktopEnvironmentInput {
   readonly dirname: string;
@@ -47,6 +48,7 @@ export interface DesktopEnvironmentShape {
   readonly desktopSettingsPath: string;
   readonly clientSettingsPath: string;
   readonly savedEnvironmentRegistryPath: string;
+  readonly threadPromptDraftsPath: string;
   readonly serverSettingsPath: string;
   readonly logDir: string;
   readonly rootDir: string;
@@ -78,9 +80,9 @@ export interface DesktopEnvironmentShape {
 export class DesktopEnvironment extends Context.Service<
   DesktopEnvironment,
   DesktopEnvironmentShape
->()("t3/desktop/Environment") {}
+>()("@t3tools/desktop/app/DesktopEnvironment") {}
 
-const APP_BASE_NAME = "T3 Code";
+const APP_BASE_NAME = PRODUCT_BASE_NAME;
 
 function resolveDesktopAppStageLabel(input: {
   readonly isDevelopment: boolean;
@@ -88,6 +90,10 @@ function resolveDesktopAppStageLabel(input: {
 }): DesktopAppStageLabel {
   if (input.isDevelopment) {
     return "Dev";
+  }
+
+  if (isLocalDesktopVersion(input.appVersion)) {
+    return "Local";
   }
 
   return isNightlyDesktopVersion(input.appVersion) ? "Nightly" : "Alpha";
@@ -158,10 +164,15 @@ const makeDesktopEnvironment = Effect.fn("desktop.environment.make")(function* (
     isDevelopment,
     appVersion: input.appVersion,
   });
+  const isLocal = branding.stageLabel === "Local";
   const displayName = branding.displayName;
-  const stateDir = path.join(baseDir, isDevelopment ? "dev" : "userdata");
-  const userDataDirName = isDevelopment ? "t3code-dev" : "t3code";
-  const legacyUserDataDirName = isDevelopment ? "T3 Code (Dev)" : "T3 Code (Alpha)";
+  const stateDir = path.join(baseDir, isDevelopment ? "dev" : isLocal ? "local" : "userdata");
+  const userDataDirName = isDevelopment ? "t3code-dev" : isLocal ? "t3code-local" : "t3code";
+  const legacyUserDataDirName = isDevelopment
+    ? "T3 Code (Dev)"
+    : isLocal
+      ? "T3 Code (Local)"
+      : "T3 Code (Alpha)";
   const resourcesPath = input.resourcesPath;
 
   return DesktopEnvironment.of({
@@ -181,6 +192,7 @@ const makeDesktopEnvironment = Effect.fn("desktop.environment.make")(function* (
     desktopSettingsPath: path.join(stateDir, "desktop-settings.json"),
     clientSettingsPath: path.join(stateDir, "client-settings.json"),
     savedEnvironmentRegistryPath: path.join(stateDir, "saved-environments.json"),
+    threadPromptDraftsPath: path.join(stateDir, "thread-prompt-drafts.json"),
     serverSettingsPath: path.join(stateDir, "settings.json"),
     logDir: path.join(stateDir, "logs"),
     rootDir,
@@ -199,9 +211,17 @@ const makeDesktopEnvironment = Effect.fn("desktop.environment.make")(function* (
     otlpExportIntervalMs: config.otlpExportIntervalMs,
     branding,
     displayName,
-    appUserModelId: isDevelopment ? "com.t3tools.t3code.dev" : "com.t3tools.t3code",
-    linuxDesktopEntryName: isDevelopment ? "t3code-dev.desktop" : "t3code.desktop",
-    linuxWmClass: isDevelopment ? "t3code-dev" : "t3code",
+    appUserModelId: isDevelopment
+      ? "com.t3tools.t3code.dev"
+      : isLocal
+        ? "com.t3tools.t3code.local"
+        : "com.t3tools.t3code",
+    linuxDesktopEntryName: isDevelopment
+      ? "t3code-dev.desktop"
+      : isLocal
+        ? "t3code-local.desktop"
+        : "t3code.desktop",
+    linuxWmClass: isDevelopment ? "t3code-dev" : isLocal ? "t3code-local" : "t3code",
     userDataDirName,
     legacyUserDataDirName,
     defaultDesktopSettings: resolveDefaultDesktopSettings(input.appVersion),

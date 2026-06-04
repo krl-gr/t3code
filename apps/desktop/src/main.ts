@@ -9,8 +9,9 @@ import * as Option from "effect/Option";
 import * as Electron from "electron";
 
 import * as NetService from "@t3tools/shared/Net";
-import { resolveRemoteT3CliPackageSpec } from "@t3tools/ssh/command";
+import { resolveRemoteUpcomputerCliPackageSpec } from "@t3tools/ssh/command";
 import type { RemoteT3RunnerOptions } from "@t3tools/ssh/tunnel";
+import serverPackageJson from "../../server/package.json" with { type: "json" };
 
 import type { DesktopSettings as DesktopSettingsValue } from "./settings/DesktopAppSettings.ts";
 import * as DesktopIpc from "./ipc/DesktopIpc.ts";
@@ -35,6 +36,7 @@ import * as DesktopObservability from "./app/DesktopObservability.ts";
 import * as DesktopServerExposure from "./backend/DesktopServerExposure.ts";
 import * as DesktopClientSettings from "./settings/DesktopClientSettings.ts";
 import * as DesktopSavedEnvironments from "./settings/DesktopSavedEnvironments.ts";
+import * as DesktopThreadPromptDrafts from "./settings/DesktopThreadPromptDrafts.ts";
 import * as DesktopAppSettings from "./settings/DesktopAppSettings.ts";
 import * as DesktopShellEnvironment from "./shell/DesktopShellEnvironment.ts";
 import * as DesktopSshEnvironment from "./ssh/DesktopSshEnvironment.ts";
@@ -65,14 +67,18 @@ const resolveDesktopSshCliRunner = (
 ): RemoteT3RunnerOptions => {
   const devRemoteEntryPath = Option.getOrUndefined(environment.devRemoteT3ServerEntryPath);
   if (environment.isDevelopment && devRemoteEntryPath !== undefined) {
-    return { nodeScriptPath: devRemoteEntryPath };
+    return {
+      nodeScriptPath: devRemoteEntryPath,
+      nodeEngineRange: serverPackageJson.engines.node,
+    };
   }
   return {
-    packageSpec: resolveRemoteT3CliPackageSpec({
+    packageSpec: resolveRemoteUpcomputerCliPackageSpec({
       appVersion: environment.appVersion,
       updateChannel: settings.updateChannel,
       isDevelopment: environment.isDevelopment,
     }),
+    nodeEngineRange: serverPackageJson.engines.node,
   };
 };
 
@@ -107,6 +113,7 @@ const desktopFoundationLayer = Layer.mergeAll(
   DesktopAppSettings.layer,
   DesktopClientSettings.layer,
   DesktopSavedEnvironments.layer,
+  DesktopThreadPromptDrafts.layer,
   DesktopAssets.layer,
   DesktopObservability.layer,
 ).pipe(Layer.provideMerge(desktopEnvironmentLayer));

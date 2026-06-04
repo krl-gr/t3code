@@ -13,7 +13,8 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { buildSshChildEnvironment, type SshAuthOptions } from "./auth.ts";
 import { SshCommandError, SshInvalidTargetError } from "./errors.ts";
 
-const PUBLISHABLE_T3_VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u;
+const PUBLISHABLE_UPCOMPUTER_VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u;
+const REMOTE_UPCOMPUTER_CLI_PACKAGE_NAME = "@updotcomputer/cli";
 const DEFAULT_SSH_COMMAND_TIMEOUT_MS = 60_000;
 
 const encoder = new TextEncoder();
@@ -325,19 +326,21 @@ export const resolveSshTarget = Effect.fn("ssh/command.resolveSshTarget")(functi
   );
 });
 
-export function resolveRemoteT3CliPackageSpec(input: {
+export function resolveRemoteUpcomputerCliPackageSpec(input: {
   readonly appVersion: string;
   readonly updateChannel: DesktopUpdateChannel;
   readonly isDevelopment?: boolean;
 }): string {
   const appVersion = input.appVersion.trim();
-  if (!input.isDevelopment && PUBLISHABLE_T3_VERSION_PATTERN.test(appVersion)) {
-    return `t3@${appVersion}`;
+  if (!input.isDevelopment && PUBLISHABLE_UPCOMPUTER_VERSION_PATTERN.test(appVersion)) {
+    return `${REMOTE_UPCOMPUTER_CLI_PACKAGE_NAME}@${appVersion}`;
   }
 
   if (input.isDevelopment) {
-    return "t3@nightly";
+    return `${REMOTE_UPCOMPUTER_CLI_PACKAGE_NAME}@nightly`;
   }
 
-  return input.updateChannel === "nightly" ? "t3@nightly" : "t3@latest";
+  return input.updateChannel === "nightly"
+    ? `${REMOTE_UPCOMPUTER_CLI_PACKAGE_NAME}@nightly`
+    : `${REMOTE_UPCOMPUTER_CLI_PACKAGE_NAME}@latest`;
 }

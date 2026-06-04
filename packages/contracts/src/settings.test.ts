@@ -6,6 +6,7 @@ import { DEFAULT_SERVER_SETTINGS, ServerSettings, ServerSettingsPatch } from "./
 
 const decodeServerSettings = Schema.decodeUnknownSync(ServerSettings);
 const decodeServerSettingsPatch = Schema.decodeUnknownSync(ServerSettingsPatch);
+const encodeServerSettings = Schema.encodeSync(ServerSettings);
 
 describe("ServerSettings.providerInstances (slice-2 invariant)", () => {
   it("defaults to an empty record so legacy configs without the key still decode", () => {
@@ -18,6 +19,8 @@ describe("ServerSettings.providerInstances (slice-2 invariant)", () => {
     // Legacy `providers` struct is still hydrated with its per-driver defaults
     // so existing call sites keep working through the migration.
     expect(decoded.providers.codex.enabled).toBe(true);
+    expect(decoded.providers.pi).toEqual({ enabled: true, customModels: [] });
+    expect(decoded.browser.allowAllHttpsOrigins).toBe(false);
   });
 
   it("decodes a multi-instance map mixing first-party and fork drivers", () => {
@@ -90,5 +93,77 @@ describe("ServerSettingsPatch.providerInstances", () => {
     });
     const ollamaId = ProviderInstanceId.make("ollama_local");
     expect(patch.providerInstances?.[ollamaId]?.driver).toBe("ollama");
+  });
+});
+
+describe("ServerSettingsPatch.browser", () => {
+  it("accepts HTTPS-wide browser access patches", () => {
+    const patch = decodeServerSettingsPatch({
+      browser: { allowAllHttpsOrigins: true },
+    });
+
+    expect(patch.browser?.allowAllHttpsOrigins).toBe(true);
+  });
+});
+
+describe("ServerSettingsPatch string normalization", () => {
+  it("trims string settings while decoding patches", () => {
+    const patch = decodeServerSettingsPatch({
+      addProjectBaseDirectory: "  ~/Development  ",
+      textGenerationModelSelection: { model: "  gpt-5.4-mini  " },
+      observability: {
+        otlpTracesUrl: "  http://localhost:4318/v1/traces  ",
+      },
+      providers: {
+        codex: {
+          binaryPath: "  /opt/homebrew/bin/codex  ",
+          homePath: "  ~/.codex  ",
+        },
+        pi: {
+          customModels: ["openai-codex/gpt-5.4"],
+        },
+      },
+      providerInstances: {
+        codex_personal: {
+          driver: "  codex  ",
+          displayName: "  Codex Personal  ",
+          config: { homePath: "  ~/.codex-personal  " },
+        },
+      },
+    });
+
+    expect(patch.addProjectBaseDirectory).toBe("~/Development");
+    expect(patch.textGenerationModelSelection?.model).toBe("gpt-5.4-mini");
+    expect(patch.observability?.otlpTracesUrl).toBe("http://localhost:4318/v1/traces");
+    expect(patch.providers?.codex?.binaryPath).toBe("/opt/homebrew/bin/codex");
+    expect(patch.providers?.codex?.homePath).toBe("~/.codex");
+    expect(patch.providers?.pi?.customModels).toEqual(["openai-codex/gpt-5.4"]);
+    expect(patch.providerInstances?.[ProviderInstanceId.make("codex_personal")]?.driver).toBe(
+      "codex",
+    );
+    expect(patch.providerInstances?.[ProviderInstanceId.make("codex_personal")]?.displayName).toBe(
+      "Codex Personal",
+    );
+    expect(patch.providerInstances?.[ProviderInstanceId.make("codex_personal")]?.config).toEqual({
+      homePath: "  ~/.codex-personal  ",
+    });
+  });
+
+  it("trims encoded server settings values before validation", () => {
+    const defaultSettings = decodeServerSettings({});
+    const encoded = encodeServerSettings({
+      ...defaultSettings,
+      addProjectBaseDirectory: "  ~/Development  ",
+      providers: {
+        ...defaultSettings.providers,
+        codex: {
+          ...defaultSettings.providers.codex,
+          binaryPath: "  /opt/homebrew/bin/codex  ",
+        },
+      },
+    });
+
+    expect(encoded.addProjectBaseDirectory).toBe("~/Development");
+    expect(encoded.providers?.codex?.binaryPath).toBe("/opt/homebrew/bin/codex");
   });
 });

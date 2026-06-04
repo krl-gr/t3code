@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
 
-import { Effect, Schema } from "effect";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import { describe, it } from "vitest";
 import { ThreadId } from "@t3tools/contracts";
 import * as CodexErrors from "effect-codex-app-server/errors";
 import * as CodexRpc from "effect-codex-app-server/rpc";
 
 import {
+  CODEX_ASK_MODE_DEVELOPER_INSTRUCTIONS,
   CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS,
   CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS,
 } from "../CodexDeveloperInstructions.ts";
@@ -15,6 +17,7 @@ import {
   isRecoverableThreadResumeError,
   openCodexThread,
 } from "./CodexSessionRuntime.ts";
+const isCodexAppServerRequestError = Schema.is(CodexErrors.CodexAppServerRequestError);
 
 function makeThreadOpenResponse(
   threadId: string,
@@ -120,6 +123,28 @@ describe("buildTurnStartParams", () => {
         },
       },
     });
+  });
+
+  it("maps ask interaction mode to upstream default collaboration mode", () => {
+    const params = Effect.runSync(
+      buildTurnStartParams({
+        threadId: "provider-thread-1",
+        runtimeMode: "full-access",
+        prompt: "Why is this failing?",
+        model: "gpt-5.3-codex",
+        interactionMode: "ask",
+      }),
+    );
+
+    assert.equal(params.collaborationMode?.mode, "default");
+    assert.equal(
+      params.collaborationMode?.settings?.developer_instructions,
+      CODEX_ASK_MODE_DEVELOPER_INSTRUCTIONS,
+    );
+    assert.match(
+      params.collaborationMode?.settings?.developer_instructions ?? "",
+      /Do not output `<proposed_plan>` or `<\/proposed_plan>` tags/,
+    );
   });
 
   it("omits collaboration mode when interaction mode is absent", () => {
@@ -268,7 +293,7 @@ describe("openCodexThread", () => {
         }),
       ),
       (error: unknown) =>
-        Schema.is(CodexErrors.CodexAppServerRequestError)(error) &&
+        isCodexAppServerRequestError(error) &&
         error.errorMessage === "timed out waiting for server",
     );
   });

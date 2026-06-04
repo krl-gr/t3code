@@ -13,7 +13,13 @@
  * @module provider/Drivers/CursorDriver
  */
 import { CursorSettings, ProviderDriverKind, type ServerProvider } from "@t3tools/contracts";
-import { Duration, Effect, FileSystem, Path, Schema, Stream } from "effect";
+import * as Duration from "effect/Duration";
+import * as Crypto from "effect/Crypto";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 import { HttpClient } from "effect/unstable/http";
 import { ChildProcessSpawner } from "effect/unstable/process";
 
@@ -40,6 +46,7 @@ import {
   makeStaticProviderMaintenanceResolver,
   resolveProviderMaintenanceCapabilitiesEffect,
 } from "../providerMaintenance.ts";
+const decodeCursorSettings = Schema.decodeSync(CursorSettings);
 
 const DRIVER_KIND = ProviderDriverKind.make("cursor");
 const SNAPSHOT_REFRESH_INTERVAL = Duration.minutes(5);
@@ -55,6 +62,7 @@ const UPDATE = makeStaticProviderMaintenanceResolver(
 
 export type CursorDriverEnv =
   | ChildProcessSpawner.ChildProcessSpawner
+  | Crypto.Crypto
   | FileSystem.FileSystem
   | HttpClient.HttpClient
   | Path.Path
@@ -84,7 +92,7 @@ export const CursorDriver: ProviderDriver<CursorSettings, CursorDriverEnv> = {
     supportsMultipleInstances: true,
   },
   configSchema: CursorSettings,
-  defaultConfig: (): CursorSettings => Schema.decodeSync(CursorSettings)({}),
+  defaultConfig: (): CursorSettings => decodeCursorSettings({}),
   create: ({ instanceId, displayName, accentColor, environment, enabled, config }) =>
     Effect.gen(function* () {
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
@@ -128,7 +136,8 @@ export const CursorDriver: ProviderDriver<CursorSettings, CursorDriverEnv> = {
         getSettings: Effect.succeed(effectiveConfig),
         streamSettings: Stream.never,
         haveSettingsChanged: () => false,
-        initialSnapshot: (settings) => stampIdentity(buildInitialCursorProviderSnapshot(settings)),
+        initialSnapshot: (settings) =>
+          buildInitialCursorProviderSnapshot(settings).pipe(Effect.map(stampIdentity)),
         checkProvider,
         // Preserve the background ACP model-capability probe that used to
         // live on `CursorProviderLive`. Only fires when the snapshot reports

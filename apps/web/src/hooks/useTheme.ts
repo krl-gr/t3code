@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 
+import { isElectron } from "../env";
+
 type Theme = "light" | "dark" | "system";
 type ThemeSnapshot = {
   theme: Theme;
@@ -81,6 +83,13 @@ export function syncBrowserChromeTheme() {
   const fallbackColor = normalizeThemeColor(getComputedStyle(document.body).backgroundColor);
   const backgroundColor = surfaceColor ?? fallbackColor;
   if (!backgroundColor) return;
+
+  if (isElectron) {
+    document.documentElement.style.backgroundColor = "transparent";
+    document.body.style.backgroundColor = "transparent";
+    ensureThemeColorMetaTag().setAttribute("content", backgroundColor);
+    return;
+  }
 
   document.documentElement.style.backgroundColor = backgroundColor;
   document.body.style.backgroundColor = backgroundColor;

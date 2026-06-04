@@ -3,6 +3,8 @@ import { CloudIcon, MonitorIcon } from "lucide-react";
 import { memo, useMemo } from "react";
 
 import type { EnvironmentOption } from "./BranchToolbar.logic";
+import { CONTEXT_BAR_TEXT_TRIGGER_CLASS } from "./BranchToolbar.styles";
+import { cn } from "../lib/utils";
 import {
   Select,
   SelectGroup,
@@ -41,11 +43,11 @@ export const BranchToolbarEnvironmentSelector = memo(function BranchToolbarEnvir
 
   if (envLocked) {
     return (
-      <span className="inline-flex items-center gap-1 border border-transparent px-[calc(--spacing(3)-1px)] text-sm font-medium text-muted-foreground/70 sm:text-xs">
+      <span className={cn(CONTEXT_BAR_TEXT_TRIGGER_CLASS, "inline-flex")}>
         {activeEnvironment?.isPrimary ? (
-          <MonitorIcon className="size-3" />
+          <MonitorIcon className="size-3.5 shrink-0" />
         ) : (
-          <CloudIcon className="size-3" />
+          <CloudIcon className="size-3.5 shrink-0" />
         )}
         {activeEnvironment?.label ?? "Run on"}
       </span>
@@ -59,11 +61,16 @@ export const BranchToolbarEnvironmentSelector = memo(function BranchToolbarEnvir
       onValueChange={(value) => onEnvironmentChange(value as EnvironmentId)}
       items={environmentItems}
     >
-      <SelectTrigger variant="ghost" size="xs" className="font-medium" aria-label="Run on">
+      <SelectTrigger
+        variant="ghost"
+        size="xs"
+        className={cn(CONTEXT_BAR_TEXT_TRIGGER_CLASS, "[&_[data-slot=select-icon]]:hidden")}
+        aria-label="Run on"
+      >
         {activeEnvironment?.isPrimary ? (
-          <MonitorIcon className="size-3" />
+          <MonitorIcon className="size-3.5 shrink-0" />
         ) : (
-          <CloudIcon className="size-3" />
+          <CloudIcon className="size-3.5 shrink-0" />
         )}
         <SelectValue />
       </SelectTrigger>

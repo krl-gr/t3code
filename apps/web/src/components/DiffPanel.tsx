@@ -1,9 +1,7 @@
-import { parsePatchFiles } from "@pierre/diffs";
-import { FileDiff, type FileDiffMetadata, Virtualizer } from "@pierre/diffs/react";
-import { useQuery } from "@tanstack/react-query";
+import { FileDiff, Virtualizer } from "@pierre/diffs/react";
 import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import { scopeThreadRef } from "@t3tools/client-runtime";
-import type { TurnId } from "@t3tools/contracts";
+import type { ScopedThreadRef, TurnId } from "@t3tools/contracts";
 import {
   ChevronDownIcon,
   ChevronLeftIcon,
@@ -22,15 +20,26 @@ import {
   useState,
 } from "react";
 import { openInPreferredEditor } from "../editorPreferences";
-import { useGitStatus } from "~/lib/gitStatusState";
-import { checkpointDiffQueryOptions } from "~/lib/providerReactQuery";
+import { useCheckpointDiff } from "~/lib/checkpointDiffState";
+import { useVcsStatus } from "~/lib/vcsStatusState";
 import { cn } from "~/lib/utils";
 import { readLocalApi } from "../localApi";
 import { resolvePathLinkTarget } from "../terminal-links";
-import { parseDiffRouteSearch, stripDiffSearchParams } from "../diffRouteSearch";
+import {
+  type DiffRouteSearch,
+  type DiffRouteSearchUpdater,
+  diffRouteSearchForNavigation,
+  parseDiffRouteSearch,
+  stripDiffSearchParams,
+} from "../diffRouteSearch";
 import { useTheme } from "../hooks/useTheme";
-import { buildPatchCacheKey } from "../lib/diffRendering";
-import { resolveDiffThemeName } from "../lib/diffRendering";
+import {
+  buildFileDiffRenderKey,
+  getDiffCollapseIconClassName,
+  getRenderablePatch,
+  resolveDiffThemeName,
+  resolveFileDiffPath,
+} from "../lib/diffRendering";
 import { useTurnDiffSummaries } from "../hooks/useTurnDiffSummaries";
 import { selectProjectByRef, useStore } from "../store";
 import { createThreadSelectorByRef } from "../storeSelectors";
@@ -107,83 +116,21 @@ const DIFF_PANEL_UNSAFE_CSS = `
 }
 `;
 
-type RenderablePatch =
-  | {
-      kind: "files";
-      files: FileDiffMetadata[];
-    }
-  | {
-      kind: "raw";
-      text: string;
-      reason: string;
-    };
-
-function getRenderablePatch(
-  patch: string | undefined,
-  cacheScope = "diff-panel",
-): RenderablePatch | null {
-  if (!patch) return null;
-  const normalizedPatch = patch.trim();
-  if (normalizedPatch.length === 0) return null;
-
-  try {
-    const parsedPatches = parsePatchFiles(
-      normalizedPatch,
-      buildPatchCacheKey(normalizedPatch, cacheScope),
-    );
-    const files = parsedPatches.flatMap((parsedPatch) => parsedPatch.files);
-    if (files.length > 0) {
-      return { kind: "files", files };
-    }
-
-    return {
-      kind: "raw",
-      text: normalizedPatch,
-      reason: "Unsupported diff format. Showing raw patch.",
-    };
-  } catch {
-    return {
-      kind: "raw",
-      text: normalizedPatch,
-      reason: "Failed to parse patch. Showing raw patch.",
-    };
-  }
-}
-
-function resolveFileDiffPath(fileDiff: FileDiffMetadata): string {
-  const raw = fileDiff.name ?? fileDiff.prevName ?? "";
-  if (raw.startsWith("a/") || raw.startsWith("b/")) {
-    return raw.slice(2);
-  }
-  return raw;
-}
-
-function buildFileDiffRenderKey(fileDiff: FileDiffMetadata): string {
-  return fileDiff.cacheKey ?? `${fileDiff.prevName ?? "none"}:${fileDiff.name}`;
-}
-
-function getDiffCollapseIconClassName(fileDiff: FileDiffMetadata): string {
-  switch (fileDiff.type) {
-    case "new":
-      return "text-[var(--diffs-addition-base)]";
-    case "deleted":
-      return "text-[var(--diffs-deletion-base)]";
-    case "change":
-    case "rename-pure":
-    case "rename-changed":
-      return "text-[var(--diffs-modified-base)]";
-    default:
-      return "text-muted-foreground/80";
-  }
-}
-
 interface DiffPanelProps {
   mode?: DiffPanelMode;
+  threadRef?: ScopedThreadRef;
+  diffSearch?: DiffRouteSearch;
+  onDiffSearchChange?: (next: DiffRouteSearchUpdater) => void;
 }
 
 export { DiffWorkerPoolProvider } from "./DiffWorkerPoolProvider";
 
-export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
+export default function DiffPanel({
+  mode = "inline",
+  threadRef: controlledThreadRef,
+  diffSearch: controlledDiffSearch,
+  onDiffSearchChange,
+}: DiffPanelProps) {
   const navigate = useNavigate();
   const { resolvedTheme } = useTheme();
   const settings = useSettings();
@@ -202,11 +149,19 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
     strict: false,
     select: (params) => resolveThreadRouteRef(params),
   });
-  const diffSearch = useSearch({ strict: false, select: (search) => parseDiffRouteSearch(search) });
+  const routeDiffSearch = useSearch({
+    strict: false,
+    select: (search) => parseDiffRouteSearch(search),
+  });
+  const routeThreadRefOrControlled = controlledThreadRef ?? routeThreadRef;
+  const diffSearch = controlledDiffSearch ?? routeDiffSearch;
   const diffOpen = diffSearch.diff === "1";
-  const activeThreadId = routeThreadRef?.threadId ?? null;
+  const activeThreadId = routeThreadRefOrControlled?.threadId ?? null;
   const activeThread = useStore(
-    useMemo(() => createThreadSelectorByRef(routeThreadRef), [routeThreadRef]),
+    useMemo(
+      () => createThreadSelectorByRef(routeThreadRefOrControlled),
+      [routeThreadRefOrControlled],
+    ),
   );
   const activeProjectId = activeThread?.projectId ?? null;
   const activeProject = useStore((store) =>
@@ -218,7 +173,7 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
       : undefined,
   );
   const activeCwd = activeThread?.worktreePath ?? activeProject?.cwd;
-  const gitStatusQuery = useGitStatus({
+  const gitStatusQuery = useVcsStatus({
     environmentId: activeThread?.environmentId ?? null,
     cwd: activeCwd ?? null,
   });
@@ -261,12 +216,14 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
     [selectedCheckpointTurnCount],
   );
   const conversationCheckpointTurnCount = useMemo(() => {
-    const turnCounts = orderedTurnDiffSummaries
-      .map(
-        (summary) =>
-          summary.checkpointTurnCount ?? inferredCheckpointTurnCountByTurnId[summary.turnId],
-      )
-      .filter((value): value is number => typeof value === "number");
+    const turnCounts: Array<number> = [];
+    for (const summary of orderedTurnDiffSummaries) {
+      const value =
+        summary.checkpointTurnCount ?? inferredCheckpointTurnCountByTurnId[summary.turnId];
+      if (typeof value === "number") {
+        turnCounts.push(value);
+      }
+    }
     if (turnCounts.length === 0) {
       return undefined;
     }
@@ -292,30 +249,21 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
     }
     return `conversation:${orderedTurnDiffSummaries.map((summary) => summary.turnId).join(",")}`;
   }, [orderedTurnDiffSummaries, selectedTurn]);
-  const activeCheckpointDiffQuery = useQuery(
-    checkpointDiffQueryOptions({
+  const activeCheckpointDiff = useCheckpointDiff(
+    {
       environmentId: activeThread?.environmentId ?? null,
       threadId: activeThreadId,
       fromTurnCount: activeCheckpointRange?.fromTurnCount ?? null,
       toTurnCount: activeCheckpointRange?.toTurnCount ?? null,
       ignoreWhitespace: diffIgnoreWhitespace,
       cacheScope: selectedTurn ? `turn:${selectedTurn.turnId}` : conversationCacheScope,
-      enabled: isGitRepo,
-    }),
+    },
+    { enabled: isGitRepo },
   );
-  const selectedTurnCheckpointDiff = selectedTurn
-    ? activeCheckpointDiffQuery.data?.diff
-    : undefined;
-  const conversationCheckpointDiff = selectedTurn
-    ? undefined
-    : activeCheckpointDiffQuery.data?.diff;
-  const isLoadingCheckpointDiff = activeCheckpointDiffQuery.isLoading;
-  const checkpointDiffError =
-    activeCheckpointDiffQuery.error instanceof Error
-      ? activeCheckpointDiffQuery.error.message
-      : activeCheckpointDiffQuery.error
-        ? "Failed to load checkpoint diff."
-        : null;
+  const selectedTurnCheckpointDiff = selectedTurn ? activeCheckpointDiff.data?.diff : undefined;
+  const conversationCheckpointDiff = selectedTurn ? undefined : activeCheckpointDiff.data?.diff;
+  const isLoadingCheckpointDiff = activeCheckpointDiff.isPending;
+  const checkpointDiffError = activeCheckpointDiff.error;
 
   const selectedPatch = selectedTurn ? selectedTurnCheckpointDiff : conversationCheckpointDiff;
   const hasResolvedPatch = typeof selectedPatch === "string";
@@ -390,27 +338,35 @@ export default function DiffPanel({ mode = "inline" }: DiffPanelProps) {
     });
   }, []);
 
+  const updateDiffSearch = useCallback(
+    (next: DiffRouteSearchUpdater) => {
+      if (onDiffSearchChange) {
+        onDiffSearchChange(next);
+        return;
+      }
+
+      if (!activeThread) return;
+      void navigate({
+        to: "/$environmentId/$threadId",
+        params: buildThreadRouteParams(scopeThreadRef(activeThread.environmentId, activeThread.id)),
+        search: (previous) => {
+          const previousDiffSearch = parseDiffRouteSearch(previous);
+          const nextDiffSearch = typeof next === "function" ? next(previousDiffSearch) : next;
+          const rest = stripDiffSearchParams(previous);
+          return { ...rest, ...diffRouteSearchForNavigation(nextDiffSearch) };
+        },
+      });
+    },
+    [activeThread, navigate, onDiffSearchChange],
+  );
+
   const selectTurn = (turnId: TurnId) => {
     if (!activeThread) return;
-    void navigate({
-      to: "/$environmentId/$threadId",
-      params: buildThreadRouteParams(scopeThreadRef(activeThread.environmentId, activeThread.id)),
-      search: (previous) => {
-        const rest = stripDiffSearchParams(previous);
-        return { ...rest, diff: "1", diffTurnId: turnId };
-      },
-    });
+    updateDiffSearch({ diff: "1", diffTurnId: turnId });
   };
   const selectWholeConversation = () => {
     if (!activeThread) return;
-    void navigate({
-      to: "/$environmentId/$threadId",
-      params: buildThreadRouteParams(scopeThreadRef(activeThread.environmentId, activeThread.id)),
-      search: (previous) => {
-        const rest = stripDiffSearchParams(previous);
-        return { ...rest, diff: "1" };
-      },
-    });
+    updateDiffSearch({ diff: "1" });
   };
   const updateTurnStripScrollState = useCallback(() => {
     const element = turnStripRef.current;

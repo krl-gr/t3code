@@ -3,8 +3,9 @@ import Layout from "../layouts/Layout.astro";
 import { RELEASES_URL } from "../lib/releases";
 ---
 
-<Layout title="Download — T3 Code" description="Download T3 Code for macOS, Windows, or Linux.">
-  <h1 class="heading">Download T3 Code</h1>
+<Layout title="Download — Up.computer" description="Download Up.computer for macOS, Windows, or Linux.">
+  <div class="download-page">
+  <h1 class="heading">Download Up.computer</h1>
   <p class="subheading">
     <span id="version-label">Loading latest release&hellip;</span>
     <a id="changelog-link" class="changelog-link" href="#" target="_blank" rel="noopener noreferrer" style="display:none">View changelog<span aria-hidden="true"> &#8599;</span></a>
@@ -60,10 +61,11 @@ import { RELEASES_URL } from "../lib/releases";
 
   <p class="releases-link">
     Looking for older versions? Check the
-    <a href="https://github.com/pingdotgg/t3code/releases" target="_blank" rel="noopener noreferrer">
+    <a href="https://github.com/krl-gr/upcomputer/releases" target="_blank" rel="noopener noreferrer">
       GitHub releases page<span aria-hidden="true"> &#8599;</span>
     </a>
   </p>
+  </div>
 </Layout>
 
 <script>
@@ -111,7 +113,11 @@ import { RELEASES_URL } from "../lib/releases";
 </script>
 
 <style>
-  .main {
+  .download-page {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
     padding: 8vh 1.5rem 4rem;
   }
 
@@ -120,7 +126,7 @@ import { RELEASES_URL } from "../lib/releases";
   .heading {
     font-weight: 500;
     font-size: clamp(1.75rem, 4vw, 2.75rem);
-    letter-spacing: -0.035em;
+    letter-spacing: 0;
     line-height: 1.15;
     text-align: center;
     margin-bottom: 0.5rem;
@@ -189,7 +195,7 @@ import { RELEASES_URL } from "../lib/releases";
   .platform-name {
     font-weight: 500;
     font-size: 1.1rem;
-    letter-spacing: -0.01em;
+    letter-spacing: 0;
   }
 
   /* ── Download cards ── */
@@ -257,7 +263,7 @@ import { RELEASES_URL } from "../lib/releases";
   /* ── Mobile ── */
 
   @media (max-width: 640px) {
-    .main {
+    .download-page {
       padding: 5vh 1.25rem 4rem;
     }
 

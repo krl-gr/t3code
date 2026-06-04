@@ -25,6 +25,8 @@ describe("environment runtime catalog stores", () => {
           getSavedEnvironmentSecret: async () => null,
           setSavedEnvironmentSecret: async () => true,
           removeSavedEnvironmentSecret: async () => undefined,
+          getThreadPromptDrafts: async () => [],
+          setThreadPromptDrafts: async () => undefined,
         },
       } satisfies Pick<LocalApi, "persistence">,
     });
@@ -112,6 +114,8 @@ describe("environment runtime catalog stores", () => {
           getSavedEnvironmentSecret: async () => null,
           setSavedEnvironmentSecret: async () => true,
           removeSavedEnvironmentSecret: async () => undefined,
+          getThreadPromptDrafts: async () => [],
+          setThreadPromptDrafts: async () => undefined,
         },
       } satisfies Pick<LocalApi, "persistence">,
     });

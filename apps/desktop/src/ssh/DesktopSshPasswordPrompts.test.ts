@@ -1,10 +1,11 @@
 import { assert, describe, it } from "@effect/vitest";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import { TestClock } from "effect/testing";
+import * as TestClock from "effect/testing/TestClock";
 import type * as Electron from "electron";
 
 import * as ElectronWindow from "../electron/ElectronWindow.ts";
@@ -86,6 +87,7 @@ function makeElectronWindowLayer(window: ReturnType<typeof makeTestWindow>["wind
 function makeLayer(window: ReturnType<typeof makeTestWindow>["window"]) {
   return DesktopSshPasswordPrompts.layer({ passwordPromptTimeoutMs: 1_000 }).pipe(
     Layer.provide(makeElectronWindowLayer(window)),
+    Layer.provide(NodeServices.layer),
     Layer.provideMerge(TestClock.layer()),
   );
 }

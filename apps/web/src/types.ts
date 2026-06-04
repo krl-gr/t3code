@@ -2,6 +2,7 @@ import type {
   EnvironmentId,
   ModelSelection,
   OrchestrationLatestTurn,
+  ThreadContextBinding,
   OrchestrationProposedPlanId,
   RepositoryIdentity,
   OrchestrationSessionStatus,
@@ -23,7 +24,7 @@ export const DEFAULT_RUNTIME_MODE: RuntimeMode = "full-access";
 
 export const DEFAULT_INTERACTION_MODE: ProviderInteractionMode = "default";
 export const DEFAULT_THREAD_TERMINAL_HEIGHT = 280;
-export const DEFAULT_THREAD_TERMINAL_ID = "default";
+export const DEFAULT_THREAD_TERMINAL_ID = "term-1";
 export const MAX_TERMINALS_PER_GROUP = 4;
 export type ProjectScript = ContractProjectScript;
 
@@ -105,6 +106,8 @@ export interface Thread {
   session: ThreadSession | null;
   messages: ChatMessage[];
   proposedPlans: ProposedPlan[];
+  contextBindings?: ThreadContextBinding[];
+  contextBindingCount?: number;
   error: string | null;
   createdAt: string;
   archivedAt: string | null;
@@ -132,6 +135,7 @@ export interface ThreadShell {
   updatedAt?: string | undefined;
   branch: string | null;
   worktreePath: string | null;
+  contextBindingCount?: number;
 }
 
 export interface ThreadTurnState {
@@ -156,6 +160,7 @@ export interface SidebarThreadSummary {
   hasPendingApprovals: boolean;
   hasPendingUserInput: boolean;
   hasActionableProposedPlan: boolean;
+  contextBindingCount?: number;
 }
 
 export interface ThreadSession {

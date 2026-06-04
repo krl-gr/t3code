@@ -122,10 +122,16 @@ const desktopEnvironmentLayer = DesktopEnvironment.layer(environmentInput).pipe(
 function makeTestLayer(input: {
   readonly window: Electron.BrowserWindow;
   readonly createCount: Ref.Ref<number>;
+  readonly createOptions: Ref.Ref<ReadonlyArray<Electron.BrowserWindowConstructorOptions>>;
   readonly mainWindow: Ref.Ref<Option.Option<Electron.BrowserWindow>>;
 }) {
   const electronWindowLayer = Layer.succeed(ElectronWindow.ElectronWindow, {
-    create: () => Ref.update(input.createCount, (count) => count + 1).pipe(Effect.as(input.window)),
+    create: (options) =>
+      Effect.gen(function* () {
+        yield* Ref.update(input.createOptions, (existing) => [...existing, options]);
+        yield* Ref.update(input.createCount, (count) => count + 1);
+        return input.window;
+      }),
     main: Ref.get(input.mainWindow),
     currentMainOrFirst: Ref.get(input.mainWindow),
     focusedMainOrFirst: Ref.get(input.mainWindow),
@@ -158,10 +164,14 @@ describe("DesktopWindow", () => {
     Effect.gen(function* () {
       const fakeWindow = makeFakeBrowserWindow();
       const createCount = yield* Ref.make(0);
+      const createOptions = yield* Ref.make<
+        ReadonlyArray<Electron.BrowserWindowConstructorOptions>
+      >([]);
       const mainWindow = yield* Ref.make<Option.Option<Electron.BrowserWindow>>(Option.none());
       const layer = makeTestLayer({
         window: fakeWindow.window,
         createCount,
+        createOptions,
         mainWindow,
       });
 
@@ -172,6 +182,18 @@ describe("DesktopWindow", () => {
 
         yield* desktopWindow.handleBackendReady;
         assert.equal(yield* Ref.get(createCount), 1);
+        const [createdWindowOptions] = yield* Ref.get(createOptions);
+        if (process.platform === "darwin") {
+          assert.equal(createdWindowOptions?.transparent, true);
+          assert.equal(createdWindowOptions?.backgroundColor, "#00000000");
+          assert.equal(createdWindowOptions?.vibrancy, "sidebar");
+          assert.equal(createdWindowOptions?.visualEffectState, "active");
+        } else {
+          assert.equal(createdWindowOptions?.transparent, undefined);
+          assert.equal(createdWindowOptions?.vibrancy, undefined);
+          assert.equal(createdWindowOptions?.visualEffectState, undefined);
+          assert.equal(createdWindowOptions?.backgroundColor, "#ffffff");
+        }
         assert.deepEqual(fakeWindow.loadURL.mock.calls[0], ["http://127.0.0.1:5733/"]);
         assert.equal(fakeWindow.openDevTools.mock.calls.length, 1);
       }).pipe(Effect.provide(layer));

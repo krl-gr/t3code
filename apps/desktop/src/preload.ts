@@ -47,6 +47,14 @@ contextBridge.exposeInMainWorld("desktopBridge", {
     ipcRenderer.invoke(IpcChannels.SET_SAVED_ENVIRONMENT_SECRET_CHANNEL, { environmentId, secret }),
   removeSavedEnvironmentSecret: (environmentId) =>
     ipcRenderer.invoke(IpcChannels.REMOVE_SAVED_ENVIRONMENT_SECRET_CHANNEL, environmentId),
+  getThreadPromptDrafts: (environmentId, threadId) =>
+    ipcRenderer.invoke(IpcChannels.GET_THREAD_PROMPT_DRAFTS_CHANNEL, { environmentId, threadId }),
+  setThreadPromptDrafts: (environmentId, threadId, drafts) =>
+    ipcRenderer.invoke(IpcChannels.SET_THREAD_PROMPT_DRAFTS_CHANNEL, {
+      environmentId,
+      threadId,
+      drafts,
+    }),
   discoverSshHosts: () => ipcRenderer.invoke(IpcChannels.DISCOVER_SSH_HOSTS_CHANNEL),
   ensureSshEnvironment: async (target, options) =>
     unwrapEnsureSshEnvironmentResult(
@@ -88,6 +96,8 @@ contextBridge.exposeInMainWorld("desktopBridge", {
     ipcRenderer.invoke(IpcChannels.SET_TAILSCALE_SERVE_ENABLED_CHANNEL, input),
   getAdvertisedEndpoints: () => ipcRenderer.invoke(IpcChannels.GET_ADVERTISED_ENDPOINTS_CHANNEL),
   pickFolder: (options) => ipcRenderer.invoke(IpcChannels.PICK_FOLDER_CHANNEL, options),
+  pickFileSystemEntries: (options) =>
+    ipcRenderer.invoke(IpcChannels.PICK_FILE_SYSTEM_ENTRIES_CHANNEL, options),
   confirm: (message) => ipcRenderer.invoke(IpcChannels.CONFIRM_CHANNEL, message),
   setTheme: (theme) => ipcRenderer.invoke(IpcChannels.SET_THEME_CHANNEL, theme),
   showContextMenu: (items, position) =>

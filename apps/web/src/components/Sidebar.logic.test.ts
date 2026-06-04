@@ -12,9 +12,13 @@ import {
   hasUnseenCompletion,
   isContextMenuPointerDown,
   orderItemsByPreferredIds,
+  orderItemsByPreferredMemberIds,
   resolveProjectStatusIndicator,
+  resolveFocusedProjectThreadTarget,
+  resolveNextPagedThreadVisibleCount,
   resolveSidebarNewThreadSeedContext,
   resolveSidebarNewThreadEnvMode,
+  resolveSidebarThreadPreviewLimit,
   resolveThreadRowClassName,
   resolveThreadStatusPill,
   shouldClearThreadSelectionOnMouseDown,
@@ -36,6 +40,10 @@ import {
 } from "../types";
 
 const localEnvironmentId = EnvironmentId.make("environment-local");
+
+function getTestThreadKey(thread: { environmentId: string; id: string }): string {
+  return `${thread.environmentId}:${thread.id}`;
+}
 
 function makeLatestTurn(overrides?: {
   completedAt?: string | null;
@@ -354,6 +362,60 @@ describe("orderItemsByPreferredIds", () => {
   });
 });
 
+describe("orderItemsByPreferredMemberIds", () => {
+  it("promotes an item by member id", () => {
+    const ordered = orderItemsByPreferredMemberIds({
+      items: [
+        { id: "project-1", memberIds: ["env-local:project-1"] },
+        { id: "project-2", memberIds: ["env-local:project-2"] },
+        { id: "project-3", memberIds: ["env-local:project-3"] },
+      ],
+      preferredMemberIds: ["env-local:project-3"],
+      getMemberIds: (project) => project.memberIds,
+    });
+
+    expect(ordered.map((project) => project.id)).toEqual(["project-3", "project-1", "project-2"]);
+  });
+
+  it("promotes a grouped item when any member id matches", () => {
+    const ordered = orderItemsByPreferredMemberIds({
+      items: [
+        { id: "project-a", memberIds: ["env-local:project-a", "env-remote:project-a"] },
+        { id: "project-b", memberIds: ["env-local:project-b"] },
+      ],
+      preferredMemberIds: ["env-remote:project-a"],
+      getMemberIds: (project) => project.memberIds,
+    });
+
+    expect(ordered.map((project) => project.id)).toEqual(["project-a", "project-b"]);
+  });
+
+  it("ignores stale preferred ids and preserves non-promoted item order", () => {
+    const ordered = orderItemsByPreferredMemberIds({
+      items: [
+        { id: "project-1", memberIds: ["env-local:project-1"] },
+        { id: "project-2", memberIds: ["env-local:project-2"] },
+        { id: "project-3", memberIds: ["env-local:project-3"] },
+        { id: "project-4", memberIds: ["env-local:project-4"] },
+      ],
+      preferredMemberIds: [
+        "env-local:missing",
+        "env-local:project-3",
+        "env-local:project-1",
+        "env-local:project-3",
+      ],
+      getMemberIds: (project) => project.memberIds,
+    });
+
+    expect(ordered.map((project) => project.id)).toEqual([
+      "project-3",
+      "project-1",
+      "project-2",
+      "project-4",
+    ]);
+  });
+});
+
 describe("resolveAdjacentThreadId", () => {
   it("resolves adjacent thread ids in ordered sidebar traversal", () => {
     const threads = [
@@ -437,6 +499,73 @@ describe("getVisibleSidebarThreadIds", () => {
         },
       ]),
     ).toEqual([ThreadId.make("thread-12"), ThreadId.make("thread-11")]);
+  });
+});
+
+describe("resolveFocusedProjectThreadTarget", () => {
+  const makeThread = (overrides: {
+    id: string;
+    createdAt: string;
+    updatedAt?: string | undefined;
+    latestUserMessageAt?: string | null | undefined;
+    archivedAt?: string | null | undefined;
+  }) => ({
+    id: ThreadId.make(overrides.id),
+    environmentId: localEnvironmentId,
+    archivedAt: overrides.archivedAt ?? null,
+    createdAt: overrides.createdAt,
+    updatedAt: overrides.updatedAt,
+    latestUserMessageAt: overrides.latestUserMessageAt ?? null,
+  });
+
+  it("prefers the saved active thread when it still belongs to the project", () => {
+    const older = makeThread({ id: "thread-older", createdAt: "2026-03-09T10:00:00.000Z" });
+    const newer = makeThread({ id: "thread-newer", createdAt: "2026-03-09T11:00:00.000Z" });
+
+    expect(
+      resolveFocusedProjectThreadTarget({
+        threads: [older, newer],
+        savedThreadKey: getTestThreadKey(older),
+        sortOrder: "created_at",
+        getThreadKey: getTestThreadKey,
+      }),
+    ).toBe(older);
+  });
+
+  it("falls back to the sorted latest thread when the saved thread is unavailable", () => {
+    const archived = makeThread({
+      id: "thread-archived",
+      archivedAt: "2026-03-09T12:00:00.000Z",
+      createdAt: "2026-03-09T12:00:00.000Z",
+    });
+    const older = makeThread({ id: "thread-older", createdAt: "2026-03-09T10:00:00.000Z" });
+    const newer = makeThread({ id: "thread-newer", createdAt: "2026-03-09T11:00:00.000Z" });
+
+    expect(
+      resolveFocusedProjectThreadTarget({
+        threads: [archived, older, newer],
+        savedThreadKey: getTestThreadKey(archived),
+        sortOrder: "created_at",
+        getThreadKey: getTestThreadKey,
+      }),
+    ).toBe(newer);
+  });
+
+  it("returns null when the project has no visible threads", () => {
+    const archived = makeThread({
+      id: "thread-archived",
+      archivedAt: "2026-03-09T12:00:00.000Z",
+      createdAt: "2026-03-09T12:00:00.000Z",
+    });
+
+    expect(
+      resolveFocusedProjectThreadTarget({
+        threads: [archived],
+        savedThreadKey: getTestThreadKey(archived),
+        sortOrder: "created_at",
+        getThreadKey: getTestThreadKey,
+      }),
+    ).toBeNull();
   });
 });
 
@@ -694,6 +823,58 @@ describe("getVisibleThreadsForProject", () => {
       threads.map((thread) => thread.id),
     );
     expect(result.hiddenThreads).toEqual([]);
+  });
+});
+
+describe("resolveSidebarThreadPreviewLimit", () => {
+  it("uses the configured preview count in classic nested view", () => {
+    expect(
+      resolveSidebarThreadPreviewLimit({
+        sidebarViewMode: "nested",
+        configuredPreviewCount: 6,
+        focusedPreviewCount: 30,
+      }),
+    ).toBe(6);
+  });
+
+  it("uses the Focus view product limit instead of the configured preview count", () => {
+    expect(
+      resolveSidebarThreadPreviewLimit({
+        sidebarViewMode: "focused",
+        configuredPreviewCount: 6,
+        focusedPreviewCount: 30,
+      }),
+    ).toBe(30);
+  });
+});
+
+describe("resolveNextPagedThreadVisibleCount", () => {
+  it("advances by one Focus page at a time", () => {
+    expect(
+      resolveNextPagedThreadVisibleCount({
+        currentVisibleCount: undefined,
+        pageSize: 30,
+        totalThreadCount: 75,
+      }),
+    ).toBe(60);
+
+    expect(
+      resolveNextPagedThreadVisibleCount({
+        currentVisibleCount: 60,
+        pageSize: 30,
+        totalThreadCount: 75,
+      }),
+    ).toBe(75);
+  });
+
+  it("caps the visible count at the total thread count", () => {
+    expect(
+      resolveNextPagedThreadVisibleCount({
+        currentVisibleCount: 30,
+        pageSize: 30,
+        totalThreadCount: 31,
+      }),
+    ).toBe(31);
   });
 });
 

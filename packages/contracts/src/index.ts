@@ -1,5 +1,7 @@
 export * from "./baseSchemas.ts";
 export * from "./auth.ts";
+export * from "./browser.ts";
+export * from "./computerUse.ts";
 export * from "./environment.ts";
 export * from "./desktopBootstrap.ts";
 export * from "./remoteAccess.ts";
@@ -19,4 +21,5 @@ export * from "./orchestration.ts";
 export * from "./editor.ts";
 export * from "./project.ts";
 export * from "./filesystem.ts";
+export * from "./review.ts";
 export * from "./rpc.ts";

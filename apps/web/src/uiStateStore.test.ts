@@ -9,6 +9,7 @@ import {
   PERSISTED_STATE_KEY,
   type PersistedUiState,
   persistState,
+  promoteFocusedProjects,
   reorderProjects,
   setDefaultAdvertisedEndpointKey,
   setProjectExpanded,
@@ -17,14 +18,19 @@ import {
   syncThreads,
   type UiState,
 } from "./uiStateStore";
+import { DEFAULT_CONTEXT_QUICK_ACTION_IDS } from "./contextQuickActions";
 
 function makeUiState(overrides: Partial<UiState> = {}): UiState {
   return {
     projectExpandedById: {},
     projectOrder: [],
+    focusedProjectOrder: [],
     threadLastVisitedAtById: {},
     threadChangedFilesExpandedById: {},
+    lastActiveThreadKeyByProjectKey: {},
     defaultAdvertisedEndpointKey: null,
+    contextQuickActionIds: [...DEFAULT_CONTEXT_QUICK_ACTION_IDS],
+    projectQuickActionIdsByProjectKey: {},
     ...overrides,
   };
 }
@@ -102,6 +108,43 @@ describe("uiStateStore pure functions", () => {
     const next = reorderProjects(initialState, [ProjectId.make("missing")], [project2]);
 
     expect(next).toBe(initialState);
+  });
+
+  it("promoteFocusedProjects moves a project key to the front", () => {
+    const project1 = ProjectId.make("project-1");
+    const project2 = ProjectId.make("project-2");
+    const project3 = ProjectId.make("project-3");
+    const initialState = makeUiState({
+      focusedProjectOrder: [project1, project2],
+    });
+
+    const next = promoteFocusedProjects(initialState, [project3]);
+
+    expect(next.focusedProjectOrder).toEqual([project3, project1, project2]);
+  });
+
+  it("promoteFocusedProjects moves grouped member keys together", () => {
+    const keyALocal = "env-local:proj-a";
+    const keyARemote = "env-remote:proj-a";
+    const keyB = "env-local:proj-b";
+    const initialState = makeUiState({
+      focusedProjectOrder: [keyB, keyARemote],
+    });
+
+    const next = promoteFocusedProjects(initialState, [keyALocal, keyARemote]);
+
+    expect(next.focusedProjectOrder).toEqual([keyALocal, keyARemote, keyB]);
+  });
+
+  it("promoteFocusedProjects is a no-op for empty input and unchanged order", () => {
+    const keyA = "env-local:proj-a";
+    const keyB = "env-local:proj-b";
+    const initialState = makeUiState({
+      focusedProjectOrder: [keyA, keyB],
+    });
+
+    expect(promoteFocusedProjects(initialState, [])).toBe(initialState);
+    expect(promoteFocusedProjects(initialState, [keyA])).toBe(initialState);
   });
 
   it("setDefaultAdvertisedEndpointKey stores endpoint preference by stable key", () => {
@@ -261,6 +304,43 @@ describe("uiStateStore pure functions", () => {
 
     expect(next.projectOrder).toEqual([keyProject2, keyProject1]);
     expect(next.projectExpandedById[keyProject2]).toBe(false);
+  });
+
+  it("syncProjects preserves focused project order across project key churn at the same cwd", () => {
+    const keyProject1 = "env-local:/tmp/project-1";
+    const keyProject2 = "env-local:/tmp/project-2";
+    const nextKeyProject1 = "env-local:/tmp/project-1-renamed-key";
+    const nextKeyProject2 = "env-local:/tmp/project-2-renamed-key";
+    const initialState = syncProjects(
+      makeUiState({
+        focusedProjectOrder: [keyProject2, keyProject1],
+      }),
+      [
+        { key: keyProject1, logicalKey: keyProject1, cwd: "/tmp/project-1" },
+        { key: keyProject2, logicalKey: keyProject2, cwd: "/tmp/project-2" },
+      ],
+    );
+
+    const next = syncProjects(initialState, [
+      { key: nextKeyProject1, logicalKey: nextKeyProject1, cwd: "/tmp/project-1" },
+      { key: nextKeyProject2, logicalKey: nextKeyProject2, cwd: "/tmp/project-2" },
+    ]);
+
+    expect(next.focusedProjectOrder).toEqual([nextKeyProject2, nextKeyProject1]);
+  });
+
+  it("syncProjects removes stale focused project order entries for deleted projects", () => {
+    const keyProject1 = "env-local:/tmp/project-1";
+    const keyProject2 = "env-local:/tmp/project-2";
+    const initialState = makeUiState({
+      focusedProjectOrder: [keyProject2, keyProject1],
+    });
+
+    const next = syncProjects(initialState, [
+      { key: keyProject1, logicalKey: keyProject1, cwd: "/tmp/project-1" },
+    ]);
+
+    expect(next.focusedProjectOrder).toEqual([keyProject1]);
   });
 
   it("syncProjects returns a new state when only project cwd changes", () => {
@@ -445,27 +525,27 @@ describe("uiStateStore pure functions", () => {
   });
 });
 
-describe("uiStateStore persistence round-trip", () => {
-  function createLocalStorageStub(): Storage {
-    const store = new Map<string, string>();
-    return {
-      clear: () => {
-        store.clear();
-      },
-      getItem: (key) => store.get(key) ?? null,
-      key: (index) => [...store.keys()][index] ?? null,
-      get length() {
-        return store.size;
-      },
-      removeItem: (key) => {
-        store.delete(key);
-      },
-      setItem: (key, value) => {
-        store.set(key, value);
-      },
-    };
-  }
+function createLocalStorageStub(): Storage {
+  const store = new Map<string, string>();
+  return {
+    clear: () => {
+      store.clear();
+    },
+    getItem: (key) => store.get(key) ?? null,
+    key: (index) => [...store.keys()][index] ?? null,
+    get length() {
+      return store.size;
+    },
+    removeItem: (key) => {
+      store.delete(key);
+    },
+    setItem: (key, value) => {
+      store.set(key, value);
+    },
+  };
+}
 
+describe("uiStateStore persistence round-trip", () => {
   let localStorageStub: Storage;
 
   beforeEach(() => {
@@ -566,6 +646,28 @@ describe("uiStateStore persistence round-trip", () => {
     const rehydrated = syncProjects(makeUiState(), [projectA, projectB, projectC]);
 
     expect(rehydrated.projectOrder).toEqual([projectC.key, projectA.key, projectB.key]);
+  });
+
+  it("preserves focused project order across restart", () => {
+    const projectA = { key: "kFocusedA", logicalKey: "kFocusedA", cwd: "/focused-projA" };
+    const projectB = { key: "kFocusedB", logicalKey: "kFocusedB", cwd: "/focused-projB" };
+    const projectC = { key: "kFocusedC", logicalKey: "kFocusedC", cwd: "/focused-projC" };
+
+    let state = syncProjects(makeUiState(), [projectA, projectB, projectC]);
+    state = promoteFocusedProjects(state, [projectC.key]);
+    expect(state.focusedProjectOrder).toEqual([projectC.key]);
+    persistState(state);
+
+    const persisted = JSON.parse(
+      localStorageStub.getItem(PERSISTED_STATE_KEY) ?? "{}",
+    ) as PersistedUiState;
+    expect(persisted.focusedProjectOrderCwds).toEqual([projectC.cwd]);
+
+    hydratePersistedProjectState(persisted);
+    const rehydrated = syncProjects(makeUiState(), [projectA, projectB, projectC]);
+
+    expect(rehydrated.focusedProjectOrder).toEqual([projectC.key]);
+    expect(rehydrated.projectOrder).toEqual([projectA.key, projectB.key, projectC.key]);
   });
 
   it("persists the default advertised endpoint preference", () => {
