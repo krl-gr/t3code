@@ -1,14 +1,14 @@
 {
-  "name": "t3",
+  "name": "@updotcomputer/cli",
   "version": "0.0.24",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/krl-gr/upcomputer",
+    "url": "git+https://github.com/krl-gr/upcomputer.git",
     "directory": "apps/server"
   },
   "bin": {
-    "t3": "./dist/bin.mjs"
+    "upcomputer": "dist/bin.mjs"
   },
   "files": [
     "dist"

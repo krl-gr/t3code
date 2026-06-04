@@ -65,6 +65,8 @@ interface PublishIconBackup {
   readonly backupPath: string;
 }
 
+const PUBLISH_ICON_BACKUP_DIR_NAME = ".publish-icon-backups";
+
 const applyPublishIconOverrides = Effect.fn("applyPublishIconOverrides")(function* (
   repoRoot: string,
   serverDir: string,
@@ -72,11 +74,15 @@ const applyPublishIconOverrides = Effect.fn("applyPublishIconOverrides")(functio
   const path = yield* Path.Path;
   const fs = yield* FileSystem.FileSystem;
   const backups: PublishIconBackup[] = [];
+  const backupDir = path.join(serverDir, PUBLISH_ICON_BACKUP_DIR_NAME);
+
+  yield* fs.remove(backupDir, { recursive: true, force: true }).pipe(Effect.ignore({ log: true }));
+  yield* fs.makeDirectory(backupDir, { recursive: true });
 
   for (const override of PUBLISH_ICON_OVERRIDES) {
     const sourcePath = path.join(repoRoot, override.sourceRelativePath);
     const targetPath = path.join(serverDir, override.targetRelativePath);
-    const backupPath = `${targetPath}.publish-bak`;
+    const backupPath = path.join(backupDir, path.basename(targetPath));
 
     if (!(yield* fs.exists(sourcePath))) {
       return yield* new CliError({
@@ -188,6 +194,7 @@ const publishCmd = Command.make(
     tag: Flag.string("tag").pipe(Flag.withDefault("latest")),
     access: Flag.string("access").pipe(Flag.withDefault("public")),
     appVersion: Flag.string("app-version").pipe(Flag.optional),
+    otp: Flag.string("otp").pipe(Flag.optional),
     provenance: Flag.boolean("provenance").pipe(Flag.withDefault(false)),
     dryRun: Flag.boolean("dry-run").pipe(Flag.withDefault(false)),
     verbose: Flag.boolean("verbose").pipe(Flag.withDefault(false)),
@@ -248,6 +255,7 @@ const publishCmd = Command.make(
         () =>
           Effect.gen(function* () {
             const args = ["publish", "--access", config.access, "--tag", config.tag];
+            if (Option.isSome(config.otp)) args.push("--otp", config.otp.value);
             if (config.provenance) args.push("--provenance");
             if (config.dryRun) args.push("--dry-run");
 
@@ -271,6 +279,12 @@ const publishCmd = Command.make(
               ),
             );
             yield* fs.rename(backupPath, packageJsonPath);
+            yield* fs
+              .remove(path.join(serverDir, PUBLISH_ICON_BACKUP_DIR_NAME), {
+                recursive: true,
+                force: true,
+              })
+              .pipe(Effect.ignore({ log: true }));
             if (config.verbose) yield* Effect.log("[cli] Restored original package.json");
           }),
       );
