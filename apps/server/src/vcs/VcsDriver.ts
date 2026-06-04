@@ -74,4 +74,4 @@ export interface VcsDriverShape {
   ) => Effect.Effect<ReviewDiffPreviewResult, VcsError>;
 }
 
-export class VcsDriver extends Context.Service<VcsDriver, VcsDriverShape>()("t3/vcs/VcsDriver") {}
+export class VcsDriver extends Context.Service<VcsDriver, VcsDriverShape>()("@updotcomputer/cli/vcs/VcsDriver") {}

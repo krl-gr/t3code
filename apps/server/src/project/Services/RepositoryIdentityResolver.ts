@@ -9,4 +9,4 @@ export interface RepositoryIdentityResolverShape {
 export class RepositoryIdentityResolver extends Context.Service<
   RepositoryIdentityResolver,
   RepositoryIdentityResolverShape
->()("t3/project/Services/RepositoryIdentityResolver") {}
+>()("@updotcomputer/cli/project/Services/RepositoryIdentityResolver") {}

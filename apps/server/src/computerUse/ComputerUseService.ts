@@ -93,7 +93,7 @@ export interface ComputerUseServiceShape {
 export class ComputerUseService extends Context.Service<
   ComputerUseService,
   ComputerUseServiceShape
->()("t3/computerUse/ComputerUseService") {}
+>()("@updotcomputer/cli/computerUse/ComputerUseService") {}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);

@@ -8,5 +8,5 @@ export interface ServerEnvironmentShape {
 }
 
 export class ServerEnvironment extends Context.Service<ServerEnvironment, ServerEnvironmentShape>()(
-  "t3/environment/Services/ServerEnvironment",
+  "@updotcomputer/cli/environment/Services/ServerEnvironment",
 ) {}

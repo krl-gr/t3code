@@ -75,4 +75,4 @@ export interface AuthPairingLinkRepositoryShape {
 export class AuthPairingLinkRepository extends Context.Service<
   AuthPairingLinkRepository,
   AuthPairingLinkRepositoryShape
->()("t3/persistence/Services/AuthPairingLinks/AuthPairingLinkRepository") {}
+>()("@updotcomputer/cli/persistence/Services/AuthPairingLinks/AuthPairingLinkRepository") {}

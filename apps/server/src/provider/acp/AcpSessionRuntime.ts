@@ -136,7 +136,7 @@ interface EnsureActiveAssistantSegmentResult {
 }
 
 export class AcpSessionRuntime extends Context.Service<AcpSessionRuntime, AcpSessionRuntimeShape>()(
-  "t3/provider/acp/AcpSessionRuntime",
+  "@updotcomputer/cli/provider/acp/AcpSessionRuntime",
 ) {
   static layer(
     options: AcpSessionRuntimeOptions,

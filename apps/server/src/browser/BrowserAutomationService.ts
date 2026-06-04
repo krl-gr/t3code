@@ -138,7 +138,7 @@ export interface BrowserAutomationServiceShape {
 export class BrowserAutomationService extends Context.Service<
   BrowserAutomationService,
   BrowserAutomationServiceShape
->()("t3/browser/BrowserAutomationService") {}
+>()("@updotcomputer/cli/browser/BrowserAutomationService") {}
 
 function blockedResult(input: {
   readonly action: BrowserActionKind;

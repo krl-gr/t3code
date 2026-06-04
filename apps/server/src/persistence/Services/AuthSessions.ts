@@ -92,4 +92,4 @@ export interface AuthSessionRepositoryShape {
 export class AuthSessionRepository extends Context.Service<
   AuthSessionRepository,
   AuthSessionRepositoryShape
->()("t3/persistence/Services/AuthSessions/AuthSessionRepository") {}
+>()("@updotcomputer/cli/persistence/Services/AuthSessions/AuthSessionRepository") {}

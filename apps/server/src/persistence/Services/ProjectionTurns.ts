@@ -177,4 +177,4 @@ export interface ProjectionTurnRepositoryShape {
 export class ProjectionTurnRepository extends Context.Service<
   ProjectionTurnRepository,
   ProjectionTurnRepositoryShape
->()("t3/persistence/Services/ProjectionTurns/ProjectionTurnRepository") {}
+>()("@updotcomputer/cli/persistence/Services/ProjectionTurns/ProjectionTurnRepository") {}

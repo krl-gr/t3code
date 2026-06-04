@@ -24,7 +24,7 @@ export interface ReviewServiceShape {
 }
 
 export class ReviewService extends Context.Service<ReviewService, ReviewServiceShape>()(
-  "t3/review/ReviewService",
+  "@updotcomputer/cli/review/ReviewService",
 ) {}
 
 export const make = Effect.fn("makeReviewService")(function* () {

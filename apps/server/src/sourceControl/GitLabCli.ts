@@ -97,7 +97,7 @@ export interface GitLabCliShape {
 }
 
 export class GitLabCli extends Context.Service<GitLabCli, GitLabCliShape>()(
-  "t3/sourceControl/GitLabCli",
+  "@updotcomputer/cli/sourceControl/GitLabCli",
 ) {}
 
 function isVcsProcessSpawnError(error: unknown): boolean {

@@ -89,4 +89,4 @@ export interface ProviderSessionRuntimeRepositoryShape {
 export class ProviderSessionRuntimeRepository extends Context.Service<
   ProviderSessionRuntimeRepository,
   ProviderSessionRuntimeRepositoryShape
->()("t3/persistence/Services/ProviderSessionRuntime/ProviderSessionRuntimeRepository") {}
+>()("@updotcomputer/cli/persistence/Services/ProviderSessionRuntime/ProviderSessionRuntimeRepository") {}

@@ -288,7 +288,7 @@ export interface KeybindingsShape {
  * Keybindings - Service tag for keybinding configuration operations.
  */
 export class Keybindings extends Context.Service<Keybindings, KeybindingsShape>()(
-  "t3/keybindings",
+  "@updotcomputer/cli/keybindings",
 ) {}
 
 const makeKeybindings = Effect.gen(function* () {

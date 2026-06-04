@@ -84,4 +84,4 @@ export interface ProviderInstanceRegistryShape {
 export class ProviderInstanceRegistry extends Context.Service<
   ProviderInstanceRegistry,
   ProviderInstanceRegistryShape
->()("t3/provider/Services/ProviderInstanceRegistry") {}
+>()("@updotcomputer/cli/provider/Services/ProviderInstanceRegistry") {}

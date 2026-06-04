@@ -75,4 +75,4 @@ export interface ProjectionThreadSessionRepositoryShape {
 export class ProjectionThreadSessionRepository extends Context.Service<
   ProjectionThreadSessionRepository,
   ProjectionThreadSessionRepositoryShape
->()("t3/persistence/Services/ProjectionThreadSessions/ProjectionThreadSessionRepository") {}
+>()("@updotcomputer/cli/persistence/Services/ProjectionThreadSessions/ProjectionThreadSessionRepository") {}
