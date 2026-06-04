@@ -7,8 +7,6 @@ visual surface. Keep Codex CLI, Cursor CLI, Claude Code, Pi, OpenCode, your
 editor, and your git workflow. Add durable threads, terminals, diffs, branches,
 source-control actions, and local or remote environment controls around them.
 
-![Up.computer desktop workspace](./apps/marketing/public/upcomputer-surface.png)
-
 ## Status
 
 Up.computer is an alpha project. It is usable, but the app and repository are
@@ -72,6 +70,15 @@ bun run dev:marketing
 - Commit, push, publish repositories, and open pull requests from the app.
 - Work against local, network, and SSH-backed environments as that support
   matures.
+
+For a fuller overview of the product surface, see
+[FEATURES.md](./FEATURES.md).
+
+## Product Philosophy
+
+Up.computer is designed as an agentic workspace that integrates with your real
+development tools instead of replacing them. For more detail, see
+[Philosophy.md](./Philosophy.md).
 
 ## Repository Layout
 
