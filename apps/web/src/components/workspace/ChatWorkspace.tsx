@@ -72,6 +72,7 @@ import { ChatWorkspacePanel } from "./ChatWorkspacePanel";
 
 const CHAT_PANEL_COMPONENT_ID = "chatContainer";
 const WORKSPACE_PERSIST_DEBOUNCE_MS = 250;
+const TOP_RIGHT_HEADER_EDGE_TOLERANCE_PX = 2;
 
 type WorkspaceRestorePhase = "pending" | "restoring" | "settled";
 type StartupRoutePolicy = "restore-saved-active";
@@ -221,6 +222,36 @@ function DockviewHeaderIconButton(props: {
   );
 }
 
+function getDockviewHeaderElements(actionsElement: HTMLElement | null): {
+  dockviewElement: HTMLElement | null;
+  headerElement: HTMLElement | null;
+  tabsContainer: HTMLElement | null;
+} {
+  const headerElement = actionsElement?.closest(".dv-tabs-and-actions-container");
+  const tabsContainer = headerElement?.querySelector(".dv-tabs-container");
+  const dockviewElement = actionsElement?.closest(".t3code-dockview-theme");
+
+  return {
+    dockviewElement: dockviewElement instanceof HTMLElement ? dockviewElement : null,
+    headerElement: headerElement instanceof HTMLElement ? headerElement : null,
+    tabsContainer: tabsContainer instanceof HTMLElement ? tabsContainer : null,
+  };
+}
+
+function isTopRightDockviewHeader(actionsElement: HTMLElement | null): boolean {
+  const { dockviewElement, headerElement } = getDockviewHeaderElements(actionsElement);
+  if (!dockviewElement || !headerElement) {
+    return false;
+  }
+
+  const dockviewRect = dockviewElement.getBoundingClientRect();
+  const headerRect = headerElement.getBoundingClientRect();
+  return (
+    Math.abs(headerRect.top - dockviewRect.top) <= TOP_RIGHT_HEADER_EDGE_TOLERANCE_PX &&
+    Math.abs(headerRect.right - dockviewRect.right) <= TOP_RIGHT_HEADER_EDGE_TOLERANCE_PX
+  );
+}
+
 function DockviewPrefixHeaderActions(props: IDockviewHeaderActionsProps) {
   const sidebar = useSidebar();
   const isPrimaryGroup = props.containerApi.groups[0]?.id === props.group.id;
@@ -255,6 +286,7 @@ function DockviewPrefixHeaderActions(props: IDockviewHeaderActionsProps) {
 function DockviewRightHeaderActions(props: IDockviewHeaderActionsProps) {
   const { newThreadShortcutLabel, onCreateDraftPanel } = useChatWorkspaceContext();
   const actionsRef = useRef<HTMLDivElement | null>(null);
+  const [reserveWindowControlsInset, setReserveWindowControlsInset] = useState(false);
   const [overflowMenuItems, setOverflowMenuItems] = useState<
     Array<{ id: string; title: string; isActive: boolean }>
   >([]);
@@ -264,9 +296,8 @@ function DockviewRightHeaderActions(props: IDockviewHeaderActionsProps) {
 
   const updateOverflowMenuItems = useCallback(() => {
     const actionsElement = actionsRef.current;
-    const headerElement = actionsElement?.closest(".dv-tabs-and-actions-container");
-    const tabsContainer = headerElement?.querySelector(".dv-tabs-container");
-    if (!(tabsContainer instanceof HTMLElement)) {
+    const { tabsContainer } = getDockviewHeaderElements(actionsElement);
+    if (!tabsContainer) {
       setOverflowMenuItems([]);
       return;
     }
@@ -323,6 +354,7 @@ function DockviewRightHeaderActions(props: IDockviewHeaderActionsProps) {
       }
       animationFrameId = window.requestAnimationFrame(() => {
         animationFrameId = null;
+        setReserveWindowControlsInset(isTopRightDockviewHeader(actionsRef.current));
         updateOverflowMenuItems();
       });
     };
@@ -330,18 +362,21 @@ function DockviewRightHeaderActions(props: IDockviewHeaderActionsProps) {
     scheduleUpdate();
 
     const actionsElement = actionsRef.current;
-    const headerElement = actionsElement?.closest(".dv-tabs-and-actions-container");
-    const tabsContainer = headerElement?.querySelector(".dv-tabs-container");
+    const { dockviewElement, headerElement, tabsContainer } =
+      getDockviewHeaderElements(actionsElement);
     const resizeObserver = new ResizeObserver(scheduleUpdate);
-    if (headerElement instanceof HTMLElement) {
+    if (dockviewElement) {
+      resizeObserver.observe(dockviewElement);
+    }
+    if (headerElement) {
       resizeObserver.observe(headerElement);
     }
-    if (tabsContainer instanceof HTMLElement) {
+    if (tabsContainer) {
       resizeObserver.observe(tabsContainer);
     }
 
     const mutationObserver = new MutationObserver(scheduleUpdate);
-    if (tabsContainer instanceof HTMLElement) {
+    if (tabsContainer) {
       mutationObserver.observe(tabsContainer, {
         attributeFilter: ["class", "style"],
         attributes: true,
@@ -379,7 +414,14 @@ function DockviewRightHeaderActions(props: IDockviewHeaderActionsProps) {
   ]);
 
   return (
-    <div ref={actionsRef} className="flex h-full items-start gap-1 px-2 pt-2">
+    <div
+      ref={actionsRef}
+      className={cn(
+        "flex h-full items-start gap-1 px-2 pt-2",
+        reserveWindowControlsInset &&
+          "wco:pr-[calc(100vw-env(titlebar-area-width)-env(titlebar-area-x)+8px)]",
+      )}
+    >
       {overflowMenuItems.length > 0 ? (
         <Menu>
           <MenuTrigger
