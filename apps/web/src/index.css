@@ -95,7 +95,7 @@
   --radius: 0.625rem;
   --background: var(--color-white);
   --app-chrome-background: var(--background);
-  --app-content-background: --alpha(var(--color-white) / 50%);
+  --app-content-background: --alpha(var(--color-white) / 80%);
   --foreground: var(--color-neutral-800);
   --card: var(--color-white);
   --card-foreground: var(--color-neutral-800);
@@ -553,10 +553,14 @@ label:has(> select#reasoning-effort) select {
 .chat-markdown :not(pre) > code {
   border: 1px solid var(--border);
   border-radius: 0.375rem;
-  background: var(--muted);
+  background: rgb(239 239 239 / 95%);
   padding: 0.1rem 0.35rem;
   color: var(--foreground);
   font-size: 0.75rem;
+}
+
+.dark .chat-markdown :not(pre) > code {
+  background: var(--muted);
 }
 
 .chat-markdown-file-link {
@@ -605,8 +609,12 @@ label:has(> select#reasoning-effort) select {
   overflow-x: auto;
   border: 1px solid var(--border);
   border-radius: 0.75rem;
-  background: var(--muted);
+  background: rgb(239 239 239 / 95%);
   padding: 0.8rem 0.9rem;
+}
+
+.dark .chat-markdown pre {
+  background: var(--muted);
 }
 
 .chat-markdown pre code {
@@ -680,7 +688,11 @@ label:has(> select#reasoning-effort) select {
 }
 
 .chat-markdown .chat-markdown-shiki .shiki {
-  background: color-mix(in srgb, var(--muted) 78%, var(--background)) !important;
+  background: rgb(239 239 239 / 95%) !important;
+}
+
+.dark .chat-markdown .chat-markdown-shiki .shiki {
+  background: var(--muted) !important;
 }
 
 .chat-markdown table {

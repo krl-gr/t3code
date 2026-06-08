@@ -1,6 +1,7 @@
 import { memo, useRef } from "react";
-import { CopyIcon, CheckIcon } from "lucide-react";
+import { CheckIcon } from "lucide-react";
 import { Button } from "../ui/button";
+import { MessageCopyIcon } from "./MessageActionIcons";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 import { cn } from "~/lib/utils";
 import { anchoredToastManager } from "../ui/toast";
@@ -45,7 +46,7 @@ export const MessageCopyButton = memo(function MessageCopyButton({
   className,
 }: {
   text: string;
-  size?: "xs" | "icon-xs";
+  size?: "xs" | "icon-xs" | "icon-sm";
   variant?: "outline" | "ghost";
   className?: string;
 }) {
@@ -72,7 +73,11 @@ export const MessageCopyButton = memo(function MessageCopyButton({
           />
         }
       >
-        {isCopied ? <CheckIcon className="size-3 text-success" /> : <CopyIcon className="size-3" />}
+        {isCopied ? (
+          <CheckIcon className="size-3 text-success" />
+        ) : (
+          <MessageCopyIcon className="size-4" />
+        )}
       </TooltipTrigger>
       <TooltipPopup>
         <p>Copy to clipboard</p>

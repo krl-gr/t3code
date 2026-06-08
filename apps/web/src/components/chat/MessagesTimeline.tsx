@@ -28,17 +28,18 @@ import {
 import ChatMarkdown from "../ChatMarkdown";
 import {
   BotIcon,
+  ChevronsDownUpIcon,
+  ChevronsUpDownIcon,
   CheckIcon,
   CircleAlertIcon,
+  FileDiffIcon,
   EyeIcon,
-  GitBranchIcon,
   GlobeIcon,
   HammerIcon,
   MousePointer2Icon,
   type LucideIcon,
   SquarePenIcon,
   TerminalIcon,
-  Undo2Icon,
   WrenchIcon,
   ZapIcon,
 } from "lucide-react";
@@ -47,6 +48,7 @@ import { buildExpandedImagePreview, ExpandedImagePreview } from "./ExpandedImage
 import { ProposedPlanCard } from "./ProposedPlanCard";
 import { ChangedFilesTree } from "./ChangedFilesTree";
 import { DiffStatLabel, hasNonZeroStat } from "./DiffStatLabel";
+import { MessageForkIcon, MessageUndoIcon } from "./MessageActionIcons";
 import { MessageCopyButton } from "./MessageCopyButton";
 import {
   computeStableMessagesTimelineRows,
@@ -280,7 +282,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
 
     return (
       <div className="flex h-full items-center justify-center">
-        <p className="max-w-[min(32rem,calc(100%-2rem))] truncate bg-gradient-to-b from-muted-foreground/45 to-muted-foreground/20 bg-clip-text text-center text-2xl font-medium text-transparent tracking-normal">
+        <p className="max-w-[min(32rem,calc(100%-2rem))] truncate text-center text-sm leading-relaxed text-muted-foreground/60">
           {emptyPrompt}
         </p>
       </div>
@@ -355,7 +357,7 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
 
   return (
     <div className="flex justify-end">
-      <div className="group relative max-w-[80%] rounded-2xl rounded-br-sm border border-border bg-secondary px-4 py-3">
+      <div className="group relative max-w-[80%] rounded-2xl rounded-br-sm border border-border bg-white/90 px-4 py-3 dark:bg-secondary">
         {userImages.length > 0 && (
           <div className="mb-2 grid max-w-[420px] grid-cols-2 gap-2">
             {userImages.map((image: NonNullable<TimelineMessage["attachments"]>[number]) => (
@@ -381,7 +383,7 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
                     />
                   </button>
                 ) : (
-                  <div className="flex min-h-[72px] items-center justify-center px-2 py-3 text-center text-[11px] text-muted-foreground/70">
+                  <div className="flex min-h-[72px] items-center justify-center px-2 py-3 text-center text-sm leading-relaxed text-muted-foreground/70">
                     {image.name}
                   </div>
                 )}
@@ -394,17 +396,21 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
           terminalContexts={terminalContexts}
           skills={ctx.skills}
           footer={
-            <>
-              <div className="flex items-center gap-1.5 opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover:opacity-100">
+            <div className="relative ml-auto min-h-8 min-w-[7rem]">
+              <p className="absolute inset-y-0 right-0 flex items-center text-right text-sm leading-relaxed text-muted-foreground/50 transition-opacity duration-200 group-focus-within:opacity-0 group-hover:opacity-0">
+                {formatTimestamp(row.message.createdAt, ctx.timestampFormat)}
+              </p>
+              <div className="absolute inset-y-0 right-0 flex items-center gap-1.5 opacity-0 transition-opacity duration-200 group-focus-within:opacity-100 group-hover:opacity-100">
                 {displayedUserMessage.copyText && (
-                  <MessageCopyButton text={displayedUserMessage.copyText} />
+                  <MessageCopyButton
+                    text={displayedUserMessage.copyText}
+                    size="icon-sm"
+                    className="shadow-none before:hidden"
+                  />
                 )}
                 {canRevertAgentWork && <RevertUserMessageButton messageId={row.message.id} />}
               </div>
-              <p className="text-right text-xs text-muted-foreground/50">
-                {formatTimestamp(row.message.createdAt, ctx.timestampFormat)}
-              </p>
-            </>
+            </div>
           }
         />
       </div>
@@ -419,13 +425,14 @@ function RevertUserMessageButton({ messageId }: { messageId: MessageId }) {
   return (
     <Button
       type="button"
-      size="xs"
+      size="icon-sm"
       variant="outline"
       disabled={activity.isRevertingCheckpoint || activity.isWorking}
+      className="shadow-none before:hidden"
       onClick={() => ctx.onRevertUserMessage(messageId)}
       title="Revert to this message"
     >
-      <Undo2Icon className="size-3" />
+      <MessageUndoIcon className="size-4" />
     </Button>
   );
 }
@@ -433,13 +440,19 @@ function RevertUserMessageButton({ messageId }: { messageId: MessageId }) {
 function AssistantTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" }> }) {
   const ctx = use(TimelineRowCtx);
   const messageText = row.message.text || (row.message.streaming ? "" : "(empty response)");
+  const assistantCopyState = resolveAssistantMessageCopyState({
+    text: row.message.text ?? null,
+    showCopyButton: row.showAssistantCopyButton,
+    streaming: row.assistantCopyStreaming,
+  });
+  const hasAssistantActions = !row.message.streaming || assistantCopyState.visible;
 
   return (
     <>
       {row.showCompletionDivider && (
         <AssistantCompletionDivider completionSummary={row.completionSummary} />
       )}
-      <div className="min-w-0 px-1 py-0.5">
+      <div className="min-w-0 py-0.5">
         <ChatMarkdown
           text={messageText}
           cwd={ctx.markdownCwd}
@@ -452,8 +465,15 @@ function AssistantTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "mess
           resolvedTheme={ctx.resolvedTheme}
           onOpenTurnDiff={ctx.onOpenTurnDiff}
         />
-        <div className="mt-1.5 flex items-center gap-2">
-          <p className="text-[10px] text-muted-foreground/30">
+        <div className="group/assistant-actions relative mt-1.5 min-h-8 w-fit min-w-[10rem]">
+          <p
+            className={cn(
+              "absolute inset-y-0 left-0 flex items-center text-sm leading-relaxed text-muted-foreground/30",
+              hasAssistantActions
+                ? "transition-opacity duration-200 group-focus-within/assistant-actions:opacity-0 group-hover/assistant-actions:opacity-0"
+                : null,
+            )}
+          >
             {row.message.streaming ? (
               <LiveMessageMeta
                 createdAt={row.message.createdAt}
@@ -468,10 +488,14 @@ function AssistantTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "mess
               )
             )}
           </p>
-          {!row.message.streaming ? (
-            <ForkAssistantMessageButton messageId={row.message.id} />
+          {hasAssistantActions ? (
+            <div className="absolute inset-y-0 left-0 flex items-center gap-1.5 opacity-0 transition-opacity duration-200 group-focus-within/assistant-actions:opacity-100 group-hover/assistant-actions:opacity-100">
+              {!row.message.streaming ? (
+                <ForkAssistantMessageButton messageId={row.message.id} />
+              ) : null}
+              <AssistantCopyButton copyState={assistantCopyState} />
+            </div>
           ) : null}
-          <AssistantCopyButton row={row} />
         </div>
       </div>
     </>
@@ -483,19 +507,17 @@ function ForkAssistantMessageButton({ messageId }: { messageId: MessageId }) {
   const activity = use(TimelineRowActivityCtx);
 
   return (
-    <div className="flex items-center opacity-0 transition-opacity duration-200 group-hover/assistant:opacity-100">
-      <Button
-        type="button"
-        size="icon-xs"
-        variant="outline"
-        disabled={activity.isWorking || activity.isRevertingCheckpoint}
-        className="border-border/50 bg-background/35 text-muted-foreground/45 shadow-none hover:border-border/70 hover:bg-background/55 hover:text-muted-foreground/70"
-        onClick={() => ctx.onForkAssistantMessage(messageId)}
-        title="Fork from message"
-      >
-        <GitBranchIcon className="size-3" />
-      </Button>
-    </div>
+    <Button
+      type="button"
+      size="icon-sm"
+      variant="outline"
+      disabled={activity.isWorking || activity.isRevertingCheckpoint}
+      className="shadow-none before:hidden"
+      onClick={() => ctx.onForkAssistantMessage(messageId)}
+      title="Fork from message"
+    >
+      <MessageForkIcon className="size-4" />
+    </Button>
   );
 }
 
@@ -503,7 +525,7 @@ function AssistantCompletionDivider({ completionSummary }: { completionSummary: 
   return (
     <div className="my-3 flex items-center gap-3">
       <span className="h-px flex-1 bg-border" />
-      <span className="rounded-full border border-border bg-background px-2.5 py-1 text-[10px] uppercase tracking-[0.14em] text-muted-foreground/80">
+      <span className="rounded-full border border-border bg-background px-2.5 py-1 text-sm leading-relaxed text-muted-foreground/80">
         {completionSummary ? `Response • ${completionSummary}` : "Response"}
       </span>
       <span className="h-px flex-1 bg-border" />
@@ -511,26 +533,22 @@ function AssistantCompletionDivider({ completionSummary }: { completionSummary: 
   );
 }
 
-function AssistantCopyButton({ row }: { row: Extract<TimelineRow, { kind: "message" }> }) {
-  const assistantCopyState = resolveAssistantMessageCopyState({
-    text: row.message.text ?? null,
-    showCopyButton: row.showAssistantCopyButton,
-    streaming: row.assistantCopyStreaming,
-  });
-
-  if (!assistantCopyState.visible) {
+function AssistantCopyButton({
+  copyState,
+}: {
+  copyState: ReturnType<typeof resolveAssistantMessageCopyState>;
+}) {
+  if (!copyState.visible) {
     return null;
   }
 
   return (
-    <div className="flex items-center opacity-0 transition-opacity duration-200  group-hover/assistant:opacity-100">
-      <MessageCopyButton
-        text={assistantCopyState.text ?? ""}
-        size="icon-xs"
-        variant="outline"
-        className="border-border/50 bg-background/35 text-muted-foreground/45 shadow-none hover:border-border/70 hover:bg-background/55 hover:text-muted-foreground/70"
-      />
-    </div>
+    <MessageCopyButton
+      text={copyState.text ?? ""}
+      size="icon-sm"
+      variant="outline"
+      className="shadow-none before:hidden"
+    />
   );
 }
 
@@ -542,7 +560,7 @@ function ProposedPlanTimelineRow({
   const ctx = use(TimelineRowCtx);
 
   return (
-    <div className="min-w-0 px-1 py-0.5">
+    <div className="min-w-0 py-0.5">
       <ProposedPlanCard
         planMarkdown={row.proposedPlan.planMarkdown}
         environmentId={ctx.activeThreadEnvironmentId}
@@ -556,7 +574,7 @@ function ProposedPlanTimelineRow({
 function WorkingTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "working" }> }) {
   return (
     <div className="py-0.5 pl-1.5">
-      <div className="flex items-center gap-2 pt-1 text-[11px] text-muted-foreground/70">
+      <div className="flex items-center gap-2 pt-1 text-sm leading-relaxed text-muted-foreground/70">
         <span className="inline-flex items-center gap-[3px]">
           <span className="h-1 w-1 rounded-full bg-muted-foreground/30 animate-pulse" />
           <span className="h-1 w-1 rounded-full bg-muted-foreground/30 animate-pulse [animation-delay:200ms]" />
@@ -659,16 +677,16 @@ const WorkGroupSection = memo(function WorkGroupSection({
   const groupLabel = onlyToolEntries ? "Tool calls" : "Work log";
 
   return (
-    <div className="rounded-xl border border-border/45 bg-card/25 px-2 py-1.5">
+    <div className="rounded-xl border border-border bg-[#EFEFEF]/95 px-2 py-1.5 dark:bg-muted">
       {showHeader && (
         <div className="mb-1.5 flex items-center justify-between gap-2 px-0.5">
-          <p className="text-[9px] uppercase tracking-[0.16em] text-muted-foreground/55">
+          <p className="text-sm leading-relaxed text-muted-foreground/55">
             {groupLabel} ({groupedEntries.length})
           </p>
           {hasOverflow && (
             <button
               type="button"
-              className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground/55 transition-colors duration-150 hover:text-foreground/75"
+              className="text-sm leading-relaxed text-muted-foreground/55 transition-colors duration-150 hover:text-foreground/75"
               onClick={() => setIsExpanded((v) => !v)}
             >
               {isExpanded ? "Show less" : `Show ${hiddenCount} more`}
@@ -740,9 +758,9 @@ function AssistantChangedFilesSectionInner({
   const changedFileCountLabel = String(checkpointFiles.length);
 
   return (
-    <div className="mt-2 rounded-lg border border-border/80 bg-card/45 p-2.5">
-      <div className="sticky top-2 z-10 mb-1.5 flex items-center justify-between gap-2 bg-[color-mix(in_srgb,var(--card)_45%,var(--background))] before:absolute before:inset-x-0 before:-top-2 before:h-2 before:bg-[color-mix(in_srgb,var(--card)_45%,var(--background))] before:content-['']">
-        <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground/65">
+    <div className="group/changed-files mt-2 rounded-xl border border-border bg-[#EFEFEF]/95 px-2.5 pt-0 pb-2.5 dark:bg-muted">
+      <div className="sticky top-0 z-10 -mx-2.5 flex items-center justify-between gap-2 rounded-t-xl bg-[linear-gradient(to_bottom,#EFEFEFF2_0%,transparent_100%)] px-2.5 py-1.5 dark:bg-[linear-gradient(to_bottom,var(--muted)_0%,transparent_100%)]">
+        <p className="text-sm leading-relaxed text-muted-foreground/65">
           <span>Changed files ({changedFileCountLabel})</span>
           {hasNonZeroStat(summaryStat) && (
             <>
@@ -751,23 +769,33 @@ function AssistantChangedFilesSectionInner({
             </>
           )}
         </p>
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 opacity-0 transition-opacity duration-200 group-hover/changed-files:opacity-100 focus-within:opacity-100">
           <Button
             type="button"
-            size="xs"
+            size="icon-sm"
             variant="outline"
+            aria-label={allDirectoriesExpanded ? "Collapse all" : "Expand all"}
+            className="shadow-none before:hidden [box-shadow:none]"
             data-scroll-anchor-ignore
+            title={allDirectoriesExpanded ? "Collapse all" : "Expand all"}
             onClick={() => setExpanded(routeThreadKey, turnSummary.turnId, !allDirectoriesExpanded)}
           >
-            {allDirectoriesExpanded ? "Collapse all" : "Expand all"}
+            {allDirectoriesExpanded ? (
+              <ChevronsDownUpIcon className="size-4" />
+            ) : (
+              <ChevronsUpDownIcon className="size-4" />
+            )}
           </Button>
           <Button
             type="button"
-            size="xs"
+            size="icon-sm"
             variant="outline"
+            aria-label="View diff"
+            className="shadow-none before:hidden [box-shadow:none]"
+            title="View diff"
             onClick={() => onOpenTurnDiff(turnSummary.turnId, checkpointFiles[0]?.path)}
           >
-            View diff
+            <FileDiffIcon className="size-4" />
           </Button>
         </div>
       </div>
@@ -866,7 +894,7 @@ const CollapsibleUserMessageBody = memo(function CollapsibleUserMessageBody(prop
               aria-expanded={expanded}
               data-scroll-anchor-ignore
               onClick={() => setExpanded((value) => !value)}
-              className="-ml-1 h-6 rounded-md px-1.5 text-xs text-muted-foreground/72 hover:bg-muted/55 hover:text-foreground/85"
+              className="-ml-1 h-auto min-h-7 rounded-md px-1.5 text-sm leading-relaxed text-muted-foreground/72 hover:bg-muted/55 hover:text-foreground/85 sm:text-sm"
             >
               {expanded ? "Show less" : "Show full message"}
             </Button>
@@ -1005,12 +1033,12 @@ function UserMessageReviewCommentCard({ comment }: { comment: ReviewCommentConte
   );
 
   return (
-    <div className="space-y-2 rounded-lg border border-border/70 bg-background/70 p-3">
+    <div className="space-y-2 rounded-lg border border-border/70 bg-[#EFEFEF]/95 p-3 dark:bg-muted">
       <div className="space-y-1">
-        <div className="text-xs font-medium text-foreground">
+        <div className="text-sm leading-relaxed text-foreground">
           {formatWorkspaceRelativePath(comment.filePath, ctx.workspaceRoot)}
         </div>
-        <div className="text-[11px] text-muted-foreground">
+        <div className="text-sm leading-relaxed text-muted-foreground">
           {comment.sectionTitle} · {comment.rangeLabel}
         </div>
       </div>
@@ -1032,7 +1060,7 @@ function UserMessageReviewCommentCard({ comment }: { comment: ReviewCommentConte
           />
         ))}
       {renderablePatch?.kind === "raw" && (
-        <pre className="overflow-x-auto rounded-md bg-muted/40 p-2 text-xs">
+        <pre className="overflow-x-auto rounded-md bg-[#EFEFEF]/95 p-2 text-xs dark:bg-muted">
           {renderablePatch.text}
         </pre>
       )}
@@ -1236,14 +1264,14 @@ const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
         <span
           className={cn("flex size-5 shrink-0 items-center justify-center", iconConfig.className)}
         >
-          <EntryIcon className="size-3" />
+          <EntryIcon className="size-4" />
         </span>
         <div className="min-w-0 flex-1 overflow-hidden">
           {rawCommand ? (
             <div className="max-w-full">
               <p
                 className={cn(
-                  "truncate text-xs leading-5",
+                  "truncate text-sm leading-relaxed",
                   workToneClass(workEntry.tone),
                   preview ? "text-muted-foreground/70" : "",
                 )}
@@ -1286,7 +1314,7 @@ const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
               >
                 <p
                   className={cn(
-                    "truncate text-[11px] leading-5",
+                    "truncate text-sm leading-relaxed",
                     workToneClass(workEntry.tone),
                     preview ? "text-muted-foreground/70" : "",
                   )}
@@ -1298,7 +1326,7 @@ const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
                 </p>
               </TooltipTrigger>
               <TooltipPopup className="max-w-[min(720px,calc(100vw-2rem))]">
-                <p className="whitespace-pre-wrap wrap-break-word text-xs leading-5">
+                <p className="whitespace-pre-wrap wrap-break-word text-sm leading-relaxed">
                   {displayText}
                 </p>
               </TooltipPopup>
@@ -1321,7 +1349,7 @@ const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
             );
           })}
           {(workEntry.changedFiles?.length ?? 0) > 4 && (
-            <span className="px-1 text-[10px] text-muted-foreground/55">
+            <span className="px-1 text-sm leading-relaxed text-muted-foreground/55">
               +{(workEntry.changedFiles?.length ?? 0) - 4}
             </span>
           )}

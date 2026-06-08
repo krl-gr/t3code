@@ -137,7 +137,7 @@ export const ProposedPlanCard = memo(function ProposedPlanCard({
   };
 
   return (
-    <div className="rounded-[24px] border border-border/80 bg-card/70 p-4 sm:p-5">
+    <div className="rounded-[24px] border border-border/80 bg-[#EFEFEF]/95 p-4 dark:bg-muted sm:p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <Badge variant="secondary">Plan</Badge>
@@ -168,7 +168,7 @@ export const ProposedPlanCard = memo(function ProposedPlanCard({
             <ChatMarkdown text={displayedPlanMarkdown} cwd={cwd} isStreaming={false} />
           )}
           {canCollapse && !expanded ? (
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-linear-to-t from-card/95 via-card/80 to-transparent" />
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-linear-to-t from-[#EFEFEF]/95 via-[#EFEFEF]/80 to-transparent dark:from-muted dark:via-muted/80" />
           ) : null}
         </div>
         {canCollapse ? (
