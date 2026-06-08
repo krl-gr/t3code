@@ -445,7 +445,9 @@ function AssistantTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "mess
     showCopyButton: row.showAssistantCopyButton,
     streaming: row.assistantCopyStreaming,
   });
-  const hasAssistantActions = !row.message.streaming || assistantCopyState.visible;
+  const showAssistantFooter = row.showAssistantCopyButton;
+  const hasAssistantActions =
+    showAssistantFooter && (!row.message.streaming || assistantCopyState.visible);
 
   return (
     <>
@@ -465,38 +467,40 @@ function AssistantTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "mess
           resolvedTheme={ctx.resolvedTheme}
           onOpenTurnDiff={ctx.onOpenTurnDiff}
         />
-        <div className="group/assistant-actions relative mt-1.5 min-h-8 w-fit min-w-[10rem]">
-          <p
-            className={cn(
-              "absolute inset-y-0 left-0 flex items-center text-sm leading-relaxed text-muted-foreground/30",
-              hasAssistantActions
-                ? "transition-opacity duration-200 group-focus-within/assistant-actions:opacity-0 group-hover/assistant-actions:opacity-0"
-                : null,
-            )}
-          >
-            {row.message.streaming ? (
-              <LiveMessageMeta
-                createdAt={row.message.createdAt}
-                durationStart={row.durationStart}
-                timestampFormat={ctx.timestampFormat}
-              />
-            ) : (
-              formatMessageMeta(
-                row.message.createdAt,
-                formatElapsed(row.durationStart, row.message.completedAt),
-                ctx.timestampFormat,
-              )
-            )}
-          </p>
-          {hasAssistantActions ? (
-            <div className="absolute inset-y-0 left-0 flex items-center gap-1.5 opacity-0 transition-opacity duration-200 group-focus-within/assistant-actions:opacity-100 group-hover/assistant-actions:opacity-100">
-              {!row.message.streaming ? (
-                <ForkAssistantMessageButton messageId={row.message.id} />
-              ) : null}
-              <AssistantCopyButton copyState={assistantCopyState} />
-            </div>
-          ) : null}
-        </div>
+        {showAssistantFooter ? (
+          <div className="group/assistant-actions relative mt-1.5 min-h-8 w-fit min-w-[10rem]">
+            <p
+              className={cn(
+                "absolute inset-y-0 left-0 flex items-center text-sm leading-relaxed text-muted-foreground/30",
+                hasAssistantActions
+                  ? "transition-opacity duration-200 group-focus-within/assistant-actions:opacity-0 group-hover/assistant-actions:opacity-0"
+                  : null,
+              )}
+            >
+              {row.message.streaming ? (
+                <LiveMessageMeta
+                  createdAt={row.message.createdAt}
+                  durationStart={row.durationStart}
+                  timestampFormat={ctx.timestampFormat}
+                />
+              ) : (
+                formatMessageMeta(
+                  row.message.createdAt,
+                  formatElapsed(row.durationStart, row.message.completedAt),
+                  ctx.timestampFormat,
+                )
+              )}
+            </p>
+            {hasAssistantActions ? (
+              <div className="absolute inset-y-0 left-0 flex items-center gap-1.5 opacity-0 transition-opacity duration-200 group-focus-within/assistant-actions:opacity-100 group-hover/assistant-actions:opacity-100">
+                {!row.message.streaming ? (
+                  <ForkAssistantMessageButton messageId={row.message.id} />
+                ) : null}
+                <AssistantCopyButton copyState={assistantCopyState} />
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     </>
   );
