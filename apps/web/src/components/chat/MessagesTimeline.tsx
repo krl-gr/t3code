@@ -670,18 +670,28 @@ const WorkGroupSection = memo(function WorkGroupSection({
   groupedEntries: Extract<MessagesTimelineRow, { kind: "work" }>["groupedEntries"];
 }) {
   const { workspaceRoot } = use(TimelineRowCtx);
+  const { isWorking } = use(TimelineRowActivityCtx);
   const hasErrorEntries = groupedEntries.some((entry) => entry.tone === "error");
-  const [agentActionsExpanded, setAgentActionsExpanded] = useState(false);
-  const [workLogExpanded, setWorkLogExpanded] = useState(() => hasErrorEntries);
+  const [agentActionsExpanded, setAgentActionsExpanded] = useState(() => isWorking);
+  const [workLogExpanded, setWorkLogExpanded] = useState(() => hasErrorEntries || isWorking);
   const agentActionsContentId = useId();
   const onlyToolEntries = groupedEntries.every((entry) => entry.tone === "tool");
   const shouldUseAgentActionsAccordion = onlyToolEntries;
 
   useEffect(() => {
+    if (isWorking) {
+      setAgentActionsExpanded(true);
+      setWorkLogExpanded(true);
+      return;
+    }
+
+    setAgentActionsExpanded(false);
     if (hasErrorEntries) {
       setWorkLogExpanded(true);
+      return;
     }
-  }, [hasErrorEntries]);
+    setWorkLogExpanded(false);
+  }, [hasErrorEntries, isWorking]);
 
   if (shouldUseAgentActionsAccordion) {
     const summaryText = formatActionCount(groupedEntries.length);
@@ -694,7 +704,10 @@ const WorkGroupSection = memo(function WorkGroupSection({
           aria-expanded={agentActionsExpanded}
           className="-mx-1 flex w-fit max-w-full min-w-0 items-center gap-1 rounded-md px-1 py-0.5 text-left text-muted-foreground/60 transition-colors duration-150 hover:text-foreground/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
           title={summaryText}
-          onClick={() => setAgentActionsExpanded((value) => !value)}
+          onClick={() => {
+            if (isWorking) return;
+            setAgentActionsExpanded((value) => !value);
+          }}
         >
           <span className="min-w-0 truncate text-sm leading-relaxed">{summaryText}</span>
           <span className="flex size-4 shrink-0 items-center justify-center">
@@ -736,7 +749,10 @@ const WorkGroupSection = memo(function WorkGroupSection({
         aria-expanded={workLogExpanded}
         className="-mx-1 flex w-fit max-w-full min-w-0 items-center gap-1 rounded-md px-1 py-0.5 text-left text-muted-foreground/60 transition-colors duration-150 hover:text-foreground/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
         title={summaryText}
-        onClick={() => setWorkLogExpanded((value) => !value)}
+        onClick={() => {
+          if (isWorking) return;
+          setWorkLogExpanded((value) => !value);
+        }}
       >
         <span className="min-w-0 truncate text-sm leading-relaxed">{summaryText}</span>
         <span className="flex size-4 shrink-0 items-center justify-center">
