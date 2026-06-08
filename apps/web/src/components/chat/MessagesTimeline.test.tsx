@@ -227,8 +227,8 @@ describe("MessagesTimeline", () => {
       />,
     );
 
-    expect(markup).toContain("1 work log entry:");
-    expect(markup).toContain("Context compacted");
+    expect(markup).toContain("1 work log entry");
+    expect(markup).not.toContain("Context compacted");
     expect(markup).not.toContain("Work log (1)");
   });
 
@@ -254,7 +254,7 @@ describe("MessagesTimeline", () => {
       />,
     );
 
-    expect(markup).toContain("1 work log entry:");
+    expect(markup).toContain("1 work log entry");
     expect(markup).toContain("Task failed - Failed to apply patch");
     expect(markup).not.toContain("Work log (1)");
   });
@@ -293,8 +293,8 @@ describe("MessagesTimeline", () => {
       />,
     );
 
-    expect(markup).toContain("2 actions:");
-    expect(markup).toContain("Ran command - rg -n latest apps/web/src");
+    expect(markup).toContain("2 actions");
+    expect(markup).not.toContain("Ran command - rg -n latest apps/web/src");
     expect(markup).not.toContain("sed -n 1,5p apps/web/src/store.ts");
   });
 
@@ -320,8 +320,8 @@ describe("MessagesTimeline", () => {
       />,
     );
 
-    expect(markup).toContain("1 action:");
-    expect(markup).toContain("Read file - apps/web/src/store.ts");
+    expect(markup).toContain("1 action");
+    expect(markup).not.toContain("Read file - apps/web/src/store.ts");
   });
 
   it("formats changed file paths from the workspace root", async () => {

@@ -684,13 +684,7 @@ const WorkGroupSection = memo(function WorkGroupSection({
   }, [hasErrorEntries]);
 
   if (shouldUseAgentActionsAccordion) {
-    const latestEntry = groupedEntries.at(-1);
-    const summaryText = latestEntry
-      ? `${formatActionCount(groupedEntries.length)}: ${formatWorkEntrySummary(
-          latestEntry,
-          workspaceRoot,
-        )}`
-      : formatActionCount(groupedEntries.length);
+    const summaryText = formatActionCount(groupedEntries.length);
 
     return (
       <div className="space-y-1">
@@ -732,13 +726,7 @@ const WorkGroupSection = memo(function WorkGroupSection({
     );
   }
 
-  const latestEntry = groupedEntries.at(-1);
-  const summaryText = latestEntry
-    ? `${formatWorkLogEntryCount(groupedEntries.length)}: ${formatWorkEntrySummary(
-        latestEntry,
-        workspaceRoot,
-      )}`
-    : formatWorkLogEntryCount(groupedEntries.length);
+  const summaryText = formatWorkLogEntryCount(groupedEntries.length);
 
   return (
     <div className="space-y-1">
@@ -1340,13 +1328,6 @@ function workEntrySummaryParts(
     preview,
     displayText: preview ? `${heading} - ${preview}` : heading,
   };
-}
-
-function formatWorkEntrySummary(
-  workEntry: TimelineWorkEntry,
-  workspaceRoot: string | undefined,
-): string {
-  return workEntrySummaryParts(workEntry, workspaceRoot).displayText;
 }
 
 const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {

@@ -128,7 +128,7 @@ describe("MessagesTimeline", () => {
         .element(page.getByText("Send a message to start the conversation."))
         .not.toBeInTheDocument();
       await expect
-        .element(page.getByRole("button", { name: /1 work log entry:/ }))
+        .element(page.getByRole("button", { name: /1 work log entry/ }))
         .toBeVisible();
     } finally {
       await screen.unmount();
@@ -137,6 +137,7 @@ describe("MessagesTimeline", () => {
 
   it("expands and collapses tool-only work groups from the actions accordion", async () => {
     const firstAction = "Ran command - sed -n 1,5p apps/web/src/store.ts";
+    const latestAction = /Ran command - rg -n latest apps\/web\/src/;
     const screen = await render(
       <MessagesTimeline
         {...buildProps()}
@@ -170,23 +171,23 @@ describe("MessagesTimeline", () => {
     );
 
     try {
-      const toggle = page.getByRole("button", { name: /2 actions:/ });
+      const toggle = page.getByRole("button", { name: /2 actions/ });
       await expect.element(toggle).toBeVisible();
       await expect.element(toggle).toHaveAttribute("aria-expanded", "false");
-      await expect
-        .element(page.getByText(/Ran command - rg -n latest apps\/web\/src/))
-        .toBeVisible();
+      await expect.element(page.getByText(latestAction)).not.toBeInTheDocument();
       await expect.element(page.getByText(firstAction)).not.toBeInTheDocument();
 
       await toggle.click();
 
       await expect.element(toggle).toHaveAttribute("aria-expanded", "true");
       await expect.element(page.getByText(firstAction)).toBeVisible();
+      await expect.element(page.getByText(latestAction)).toBeVisible();
 
       await toggle.click();
 
       await expect.element(toggle).toHaveAttribute("aria-expanded", "false");
       await expect.element(page.getByText(firstAction)).not.toBeInTheDocument();
+      await expect.element(page.getByText(latestAction)).not.toBeInTheDocument();
     } finally {
       await screen.unmount();
     }
@@ -230,7 +231,7 @@ describe("MessagesTimeline", () => {
       );
 
       await expect
-        .element(page.getByRole("button", { name: /1 work log entry:/ }))
+        .element(page.getByRole("button", { name: /1 work log entry/ }))
         .toBeVisible();
       expect(props.onIsAtEndChange).toHaveBeenCalledWith(true);
       expect(scrollToEndSpy).toHaveBeenCalledWith({ animated: false });
