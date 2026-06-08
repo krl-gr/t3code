@@ -127,7 +127,66 @@ describe("MessagesTimeline", () => {
       await expect
         .element(page.getByText("Send a message to start the conversation."))
         .not.toBeInTheDocument();
-      await expect.element(page.getByText("Thinking - Inspecting repository state")).toBeVisible();
+      await expect
+        .element(page.getByRole("button", { name: /1 work log entry:/ }))
+        .toBeVisible();
+    } finally {
+      await screen.unmount();
+    }
+  });
+
+  it("expands and collapses tool-only work groups from the actions accordion", async () => {
+    const firstAction = "Ran command - sed -n 1,5p apps/web/src/store.ts";
+    const screen = await render(
+      <MessagesTimeline
+        {...buildProps()}
+        timelineEntries={[
+          {
+            id: "work-entry-1",
+            kind: "work",
+            createdAt: "2026-04-13T12:00:00.000Z",
+            entry: {
+              id: "work-1",
+              createdAt: "2026-04-13T12:00:00.000Z",
+              label: "Ran command",
+              tone: "tool",
+              command: "sed -n 1,5p apps/web/src/store.ts",
+            },
+          },
+          {
+            id: "work-entry-2",
+            kind: "work",
+            createdAt: "2026-04-13T12:00:01.000Z",
+            entry: {
+              id: "work-2",
+              createdAt: "2026-04-13T12:00:01.000Z",
+              label: "Ran command",
+              tone: "tool",
+              command: "rg -n latest apps/web/src",
+            },
+          },
+        ]}
+      />,
+    );
+
+    try {
+      const toggle = page.getByRole("button", { name: /2 actions:/ });
+      await expect.element(toggle).toBeVisible();
+      await expect.element(toggle).toHaveAttribute("aria-expanded", "false");
+      await expect
+        .element(page.getByText(/Ran command - rg -n latest apps\/web\/src/))
+        .toBeVisible();
+      await expect.element(page.getByText(firstAction)).not.toBeInTheDocument();
+
+      await toggle.click();
+
+      await expect.element(toggle).toHaveAttribute("aria-expanded", "true");
+      await expect.element(page.getByText(firstAction)).toBeVisible();
+
+      await toggle.click();
+
+      await expect.element(toggle).toHaveAttribute("aria-expanded", "false");
+      await expect.element(page.getByText(firstAction)).not.toBeInTheDocument();
     } finally {
       await screen.unmount();
     }
@@ -170,7 +229,9 @@ describe("MessagesTimeline", () => {
         />,
       );
 
-      await expect.element(page.getByText("Thinking - Inspecting repository state")).toBeVisible();
+      await expect
+        .element(page.getByRole("button", { name: /1 work log entry:/ }))
+        .toBeVisible();
       expect(props.onIsAtEndChange).toHaveBeenCalledWith(true);
       expect(scrollToEndSpy).toHaveBeenCalledWith({ animated: false });
       expect(requestAnimationFrameSpy).toHaveBeenCalled();

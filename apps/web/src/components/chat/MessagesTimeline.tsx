@@ -10,6 +10,7 @@ import {
   use,
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -28,6 +29,7 @@ import {
 import ChatMarkdown from "../ChatMarkdown";
 import {
   BotIcon,
+  ChevronRightIcon,
   ChevronsDownUpIcon,
   ChevronsUpDownIcon,
   CheckIcon,
@@ -52,7 +54,6 @@ import { MessageForkIcon, MessageUndoIcon } from "./MessageActionIcons";
 import { MessageCopyButton } from "./MessageCopyButton";
 import {
   computeStableMessagesTimelineRows,
-  MAX_VISIBLE_WORK_LOG_ENTRIES,
   deriveMessagesTimelineRows,
   normalizeCompactToolLabel,
   resolveAssistantMessageCopyState,
@@ -669,44 +670,112 @@ const WorkGroupSection = memo(function WorkGroupSection({
   groupedEntries: Extract<MessagesTimelineRow, { kind: "work" }>["groupedEntries"];
 }) {
   const { workspaceRoot } = use(TimelineRowCtx);
-  const [isExpanded, setIsExpanded] = useState(false);
-  const hasOverflow = groupedEntries.length > MAX_VISIBLE_WORK_LOG_ENTRIES;
-  const visibleEntries =
-    hasOverflow && !isExpanded
-      ? groupedEntries.slice(-MAX_VISIBLE_WORK_LOG_ENTRIES)
-      : groupedEntries;
-  const hiddenCount = groupedEntries.length - visibleEntries.length;
+  const hasErrorEntries = groupedEntries.some((entry) => entry.tone === "error");
+  const [agentActionsExpanded, setAgentActionsExpanded] = useState(false);
+  const [workLogExpanded, setWorkLogExpanded] = useState(() => hasErrorEntries);
+  const agentActionsContentId = useId();
   const onlyToolEntries = groupedEntries.every((entry) => entry.tone === "tool");
-  const showHeader = hasOverflow || !onlyToolEntries;
-  const groupLabel = onlyToolEntries ? "Tool calls" : "Work log";
+  const shouldUseAgentActionsAccordion = onlyToolEntries;
+
+  useEffect(() => {
+    if (hasErrorEntries) {
+      setWorkLogExpanded(true);
+    }
+  }, [hasErrorEntries]);
+
+  if (shouldUseAgentActionsAccordion) {
+    const latestEntry = groupedEntries.at(-1);
+    const summaryText = latestEntry
+      ? `${formatActionCount(groupedEntries.length)}: ${formatWorkEntrySummary(
+          latestEntry,
+          workspaceRoot,
+        )}`
+      : formatActionCount(groupedEntries.length);
+
+    return (
+      <div className="space-y-1">
+        <button
+          type="button"
+          aria-controls={agentActionsContentId}
+          aria-expanded={agentActionsExpanded}
+          className="-mx-1 flex w-fit max-w-full min-w-0 items-center gap-1 rounded-md px-1 py-0.5 text-left text-muted-foreground/60 transition-colors duration-150 hover:text-foreground/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          title={summaryText}
+          onClick={() => setAgentActionsExpanded((value) => !value)}
+        >
+          <span className="min-w-0 truncate text-sm leading-relaxed">{summaryText}</span>
+          <span className="flex size-4 shrink-0 items-center justify-center">
+            <ChevronRightIcon
+              className={cn(
+                "size-3.5 transition-transform duration-150",
+                agentActionsExpanded ? "rotate-90" : null,
+              )}
+            />
+          </span>
+        </button>
+        {agentActionsExpanded ? (
+          <div
+            id={agentActionsContentId}
+            className="rounded-xl border border-border bg-[#EFEFEF]/95 px-2 py-1.5 dark:bg-muted"
+          >
+            <div className="space-y-0.5">
+              {groupedEntries.map((workEntry) => (
+                <SimpleWorkEntryRow
+                  key={`work-row:${workEntry.id}`}
+                  workEntry={workEntry}
+                  workspaceRoot={workspaceRoot}
+                />
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  const latestEntry = groupedEntries.at(-1);
+  const summaryText = latestEntry
+    ? `${formatWorkLogEntryCount(groupedEntries.length)}: ${formatWorkEntrySummary(
+        latestEntry,
+        workspaceRoot,
+      )}`
+    : formatWorkLogEntryCount(groupedEntries.length);
 
   return (
-    <div className="rounded-xl border border-border bg-[#EFEFEF]/95 px-2 py-1.5 dark:bg-muted">
-      {showHeader && (
-        <div className="mb-1.5 flex items-center justify-between gap-2 px-0.5">
-          <p className="text-sm leading-relaxed text-muted-foreground/55">
-            {groupLabel} ({groupedEntries.length})
-          </p>
-          {hasOverflow && (
-            <button
-              type="button"
-              className="text-sm leading-relaxed text-muted-foreground/55 transition-colors duration-150 hover:text-foreground/75"
-              onClick={() => setIsExpanded((v) => !v)}
-            >
-              {isExpanded ? "Show less" : `Show ${hiddenCount} more`}
-            </button>
-          )}
-        </div>
-      )}
-      <div className="space-y-0.5">
-        {visibleEntries.map((workEntry) => (
-          <SimpleWorkEntryRow
-            key={`work-row:${workEntry.id}`}
-            workEntry={workEntry}
-            workspaceRoot={workspaceRoot}
+    <div className="space-y-1">
+      <button
+        type="button"
+        aria-controls={agentActionsContentId}
+        aria-expanded={workLogExpanded}
+        className="-mx-1 flex w-fit max-w-full min-w-0 items-center gap-1 rounded-md px-1 py-0.5 text-left text-muted-foreground/60 transition-colors duration-150 hover:text-foreground/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+        title={summaryText}
+        onClick={() => setWorkLogExpanded((value) => !value)}
+      >
+        <span className="min-w-0 truncate text-sm leading-relaxed">{summaryText}</span>
+        <span className="flex size-4 shrink-0 items-center justify-center">
+          <ChevronRightIcon
+            className={cn(
+              "size-3.5 transition-transform duration-150",
+              workLogExpanded ? "rotate-90" : null,
+            )}
           />
-        ))}
-      </div>
+        </span>
+      </button>
+      {workLogExpanded ? (
+        <div
+          id={agentActionsContentId}
+          className="rounded-xl border border-border bg-[#EFEFEF]/95 px-2 py-1.5 dark:bg-muted"
+        >
+          <div className="space-y-0.5">
+            {groupedEntries.map((workEntry) => (
+              <SimpleWorkEntryRow
+                key={`work-row:${workEntry.id}`}
+                workEntry={workEntry}
+                workspaceRoot={workspaceRoot}
+              />
+            ))}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 });
@@ -1242,13 +1311,22 @@ function toolWorkEntryHeading(workEntry: TimelineWorkEntry): string {
   return capitalizePhrase(normalizeCompactToolLabel(workEntry.toolTitle));
 }
 
-const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
-  workEntry: TimelineWorkEntry;
-  workspaceRoot: string | undefined;
-}) {
-  const { workEntry, workspaceRoot } = props;
-  const iconConfig = workToneIcon(workEntry.tone);
-  const EntryIcon = workEntryIcon(workEntry);
+function formatActionCount(count: number): string {
+  return count === 1 ? "1 action" : `${count} actions`;
+}
+
+function formatWorkLogEntryCount(count: number): string {
+  return count === 1 ? "1 work log entry" : `${count} work log entries`;
+}
+
+function workEntrySummaryParts(
+  workEntry: TimelineWorkEntry,
+  workspaceRoot: string | undefined,
+): {
+  heading: string;
+  preview: string | null;
+  displayText: string;
+} {
   const heading = toolWorkEntryHeading(workEntry);
   const rawPreview = workEntryPreview(workEntry, workspaceRoot);
   const preview =
@@ -1257,8 +1335,29 @@ const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
       normalizeCompactToolLabel(heading).toLowerCase()
       ? null
       : rawPreview;
+  return {
+    heading,
+    preview,
+    displayText: preview ? `${heading} - ${preview}` : heading,
+  };
+}
+
+function formatWorkEntrySummary(
+  workEntry: TimelineWorkEntry,
+  workspaceRoot: string | undefined,
+): string {
+  return workEntrySummaryParts(workEntry, workspaceRoot).displayText;
+}
+
+const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
+  workEntry: TimelineWorkEntry;
+  workspaceRoot: string | undefined;
+}) {
+  const { workEntry, workspaceRoot } = props;
+  const iconConfig = workToneIcon(workEntry.tone);
+  const EntryIcon = workEntryIcon(workEntry);
+  const { heading, preview, displayText } = workEntrySummaryParts(workEntry, workspaceRoot);
   const rawCommand = workEntryRawCommand(workEntry);
-  const displayText = preview ? `${heading} - ${preview}` : heading;
   const hasChangedFiles = (workEntry.changedFiles?.length ?? 0) > 0;
   const previewIsChangedFiles = hasChangedFiles && !workEntry.command && !workEntry.detail;
 

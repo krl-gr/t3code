@@ -206,7 +206,7 @@ describe("MessagesTimeline", () => {
     expect(markup).toContain('data-user-message-footer="true"');
   });
 
-  it("renders context compaction entries in the normal work log", async () => {
+  it("collapses non-tool work log entries behind a minimal trigger", async () => {
     const { MessagesTimeline } = await import("./MessagesTimeline");
     const markup = renderToStaticMarkup(
       <MessagesTimeline
@@ -227,8 +227,101 @@ describe("MessagesTimeline", () => {
       />,
     );
 
+    expect(markup).toContain("1 work log entry:");
     expect(markup).toContain("Context compacted");
-    expect(markup).toContain("Work log");
+    expect(markup).not.toContain("Work log (1)");
+  });
+
+  it("starts error work log entries expanded", async () => {
+    const { MessagesTimeline } = await import("./MessagesTimeline");
+    const markup = renderToStaticMarkup(
+      <MessagesTimeline
+        {...buildProps()}
+        timelineEntries={[
+          {
+            id: "entry-1",
+            kind: "work",
+            createdAt: "2026-03-17T19:12:28.000Z",
+            entry: {
+              id: "work-1",
+              createdAt: "2026-03-17T19:12:28.000Z",
+              label: "Task failed",
+              detail: "Failed to apply patch",
+              tone: "error",
+            },
+          },
+        ]}
+      />,
+    );
+
+    expect(markup).toContain("1 work log entry:");
+    expect(markup).toContain("Task failed - Failed to apply patch");
+    expect(markup).not.toContain("Work log (1)");
+  });
+
+  it("collapses tool-only work groups into an actions accordion", async () => {
+    const { MessagesTimeline } = await import("./MessagesTimeline");
+    const markup = renderToStaticMarkup(
+      <MessagesTimeline
+        {...buildProps()}
+        timelineEntries={[
+          {
+            id: "entry-1",
+            kind: "work",
+            createdAt: "2026-03-17T19:12:28.000Z",
+            entry: {
+              id: "work-1",
+              createdAt: "2026-03-17T19:12:28.000Z",
+              label: "Ran command",
+              tone: "tool",
+              command: "sed -n 1,5p apps/web/src/store.ts",
+            },
+          },
+          {
+            id: "entry-2",
+            kind: "work",
+            createdAt: "2026-03-17T19:12:29.000Z",
+            entry: {
+              id: "work-2",
+              createdAt: "2026-03-17T19:12:29.000Z",
+              label: "Ran command",
+              tone: "tool",
+              command: "rg -n latest apps/web/src",
+            },
+          },
+        ]}
+      />,
+    );
+
+    expect(markup).toContain("2 actions:");
+    expect(markup).toContain("Ran command - rg -n latest apps/web/src");
+    expect(markup).not.toContain("sed -n 1,5p apps/web/src/store.ts");
+  });
+
+  it("renders a single tool entry as an action accordion", async () => {
+    const { MessagesTimeline } = await import("./MessagesTimeline");
+    const markup = renderToStaticMarkup(
+      <MessagesTimeline
+        {...buildProps()}
+        timelineEntries={[
+          {
+            id: "entry-1",
+            kind: "work",
+            createdAt: "2026-03-17T19:12:28.000Z",
+            entry: {
+              id: "work-1",
+              createdAt: "2026-03-17T19:12:28.000Z",
+              label: "Read file",
+              tone: "tool",
+              detail: "apps/web/src/store.ts",
+            },
+          },
+        ]}
+      />,
+    );
+
+    expect(markup).toContain("1 action:");
+    expect(markup).toContain("Read file - apps/web/src/store.ts");
   });
 
   it("formats changed file paths from the workspace root", async () => {
