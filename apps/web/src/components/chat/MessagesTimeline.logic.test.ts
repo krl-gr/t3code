@@ -7,6 +7,30 @@ import {
   resolveAssistantMessageCopyState,
 } from "./MessagesTimeline.logic";
 
+type DerivedTimelineRow = ReturnType<typeof deriveMessagesTimelineRows>[number];
+type DerivedMessageRow = Extract<DerivedTimelineRow, { kind: "message" }>;
+
+function collectAssistantMessageRows(rows: ReturnType<typeof deriveMessagesTimelineRows>) {
+  const result: DerivedMessageRow[] = [];
+
+  for (const row of rows) {
+    if (row.kind === "message" && row.message.role === "assistant") {
+      result.push(row);
+      continue;
+    }
+
+    if (row.kind === "process") {
+      for (const child of row.children) {
+        if (child.kind === "message" && child.message.role === "assistant") {
+          result.push(child);
+        }
+      }
+    }
+  }
+
+  return result;
+}
+
 describe("computeMessageDurationStart", () => {
   it("returns message createdAt when there is no preceding user message", () => {
     const result = computeMessageDurationStart([
@@ -322,15 +346,14 @@ describe("deriveMessagesTimelineRows", () => {
       revertTurnCountByUserMessageId: new Map(),
     });
 
-    const assistantRows = rows.filter(
-      (row): row is Extract<(typeof rows)[number], { kind: "message" }> =>
-        row.kind === "message" && row.message.role === "assistant",
-    );
+    const assistantRows = collectAssistantMessageRows(rows);
 
     expect(assistantRows[0]?.assistantCopyStreaming).toBe(false);
     expect(assistantRows[0]?.completionSummary).toBeNull();
     expect(assistantRows[1]?.assistantCopyStreaming).toBe(true);
-    expect(assistantRows[1]?.completionSummary).toBe("done");
+    expect(assistantRows[1]?.completionSummary).toBeNull();
+    expect(rows.map((row) => row.kind)).toEqual(["message", "process"]);
+    expect(rows[1]?.kind === "process" ? rows[1].isActive : null).toBe(true);
   });
 
   it("projects assistant diff summaries and user revert counts onto the affected rows", () => {
@@ -576,6 +599,79 @@ describe("deriveMessagesTimelineRows", () => {
     expect(processRow.isActive).toBe(true);
     expect(processRow.startedAt).toBe("2026-01-01T00:00:05Z");
     expect(processRow.children.map((child) => child.kind)).toEqual(["work", "working"]);
+  });
+
+  it("keeps active assistant output inside the process row until the turn completes", () => {
+    const rows = deriveMessagesTimelineRows({
+      timelineEntries: [
+        {
+          id: "user-entry",
+          kind: "message",
+          createdAt: "2026-01-01T00:00:00Z",
+          message: {
+            id: "user-1" as never,
+            role: "user",
+            text: "Explain the issue",
+            turnId: null,
+            createdAt: "2026-01-01T00:00:00Z",
+            streaming: false,
+          },
+        },
+        {
+          id: "assistant-progress-entry",
+          kind: "message",
+          createdAt: "2026-01-01T00:00:08Z",
+          message: {
+            id: "assistant-progress" as never,
+            role: "assistant",
+            text: "I am checking the code path.",
+            turnId: null,
+            createdAt: "2026-01-01T00:00:08Z",
+            completedAt: "2026-01-01T00:00:09Z",
+            streaming: false,
+          },
+        },
+        {
+          id: "work-entry",
+          kind: "work",
+          createdAt: "2026-01-01T00:00:10Z",
+          entry: {
+            id: "work-1",
+            createdAt: "2026-01-01T00:00:10Z",
+            label: "Ran command",
+            tone: "tool",
+            command: "rg -n process",
+          },
+        },
+      ],
+      completionDividerBeforeEntryId: "assistant-progress-entry",
+      completionSummary: "Worked for 10s",
+      isWorking: true,
+      activeTurnInProgress: true,
+      activeTurnId: "turn-active" as never,
+      activeTurnStartedAt: "2026-01-01T00:00:05Z",
+      turnDiffSummaryByAssistantMessageId: new Map(),
+      revertTurnCountByUserMessageId: new Map(),
+    });
+
+    expect(rows.map((row) => row.kind)).toEqual(["message", "process"]);
+
+    const processRow = rows[1];
+    expect(processRow?.kind).toBe("process");
+    if (processRow?.kind !== "process") return;
+
+    expect(processRow.turnId).toBe("turn-active");
+    expect(processRow.isActive).toBe(true);
+    expect(processRow.startedAt).toBe("2026-01-01T00:00:05Z");
+    expect(processRow.children.map((child) => child.kind)).toEqual(["message", "work", "working"]);
+    const progressMessage = processRow.children[0];
+
+    expect(progressMessage?.kind === "message" ? progressMessage.message.text : null).toBe(
+      "I am checking the code path.",
+    );
+    expect(
+      progressMessage?.kind === "message" ? progressMessage.completionSummary : null,
+    ).toBeNull();
   });
 
   it("does not create a process row for a plain final answer", () => {

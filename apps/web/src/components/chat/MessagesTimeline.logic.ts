@@ -313,23 +313,17 @@ function deriveProcessTimelineRows(
       continue;
     }
 
-    if (
-      row.kind === "message" &&
-      row.message.role === "assistant" &&
-      !row.showAssistantCopyButton
-    ) {
-      appendProcessChild(row);
-      continue;
-    }
-
-    if (
-      row.kind === "message" &&
-      row.message.role === "assistant" &&
-      row.showAssistantCopyButton
-    ) {
-      if (isActiveTerminalAssistantRow(row, input)) {
-        appendWorkingChild();
+    if (row.kind === "message" && row.message.role === "assistant") {
+      if (isActiveAssistantProcessChild(row, input)) {
+        appendProcessChild(suppressCompletionDivider(row));
+        continue;
       }
+
+      if (!row.showAssistantCopyButton) {
+        appendProcessChild(row);
+        continue;
+      }
+
       const processRow = flushProcess(row);
       if (processRow) {
         result.push(processRow);
@@ -379,6 +373,7 @@ function resolveProcessStartedAt(
     input.activeTurnStartedAt &&
     (row.kind === "working" ||
       (input.activeTurnId != null && rowTurnId != null && rowTurnId === input.activeTurnId) ||
+      (input.isWorking && row.kind === "message" && rowTurnId == null) ||
       (input.isWorking && row.kind === "work"))
   ) {
     return input.activeTurnStartedAt;
@@ -403,7 +398,15 @@ function resolveProcessTurnId(
     }
   }
 
-  if (activeTurnId && children.some((child) => child.kind === "working" || child.kind === "work")) {
+  if (
+    activeTurnId &&
+    children.some(
+      (child) =>
+        child.kind === "working" ||
+        child.kind === "work" ||
+        (child.kind === "message" && child.message.turnId == null),
+    )
+  ) {
     return activeTurnId;
   }
 
@@ -448,18 +451,39 @@ function deriveProcessRowId(
   return turnId ? `process:turn:${turnId}` : `process:${firstChild?.id ?? "unknown"}`;
 }
 
-function isActiveTerminalAssistantRow(
+function isActiveAssistantProcessChild(
   row: MessageTimelineRow,
   input: {
     activeTurnInProgress?: boolean;
     activeTurnId?: TurnId | null;
+    activeTurnStartedAt: string | null;
   },
 ): boolean {
+  if (input.activeTurnInProgress !== true) {
+    return false;
+  }
+
+  if (input.activeTurnId != null && row.message.turnId === input.activeTurnId) {
+    return true;
+  }
+
   return (
-    input.activeTurnInProgress === true &&
-    input.activeTurnId != null &&
-    row.message.turnId === input.activeTurnId
+    row.message.turnId == null &&
+    ((input.activeTurnStartedAt != null &&
+      isAtOrAfterTimestamp(row.createdAt, input.activeTurnStartedAt)) ||
+      row.message.streaming)
   );
+}
+
+function isAtOrAfterTimestamp(value: string, boundary: string): boolean {
+  const valueMs = Date.parse(value);
+  const boundaryMs = Date.parse(boundary);
+
+  if (Number.isFinite(valueMs) && Number.isFinite(boundaryMs)) {
+    return valueMs >= boundaryMs;
+  }
+
+  return value >= boundary;
 }
 
 function suppressCompletionDivider(row: MessageTimelineRow): MessageTimelineRow {

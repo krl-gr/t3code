@@ -133,7 +133,7 @@ describe("MessagesTimeline", () => {
     }
   });
 
-  it("expands process details and then tool-only work groups from the actions accordion", async () => {
+  it("lets active process details and tool-only work groups expand independently", async () => {
     const firstAction = "Ran command - sed -n 1,5p apps/web/src/store.ts";
     const latestAction = /Ran command - rg -n latest apps\/web\/src/;
     const props = buildProps();
@@ -185,7 +185,16 @@ describe("MessagesTimeline", () => {
 
       await processToggle.click();
 
+      await expect.element(processToggle).toHaveAttribute("aria-expanded", "false");
+      await expect.element(page.getByRole("button", { name: /2 actions/ })).not.toBeInTheDocument();
+      await expect.element(page.getByText(firstAction)).not.toBeInTheDocument();
+      await expect.element(page.getByText(latestAction)).not.toBeInTheDocument();
+
+      await processToggle.click();
+
+      const reopenedActionToggle = page.getByRole("button", { name: /2 actions/ });
       await expect.element(processToggle).toHaveAttribute("aria-expanded", "true");
+      await expect.element(reopenedActionToggle).toHaveAttribute("aria-expanded", "true");
       await expect.element(page.getByText(firstAction)).toBeVisible();
       await expect.element(page.getByText(latestAction)).toBeVisible();
 

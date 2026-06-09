@@ -325,7 +325,8 @@ type TimelineEntry = ReturnType<typeof deriveTimelineEntries>[number];
 type TimelineMessage = Extract<TimelineEntry, { kind: "message" }>["message"];
 type TimelineWorkEntry = Extract<MessagesTimelineRow, { kind: "work" }>["groupedEntries"][number];
 type TimelineRow = MessagesTimelineRow;
-type TimelineBaseRow = Exclude<TimelineRow, { kind: "process" }>;
+type TimelineProcessChildRow = Extract<TimelineRow, { kind: "process" }>["children"][number];
+type VisibleProcessChildRow = Exclude<TimelineProcessChildRow, { kind: "working" }>;
 
 const TimelineRowContent = memo(function TimelineRowContent({ row }: { row: TimelineRow }) {
   return (
@@ -344,11 +345,22 @@ const TimelineRowContent = memo(function TimelineRowContent({ row }: { row: Time
   );
 });
 
-function TimelineRowBody({ row }: { row: TimelineRow }) {
+function TimelineRowBody({
+  row,
+  forceWorkGroupsExpanded = false,
+}: {
+  row: TimelineRow;
+  forceWorkGroupsExpanded?: boolean;
+}) {
   return (
     <>
       {row.kind === "process" ? <ProcessTimelineRow row={row} /> : null}
-      {row.kind === "work" ? <WorkGroupSection groupedEntries={row.groupedEntries} /> : null}
+      {row.kind === "work" ? (
+        <WorkGroupSection
+          groupedEntries={row.groupedEntries}
+          forceExpanded={forceWorkGroupsExpanded}
+        />
+      ) : null}
       {row.kind === "message" && row.message.role === "user" ? <UserTimelineRow row={row} /> : null}
       {row.kind === "message" && row.message.role === "assistant" ? (
         <AssistantTimelineRow row={row} />
@@ -590,11 +602,7 @@ function WorkingTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "workin
   return (
     <div className="py-0.5 pl-1.5">
       <div className="flex items-center gap-2 pt-1 text-sm leading-relaxed text-muted-foreground/70">
-        <span className="inline-flex items-center gap-[3px]">
-          <span className="h-1 w-1 rounded-full bg-muted-foreground/30 animate-pulse" />
-          <span className="h-1 w-1 rounded-full bg-muted-foreground/30 animate-pulse [animation-delay:200ms]" />
-          <span className="h-1 w-1 rounded-full bg-muted-foreground/30 animate-pulse [animation-delay:400ms]" />
-        </span>
+        <WorkingStatusDots />
         <span>
           {row.createdAt ? (
             <>
@@ -613,14 +621,15 @@ function ProcessTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "proces
   const contentId = useId();
   const [expanded, setExpanded] = useState(() => row.isActive || row.hasErrorEntries);
   const titleText = formatProcessAccordionTitle(row);
+  const visibleChildren = row.children.filter(isVisibleProcessChild);
 
   useEffect(() => {
-    if (row.isActive) {
+    if (row.hasErrorEntries) {
       setExpanded(true);
       return;
     }
 
-    if (row.hasErrorEntries) {
+    if (row.isActive) {
       setExpanded(true);
       return;
     }
@@ -637,7 +646,6 @@ function ProcessTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "proces
         className="-mx-1 flex w-fit max-w-full min-w-0 items-center gap-1 rounded-md px-1 py-0.5 text-left text-muted-foreground/60 transition-colors duration-150 hover:text-foreground/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
         title={titleText}
         onClick={() => {
-          if (row.isActive) return;
           setExpanded((value) => !value);
         }}
       >
@@ -653,9 +661,9 @@ function ProcessTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "proces
           />
         </span>
       </button>
-      {expanded ? (
+      {expanded && visibleChildren.length > 0 ? (
         <div id={contentId} className="space-y-4 pt-0.5">
-          {row.children.map((child) => (
+          {visibleChildren.map((child) => (
             <div
               key={`process-child:${child.id}`}
               className={cn(
@@ -667,7 +675,7 @@ function ProcessTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "proces
               data-process-child-row-id={child.id}
               data-process-child-row-kind={child.kind}
             >
-              <TimelineProcessChildBody row={child} />
+              <TimelineProcessChildBody row={child} forceWorkGroupsExpanded={row.isActive} />
             </div>
           ))}
         </div>
@@ -676,22 +684,53 @@ function ProcessTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "proces
   );
 }
 
-function TimelineProcessChildBody({ row }: { row: TimelineBaseRow }) {
-  return <TimelineRowBody row={row} />;
+function isVisibleProcessChild(row: TimelineProcessChildRow): row is VisibleProcessChildRow {
+  return row.kind !== "working";
+}
+
+function TimelineProcessChildBody({
+  row,
+  forceWorkGroupsExpanded,
+}: {
+  row: VisibleProcessChildRow;
+  forceWorkGroupsExpanded: boolean;
+}) {
+  return <TimelineRowBody row={row} forceWorkGroupsExpanded={forceWorkGroupsExpanded} />;
 }
 
 function ProcessAccordionLabel({ row }: { row: Extract<TimelineRow, { kind: "process" }> }) {
   if (row.isActive) {
-    return row.startedAt ? (
-      <>
-        Working for <WorkingTimer createdAt={row.startedAt} />
-      </>
-    ) : (
-      "Working..."
-    );
+    return <WorkingProcessLabel startedAt={row.startedAt} />;
   }
 
   return formatCompletedProcessAccordionLabel(row);
+}
+
+function WorkingStatusDots() {
+  return (
+    <span className="inline-flex shrink-0 items-center gap-[3px]">
+      <span className="h-1 w-1 rounded-full bg-muted-foreground/30 animate-pulse" />
+      <span className="h-1 w-1 rounded-full bg-muted-foreground/30 animate-pulse [animation-delay:200ms]" />
+      <span className="h-1 w-1 rounded-full bg-muted-foreground/30 animate-pulse [animation-delay:400ms]" />
+    </span>
+  );
+}
+
+function WorkingProcessLabel({ startedAt }: { startedAt: string | null }) {
+  return (
+    <span className="inline-flex min-w-0 items-center gap-2">
+      <WorkingStatusDots />
+      <span className="min-w-0 truncate">
+        {startedAt ? (
+          <>
+            Working for <WorkingTimer createdAt={startedAt} />
+          </>
+        ) : (
+          "Working..."
+        )}
+      </span>
+    </span>
+  );
 }
 
 function formatProcessAccordionTitle(row: Extract<TimelineRow, { kind: "process" }>): string {
@@ -780,32 +819,31 @@ function LiveMessageMeta({
  *  State resets on unmount which is fine — work groups start collapsed. */
 const WorkGroupSection = memo(function WorkGroupSection({
   groupedEntries,
+  forceExpanded = false,
 }: {
   groupedEntries: Extract<MessagesTimelineRow, { kind: "work" }>["groupedEntries"];
+  forceExpanded?: boolean;
 }) {
   const { workspaceRoot } = use(TimelineRowCtx);
-  const { isWorking } = use(TimelineRowActivityCtx);
   const hasErrorEntries = groupedEntries.some((entry) => entry.tone === "error");
-  const [agentActionsExpanded, setAgentActionsExpanded] = useState(() => isWorking);
-  const [workLogExpanded, setWorkLogExpanded] = useState(() => hasErrorEntries || isWorking);
+  const [agentActionsExpanded, setAgentActionsExpanded] = useState(
+    () => forceExpanded || hasErrorEntries,
+  );
+  const [workLogExpanded, setWorkLogExpanded] = useState(() => forceExpanded || hasErrorEntries);
   const agentActionsContentId = useId();
   const onlyToolEntries = groupedEntries.every((entry) => entry.tone === "tool");
   const shouldUseAgentActionsAccordion = onlyToolEntries;
 
   useEffect(() => {
-    if (isWorking) {
+    if (forceExpanded || hasErrorEntries) {
       setAgentActionsExpanded(true);
       setWorkLogExpanded(true);
       return;
     }
 
     setAgentActionsExpanded(false);
-    if (hasErrorEntries) {
-      setWorkLogExpanded(true);
-      return;
-    }
     setWorkLogExpanded(false);
-  }, [hasErrorEntries, isWorking]);
+  }, [forceExpanded, hasErrorEntries]);
 
   if (shouldUseAgentActionsAccordion) {
     const summaryText = formatActionCount(groupedEntries.length);
@@ -819,7 +857,7 @@ const WorkGroupSection = memo(function WorkGroupSection({
           className="-mx-1 flex w-fit max-w-full min-w-0 items-center gap-1 rounded-md px-1 py-0.5 text-left text-muted-foreground/60 transition-colors duration-150 hover:text-foreground/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
           title={summaryText}
           onClick={() => {
-            if (isWorking) return;
+            if (forceExpanded) return;
             setAgentActionsExpanded((value) => !value);
           }}
         >
@@ -864,7 +902,7 @@ const WorkGroupSection = memo(function WorkGroupSection({
         className="-mx-1 flex w-fit max-w-full min-w-0 items-center gap-1 rounded-md px-1 py-0.5 text-left text-muted-foreground/60 transition-colors duration-150 hover:text-foreground/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
         title={summaryText}
         onClick={() => {
-          if (isWorking) return;
+          if (forceExpanded) return;
           setWorkLogExpanded((value) => !value);
         }}
       >
