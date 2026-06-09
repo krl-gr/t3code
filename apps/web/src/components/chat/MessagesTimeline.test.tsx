@@ -136,6 +136,30 @@ function buildUserTimelineEntry(text: string) {
   };
 }
 
+function buildAssistantTimelineEntry(input: {
+  id: string;
+  entryId?: string;
+  text: string;
+  createdAt: string;
+  completedAt?: string;
+  turnId?: string;
+}) {
+  return {
+    id: input.entryId ?? input.id,
+    kind: "message" as const,
+    createdAt: input.createdAt,
+    message: {
+      id: MessageId.make(input.id),
+      role: "assistant" as const,
+      text: input.text,
+      turnId: input.turnId ? (input.turnId as never) : null,
+      createdAt: input.createdAt,
+      completedAt: input.completedAt,
+      streaming: false,
+    },
+  };
+}
+
 describe("MessagesTimeline", () => {
   it("renders collapse controls for long user messages", async () => {
     const { MessagesTimeline } = await import("./MessagesTimeline");
@@ -206,7 +230,7 @@ describe("MessagesTimeline", () => {
     expect(markup).toContain('data-user-message-footer="true"');
   });
 
-  it("collapses non-tool work log entries behind a minimal trigger", async () => {
+  it("collapses process-only work log entries behind the parent process trigger", async () => {
     const { MessagesTimeline } = await import("./MessagesTimeline");
     const markup = renderToStaticMarkup(
       <MessagesTimeline
@@ -227,12 +251,13 @@ describe("MessagesTimeline", () => {
       />,
     );
 
-    expect(markup).toContain("1 work log entry");
+    expect(markup).toContain("Work details");
+    expect(markup).not.toContain("1 work log entry");
     expect(markup).not.toContain("Context compacted");
     expect(markup).not.toContain("Work log (1)");
   });
 
-  it("starts error work log entries expanded", async () => {
+  it("keeps error process entries expanded", async () => {
     const { MessagesTimeline } = await import("./MessagesTimeline");
     const markup = renderToStaticMarkup(
       <MessagesTimeline
@@ -254,12 +279,13 @@ describe("MessagesTimeline", () => {
       />,
     );
 
+    expect(markup).toContain("Work details");
     expect(markup).toContain("1 work log entry");
     expect(markup).toContain("Task failed - Failed to apply patch");
     expect(markup).not.toContain("Work log (1)");
   });
 
-  it("collapses tool-only work groups into an actions accordion", async () => {
+  it("collapses tool-only work groups behind the parent process trigger", async () => {
     const { MessagesTimeline } = await import("./MessagesTimeline");
     const markup = renderToStaticMarkup(
       <MessagesTimeline
@@ -293,12 +319,13 @@ describe("MessagesTimeline", () => {
       />,
     );
 
-    expect(markup).toContain("2 actions");
+    expect(markup).toContain("Work details");
+    expect(markup).not.toContain("2 actions");
     expect(markup).not.toContain("Ran command - rg -n latest apps/web/src");
     expect(markup).not.toContain("sed -n 1,5p apps/web/src/store.ts");
   });
 
-  it("renders a single tool entry as an action accordion", async () => {
+  it("hides a single tool entry behind the parent process trigger", async () => {
     const { MessagesTimeline } = await import("./MessagesTimeline");
     const markup = renderToStaticMarkup(
       <MessagesTimeline
@@ -320,8 +347,107 @@ describe("MessagesTimeline", () => {
       />,
     );
 
-    expect(markup).toContain("1 action");
+    expect(markup).toContain("Work details");
+    expect(markup).not.toContain("1 action");
     expect(markup).not.toContain("Read file - apps/web/src/store.ts");
+  });
+
+  it("keeps the final assistant answer visible while process internals are collapsed", async () => {
+    const { MessagesTimeline } = await import("./MessagesTimeline");
+    const markup = renderToStaticMarkup(
+      <MessagesTimeline
+        {...buildProps()}
+        activeTurnId={"turn-1" as never}
+        completionDividerBeforeEntryId="assistant-final-entry"
+        completionSummary="Worked for 1m"
+        timelineEntries={[
+          {
+            ...buildUserTimelineEntry("Please inspect this."),
+            id: "user-entry",
+          },
+          buildAssistantTimelineEntry({
+            id: "assistant-interim",
+            text: "I am checking the timeline.",
+            createdAt: "2026-03-17T19:12:30.000Z",
+            completedAt: "2026-03-17T19:12:31.000Z",
+            turnId: "turn-1",
+          }),
+          {
+            id: "work-entry",
+            kind: "work",
+            createdAt: "2026-03-17T19:12:32.000Z",
+            entry: {
+              id: "work-1",
+              createdAt: "2026-03-17T19:12:32.000Z",
+              label: "Ran command",
+              tone: "tool",
+              command: "rg -n hidden apps/web/src",
+            },
+          },
+          buildAssistantTimelineEntry({
+            id: "assistant-final",
+            entryId: "assistant-final-entry",
+            text: "Final answer stays visible.",
+            createdAt: "2026-03-17T19:13:00.000Z",
+            completedAt: "2026-03-17T19:13:28.000Z",
+            turnId: "turn-1",
+          }),
+        ]}
+      />,
+    );
+
+    expect(markup).toContain("Worked for 1m");
+    expect(markup).toContain("Final answer stays visible.");
+    expect(markup).not.toContain("I am checking the timeline.");
+    expect(markup).not.toContain("rg -n hidden apps/web/src");
+    expect(markup).not.toContain("Response");
+  });
+
+  it("keeps proposed plans visible while process internals are collapsed", async () => {
+    const { MessagesTimeline } = await import("./MessagesTimeline");
+    const markup = renderToStaticMarkup(
+      <MessagesTimeline
+        {...buildProps()}
+        activeTurnId={"turn-plan" as never}
+        completionSummary="Worked for 2s"
+        timelineEntries={[
+          {
+            ...buildUserTimelineEntry("Plan this."),
+            id: "user-entry",
+          },
+          {
+            id: "work-entry",
+            kind: "work",
+            createdAt: "2026-03-17T19:12:29.000Z",
+            entry: {
+              id: "work-1",
+              createdAt: "2026-03-17T19:12:29.000Z",
+              label: "Ran command",
+              tone: "tool",
+              command: "rg -n plan apps/web/src",
+            },
+          },
+          {
+            id: "plan-1",
+            kind: "proposed-plan",
+            createdAt: "2026-03-17T19:12:30.000Z",
+            proposedPlan: {
+              id: "plan-1" as never,
+              turnId: "turn-plan" as never,
+              planMarkdown: "# Proposed Fix\n\nDo the focused thing.",
+              implementedAt: null,
+              implementationThreadId: null,
+              createdAt: "2026-03-17T19:12:30.000Z",
+              updatedAt: "2026-03-17T19:12:31.000Z",
+            },
+          },
+        ]}
+      />,
+    );
+
+    expect(markup).toContain("Worked for 2s");
+    expect(markup).toContain("Proposed Fix");
+    expect(markup).not.toContain("rg -n plan apps/web/src");
   });
 
   it("formats changed file paths from the workspace root", async () => {
@@ -329,6 +455,9 @@ describe("MessagesTimeline", () => {
     const markup = renderToStaticMarkup(
       <MessagesTimeline
         {...buildProps()}
+        isWorking
+        activeTurnInProgress
+        activeTurnStartedAt="2026-03-17T19:12:27.000Z"
         timelineEntries={[
           {
             id: "entry-1",

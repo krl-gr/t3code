@@ -3,8 +3,6 @@ import { type TimelineEntry, type WorkLogEntry } from "../../session-logic";
 import { type ChatMessage, type ProposedPlan, type TurnDiffSummary } from "../../types";
 import { type MessageId, type TurnId } from "@t3tools/contracts";
 
-export const MAX_VISIBLE_WORK_LOG_ENTRIES = 6;
-
 export interface TimelineDurationMessage {
   id: string;
   role: "user" | "assistant" | "system";
@@ -12,33 +10,58 @@ export interface TimelineDurationMessage {
   completedAt?: string | undefined;
 }
 
-export type MessagesTimelineRow =
-  | {
-      kind: "work";
-      id: string;
-      createdAt: string;
-      groupedEntries: WorkLogEntry[];
-    }
-  | {
-      kind: "message";
-      id: string;
-      createdAt: string;
-      message: ChatMessage;
-      durationStart: string;
-      showCompletionDivider: boolean;
-      completionSummary: string | null;
-      showAssistantCopyButton: boolean;
-      assistantCopyStreaming: boolean;
-      assistantTurnDiffSummary?: TurnDiffSummary | undefined;
-      revertTurnCount?: number | undefined;
-    }
-  | {
-      kind: "proposed-plan";
-      id: string;
-      createdAt: string;
-      proposedPlan: ProposedPlan;
-    }
-  | { kind: "working"; id: string; createdAt: string | null };
+export type WorkTimelineRow = {
+  kind: "work";
+  id: string;
+  createdAt: string;
+  groupedEntries: WorkLogEntry[];
+};
+
+export type MessageTimelineRow = {
+  kind: "message";
+  id: string;
+  createdAt: string;
+  message: ChatMessage;
+  durationStart: string;
+  showCompletionDivider: boolean;
+  completionSummary: string | null;
+  showAssistantCopyButton: boolean;
+  assistantCopyStreaming: boolean;
+  assistantTurnDiffSummary?: TurnDiffSummary | undefined;
+  revertTurnCount?: number | undefined;
+};
+
+export type ProposedPlanTimelineRow = {
+  kind: "proposed-plan";
+  id: string;
+  createdAt: string;
+  proposedPlan: ProposedPlan;
+};
+
+export type WorkingTimelineRow = { kind: "working"; id: string; createdAt: string | null };
+
+export type BaseMessagesTimelineRow =
+  | WorkTimelineRow
+  | MessageTimelineRow
+  | ProposedPlanTimelineRow
+  | WorkingTimelineRow;
+
+export type ProcessTimelineChildRow = WorkTimelineRow | MessageTimelineRow | WorkingTimelineRow;
+
+export type ProcessTimelineRow = {
+  kind: "process";
+  id: string;
+  createdAt: string;
+  turnId: TurnId | null;
+  children: ProcessTimelineChildRow[];
+  startedAt: string | null;
+  completedAt: string | null;
+  completionSummary: string | null;
+  isActive: boolean;
+  hasErrorEntries: boolean;
+};
+
+export type MessagesTimelineRow = BaseMessagesTimelineRow | ProcessTimelineRow;
 
 export interface StableMessagesTimelineRowsState {
   byId: Map<string, MessagesTimelineRow>;
@@ -121,7 +144,7 @@ export function deriveMessagesTimelineRows(input: {
   turnDiffSummaryByAssistantMessageId: ReadonlyMap<MessageId, TurnDiffSummary>;
   revertTurnCountByUserMessageId: ReadonlyMap<MessageId, number>;
 }): MessagesTimelineRow[] {
-  const nextRows: MessagesTimelineRow[] = [];
+  const baseRows: BaseMessagesTimelineRow[] = [];
   const durationStartByMessageId = computeMessageDurationStart(
     input.timelineEntries.flatMap((entry) => (entry.kind === "message" ? [entry.message] : [])),
   );
@@ -142,7 +165,7 @@ export function deriveMessagesTimelineRows(input: {
         groupedEntries.push(nextEntry.entry);
         cursor += 1;
       }
-      nextRows.push({
+      baseRows.push({
         kind: "work",
         id: timelineEntry.id,
         createdAt: timelineEntry.createdAt,
@@ -153,7 +176,7 @@ export function deriveMessagesTimelineRows(input: {
     }
 
     if (timelineEntry.kind === "proposed-plan") {
-      nextRows.push({
+      baseRows.push({
         kind: "proposed-plan",
         id: timelineEntry.id,
         createdAt: timelineEntry.createdAt,
@@ -172,7 +195,7 @@ export function deriveMessagesTimelineRows(input: {
       timelineEntry.message.role === "assistant" &&
       input.completionDividerBeforeEntryId === timelineEntry.id;
 
-    nextRows.push({
+    baseRows.push({
       kind: "message",
       id: timelineEntry.id,
       createdAt: timelineEntry.createdAt,
@@ -196,15 +219,259 @@ export function deriveMessagesTimelineRows(input: {
     });
   }
 
-  if (input.isWorking) {
-    nextRows.push({
-      kind: "working",
-      id: "working-indicator-row",
-      createdAt: input.activeTurnStartedAt,
-    });
+  return deriveProcessTimelineRows(baseRows, input);
+}
+
+function deriveProcessTimelineRows(
+  baseRows: ReadonlyArray<BaseMessagesTimelineRow>,
+  input: {
+    completionSummary?: string | null;
+    isWorking: boolean;
+    activeTurnInProgress?: boolean;
+    activeTurnId?: TurnId | null;
+    activeTurnStartedAt: string | null;
+  },
+): MessagesTimelineRow[] {
+  const result: MessagesTimelineRow[] = [];
+  const workingRow: WorkingTimelineRow | null = input.isWorking
+    ? {
+        kind: "working",
+        id: "working-indicator-row",
+        createdAt: input.activeTurnStartedAt,
+      }
+    : null;
+  let workingRowConsumed = false;
+  let previousBoundaryCreatedAt: string | null = null;
+  let pendingChildren: ProcessTimelineChildRow[] = [];
+  let pendingStartedAt: string | null = null;
+
+  const appendProcessChild = (row: ProcessTimelineChildRow) => {
+    if (pendingChildren.length === 0) {
+      pendingStartedAt = resolveProcessStartedAt(row, previousBoundaryCreatedAt, input);
+    }
+    pendingChildren.push(row);
+  };
+
+  const appendWorkingChild = () => {
+    if (!workingRow || workingRowConsumed) {
+      return;
+    }
+    appendProcessChild(workingRow);
+    workingRowConsumed = true;
+  };
+
+  const flushProcess = (
+    terminalRow?: MessageTimelineRow | ProposedPlanTimelineRow,
+  ): ProcessTimelineRow | null => {
+    if (pendingChildren.length === 0) {
+      return null;
+    }
+
+    const firstChild = pendingChildren[0];
+    const turnId = resolveProcessTurnId(pendingChildren, terminalRow, input.activeTurnId ?? null);
+    const isActive =
+      pendingChildren.some((child) => child.kind === "working") ||
+      (input.activeTurnInProgress === true &&
+        input.activeTurnId != null &&
+        turnId === input.activeTurnId);
+    const completedAt = isActive ? null : resolveTerminalCompletedAt(terminalRow);
+    const completionSummary =
+      !isActive && turnId != null && turnId === input.activeTurnId
+        ? (input.completionSummary ?? null)
+        : null;
+    const processRow: ProcessTimelineRow = {
+      kind: "process",
+      id: deriveProcessRowId(turnId, firstChild),
+      createdAt: firstChild?.createdAt ?? pendingStartedAt ?? terminalRow?.createdAt ?? "",
+      turnId,
+      children: pendingChildren,
+      startedAt: pendingStartedAt,
+      completedAt,
+      completionSummary,
+      isActive,
+      hasErrorEntries: pendingChildren.some(hasProcessChildErrorEntry),
+    };
+
+    pendingChildren = [];
+    pendingStartedAt = null;
+    return processRow;
+  };
+
+  for (const row of baseRows) {
+    if (row.kind === "message" && row.message.role === "user") {
+      const processRow = flushProcess();
+      if (processRow) {
+        result.push(processRow);
+      }
+      result.push(row);
+      previousBoundaryCreatedAt = row.message.createdAt;
+      continue;
+    }
+
+    if (row.kind === "work") {
+      appendProcessChild(row);
+      continue;
+    }
+
+    if (
+      row.kind === "message" &&
+      row.message.role === "assistant" &&
+      !row.showAssistantCopyButton
+    ) {
+      appendProcessChild(row);
+      continue;
+    }
+
+    if (
+      row.kind === "message" &&
+      row.message.role === "assistant" &&
+      row.showAssistantCopyButton
+    ) {
+      if (isActiveTerminalAssistantRow(row, input)) {
+        appendWorkingChild();
+      }
+      const processRow = flushProcess(row);
+      if (processRow) {
+        result.push(processRow);
+      }
+      result.push(processRow && row.showCompletionDivider ? suppressCompletionDivider(row) : row);
+      previousBoundaryCreatedAt = row.message.completedAt ?? row.message.createdAt;
+      continue;
+    }
+
+    if (row.kind === "proposed-plan") {
+      const processRow = flushProcess(row);
+      if (processRow) {
+        result.push(processRow);
+      }
+      result.push(row);
+      previousBoundaryCreatedAt = row.proposedPlan.updatedAt ?? row.proposedPlan.createdAt;
+      continue;
+    }
+
+    const processRow = flushProcess();
+    if (processRow) {
+      result.push(processRow);
+    }
+    result.push(row);
   }
 
-  return nextRows;
+  appendWorkingChild();
+  const finalProcessRow = flushProcess();
+  if (finalProcessRow) {
+    result.push(finalProcessRow);
+  }
+
+  return result;
+}
+
+function resolveProcessStartedAt(
+  row: ProcessTimelineChildRow,
+  previousBoundaryCreatedAt: string | null,
+  input: {
+    isWorking: boolean;
+    activeTurnId?: TurnId | null;
+    activeTurnStartedAt: string | null;
+  },
+): string | null {
+  const rowTurnId = resolveProcessChildTurnId(row);
+  if (
+    input.activeTurnStartedAt &&
+    (row.kind === "working" ||
+      (input.activeTurnId != null && rowTurnId != null && rowTurnId === input.activeTurnId) ||
+      (input.isWorking && row.kind === "work"))
+  ) {
+    return input.activeTurnStartedAt;
+  }
+  return previousBoundaryCreatedAt ?? row.createdAt ?? input.activeTurnStartedAt;
+}
+
+function resolveProcessTurnId(
+  children: ReadonlyArray<ProcessTimelineChildRow>,
+  terminalRow: MessageTimelineRow | ProposedPlanTimelineRow | undefined,
+  activeTurnId: TurnId | null,
+): TurnId | null {
+  const terminalTurnId = resolveTerminalTurnId(terminalRow);
+  if (terminalTurnId) {
+    return terminalTurnId;
+  }
+
+  for (const child of children) {
+    const childTurnId = resolveProcessChildTurnId(child);
+    if (childTurnId) {
+      return childTurnId;
+    }
+  }
+
+  if (activeTurnId && children.some((child) => child.kind === "working" || child.kind === "work")) {
+    return activeTurnId;
+  }
+
+  return null;
+}
+
+function resolveTerminalTurnId(
+  row: MessageTimelineRow | ProposedPlanTimelineRow | undefined,
+): TurnId | null {
+  if (!row) {
+    return null;
+  }
+  if (row.kind === "message") {
+    return row.message.turnId ?? null;
+  }
+  return row.proposedPlan.turnId ?? null;
+}
+
+function resolveProcessChildTurnId(row: ProcessTimelineChildRow): TurnId | null {
+  if (row.kind !== "message") {
+    return null;
+  }
+  return row.message.turnId ?? null;
+}
+
+function resolveTerminalCompletedAt(
+  row: MessageTimelineRow | ProposedPlanTimelineRow | undefined,
+): string | null {
+  if (!row) {
+    return null;
+  }
+  if (row.kind === "message") {
+    return row.message.completedAt ?? (row.message.streaming ? null : row.message.createdAt);
+  }
+  return row.proposedPlan.updatedAt ?? row.proposedPlan.createdAt;
+}
+
+function deriveProcessRowId(
+  turnId: TurnId | null,
+  firstChild: ProcessTimelineChildRow | undefined,
+): string {
+  return turnId ? `process:turn:${turnId}` : `process:${firstChild?.id ?? "unknown"}`;
+}
+
+function isActiveTerminalAssistantRow(
+  row: MessageTimelineRow,
+  input: {
+    activeTurnInProgress?: boolean;
+    activeTurnId?: TurnId | null;
+  },
+): boolean {
+  return (
+    input.activeTurnInProgress === true &&
+    input.activeTurnId != null &&
+    row.message.turnId === input.activeTurnId
+  );
+}
+
+function suppressCompletionDivider(row: MessageTimelineRow): MessageTimelineRow {
+  return {
+    ...row,
+    showCompletionDivider: false,
+    completionSummary: null,
+  };
+}
+
+function hasProcessChildErrorEntry(row: ProcessTimelineChildRow): boolean {
+  return row.kind === "work" && row.groupedEntries.some((entry) => entry.tone === "error");
 }
 
 export function computeStableMessagesTimelineRows(
@@ -240,6 +507,20 @@ function isRowUnchanged(a: MessagesTimelineRow, b: MessagesTimelineRow): boolean
 
     case "work":
       return Equal.equals(a.groupedEntries, (b as typeof a).groupedEntries);
+
+    case "process": {
+      const bp = b as typeof a;
+      return (
+        a.createdAt === bp.createdAt &&
+        a.turnId === bp.turnId &&
+        a.startedAt === bp.startedAt &&
+        a.completedAt === bp.completedAt &&
+        a.completionSummary === bp.completionSummary &&
+        a.isActive === bp.isActive &&
+        a.hasErrorEntries === bp.hasErrorEntries &&
+        Equal.equals(a.children, bp.children)
+      );
+    }
 
     case "message": {
       const bm = b as typeof a;

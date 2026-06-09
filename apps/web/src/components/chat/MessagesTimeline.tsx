@@ -325,6 +325,7 @@ type TimelineEntry = ReturnType<typeof deriveTimelineEntries>[number];
 type TimelineMessage = Extract<TimelineEntry, { kind: "message" }>["message"];
 type TimelineWorkEntry = Extract<MessagesTimelineRow, { kind: "work" }>["groupedEntries"][number];
 type TimelineRow = MessagesTimelineRow;
+type TimelineBaseRow = Exclude<TimelineRow, { kind: "process" }>;
 
 const TimelineRowContent = memo(function TimelineRowContent({ row }: { row: TimelineRow }) {
   return (
@@ -338,6 +339,15 @@ const TimelineRowContent = memo(function TimelineRowContent({ row }: { row: Time
       data-message-id={row.kind === "message" ? row.message.id : undefined}
       data-message-role={row.kind === "message" ? row.message.role : undefined}
     >
+      <TimelineRowBody row={row} />
+    </div>
+  );
+});
+
+function TimelineRowBody({ row }: { row: TimelineRow }) {
+  return (
+    <>
+      {row.kind === "process" ? <ProcessTimelineRow row={row} /> : null}
       {row.kind === "work" ? <WorkGroupSection groupedEntries={row.groupedEntries} /> : null}
       {row.kind === "message" && row.message.role === "user" ? <UserTimelineRow row={row} /> : null}
       {row.kind === "message" && row.message.role === "assistant" ? (
@@ -345,9 +355,9 @@ const TimelineRowContent = memo(function TimelineRowContent({ row }: { row: Time
       ) : null}
       {row.kind === "proposed-plan" ? <ProposedPlanTimelineRow row={row} /> : null}
       {row.kind === "working" ? <WorkingTimelineRow row={row} /> : null}
-    </div>
+    </>
   );
-});
+}
 
 function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" }> }) {
   const ctx = use(TimelineRowCtx);
@@ -597,6 +607,110 @@ function WorkingTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "workin
       </div>
     </div>
   );
+}
+
+function ProcessTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "process" }> }) {
+  const contentId = useId();
+  const [expanded, setExpanded] = useState(() => row.isActive || row.hasErrorEntries);
+  const titleText = formatProcessAccordionTitle(row);
+
+  useEffect(() => {
+    if (row.isActive) {
+      setExpanded(true);
+      return;
+    }
+
+    if (row.hasErrorEntries) {
+      setExpanded(true);
+      return;
+    }
+
+    setExpanded(false);
+  }, [row.hasErrorEntries, row.id, row.isActive]);
+
+  return (
+    <div className="space-y-2">
+      <button
+        type="button"
+        aria-controls={contentId}
+        aria-expanded={expanded}
+        className="-mx-1 flex w-fit max-w-full min-w-0 items-center gap-1 rounded-md px-1 py-0.5 text-left text-muted-foreground/60 transition-colors duration-150 hover:text-foreground/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+        title={titleText}
+        onClick={() => {
+          if (row.isActive) return;
+          setExpanded((value) => !value);
+        }}
+      >
+        <span className="min-w-0 truncate text-sm leading-relaxed">
+          <ProcessAccordionLabel row={row} />
+        </span>
+        <span className="flex size-4 shrink-0 items-center justify-center">
+          <ChevronRightIcon
+            className={cn(
+              "size-3.5 transition-transform duration-150",
+              expanded ? "rotate-90" : null,
+            )}
+          />
+        </span>
+      </button>
+      {expanded ? (
+        <div id={contentId} className="space-y-4 pt-0.5">
+          {row.children.map((child) => (
+            <div
+              key={`process-child:${child.id}`}
+              className={cn(
+                "min-w-0",
+                child.kind === "message" && child.message.role === "assistant"
+                  ? "group/assistant"
+                  : null,
+              )}
+              data-process-child-row-id={child.id}
+              data-process-child-row-kind={child.kind}
+            >
+              <TimelineProcessChildBody row={child} />
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function TimelineProcessChildBody({ row }: { row: TimelineBaseRow }) {
+  return <TimelineRowBody row={row} />;
+}
+
+function ProcessAccordionLabel({ row }: { row: Extract<TimelineRow, { kind: "process" }> }) {
+  if (row.isActive) {
+    return row.startedAt ? (
+      <>
+        Working for <WorkingTimer createdAt={row.startedAt} />
+      </>
+    ) : (
+      "Working..."
+    );
+  }
+
+  return formatCompletedProcessAccordionLabel(row);
+}
+
+function formatProcessAccordionTitle(row: Extract<TimelineRow, { kind: "process" }>): string {
+  if (row.isActive) {
+    return row.startedAt ? `Working for ${formatWorkingTimerNow(row.startedAt)}` : "Working...";
+  }
+  return formatCompletedProcessAccordionLabel(row);
+}
+
+function formatCompletedProcessAccordionLabel(
+  row: Extract<TimelineRow, { kind: "process" }>,
+): string {
+  if (row.completionSummary) {
+    return row.completionSummary;
+  }
+
+  const elapsed =
+    row.startedAt && row.completedAt ? formatElapsed(row.startedAt, row.completedAt) : null;
+  return elapsed ? `Worked for ${elapsed}` : "Work details";
 }
 
 // ---------------------------------------------------------------------------
