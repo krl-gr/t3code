@@ -195,6 +195,7 @@ import {
 } from "../sidebarProjectGrouping";
 import { SidebarProviderUpdatePill } from "./sidebar/SidebarProviderUpdatePill";
 import {
+  SIDEBAR_LABEL_COLOR_CLASS,
   SIDEBAR_LABEL_TEXT_CLASS,
   SIDEBAR_MUTED_TEXT_CLASS,
 } from "./sidebar/sidebarTextStyles";
@@ -391,6 +392,12 @@ interface SidebarThreadRowProps {
   cancelRename: () => void;
   attemptArchiveThread: (threadRef: ScopedThreadRef) => Promise<void>;
   openPrLink: (event: React.MouseEvent<HTMLElement>, prUrl: string) => void;
+}
+
+function formatSidebarThreadTimestamp(isoDate: string): string {
+  const label = formatRelativeTimeLabel(isoDate);
+  if (label === "just now") return "now";
+  return label.replace(/ ago$/, "");
 }
 
 const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowProps) {
@@ -677,7 +684,11 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
               <TooltipTrigger
                 render={
                   <span
-                    className={cn("min-w-0 flex-1 truncate", SIDEBAR_LABEL_TEXT_CLASS)}
+                    className={cn(
+                      "min-w-0 flex-1 truncate",
+                      SIDEBAR_LABEL_COLOR_CLASS,
+                      SIDEBAR_LABEL_TEXT_CLASS,
+                    )}
                     data-testid={`thread-title-${thread.id}`}
                   >
                     {thread.title}
@@ -794,9 +805,9 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                       SIDEBAR_LABEL_TEXT_CLASS,
                     )}
                   >
-                    {formatRelativeTimeLabel(
+                    {formatSidebarThreadTimestamp(
                       thread.latestUserMessageAt ?? thread.updatedAt ?? thread.createdAt,
-                    ).replace(/ ago$/, "")}
+                    )}
                   </span>
                 )}
               </span>
@@ -2287,7 +2298,8 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
             <span className="flex min-w-0 flex-1 items-center gap-2">
               <span
                 className={cn(
-                  "truncate text-foreground/72 dark:text-white/82",
+                  "truncate",
+                  SIDEBAR_LABEL_COLOR_CLASS,
                   SIDEBAR_LABEL_TEXT_CLASS,
                 )}
               >
@@ -2591,7 +2603,8 @@ function SidebarViewModeButton({
       <ArrowRightIcon className="size-4" />
       <span
         className={cn(
-          "flex-1 truncate text-left text-foreground/72 dark:text-white/82",
+          "flex-1 truncate text-left",
+          SIDEBAR_LABEL_COLOR_CLASS,
           SIDEBAR_LABEL_TEXT_CLASS,
         )}
       >
@@ -2792,7 +2805,8 @@ function FocusedProjectCard({
         <span className="flex min-w-0 flex-1 items-center gap-2">
           <span
             className={cn(
-              "truncate text-foreground/72 dark:text-white/82",
+              "truncate",
+              SIDEBAR_LABEL_COLOR_CLASS,
               SIDEBAR_LABEL_TEXT_CLASS,
             )}
           >
@@ -3144,7 +3158,8 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
               <SearchIcon className="size-4" />
               <span
                 className={cn(
-                  "flex-1 truncate text-left text-foreground/72 dark:text-white/82",
+                  "flex-1 truncate text-left",
+                  SIDEBAR_LABEL_COLOR_CLASS,
                   SIDEBAR_LABEL_TEXT_CLASS,
                 )}
               >
@@ -3175,7 +3190,8 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
               <PlusIcon className="size-4" />
               <span
                 className={cn(
-                  "flex-1 truncate text-left text-foreground/72 dark:text-white/82",
+                  "flex-1 truncate text-left",
+                  SIDEBAR_LABEL_COLOR_CLASS,
                   SIDEBAR_LABEL_TEXT_CLASS,
                 )}
               >
