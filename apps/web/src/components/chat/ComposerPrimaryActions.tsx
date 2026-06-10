@@ -53,10 +53,10 @@ const preventPointerFocus: PointerEventHandler<HTMLElement> = (event) => {
 
 export function composerSendButtonClassName(canSend: boolean, className?: string) {
   return cn(
-    "flex size-8 shrink-0 items-center justify-center rounded-full bg-[#d4d4d4] text-[#171717]",
-    "shadow-[inset_0_-1px_1px_rgba(0,0,0,0.17),inset_0_1px_1px_white]",
+    "flex size-8 shrink-0 items-center justify-center rounded-full bg-[#c4c4c4] text-white",
+    "shadow-[inset_0_-1px_1px_rgba(255,255,255,0.2),inset_0_1px_1px_rgba(255,255,255,0.2)]",
     "transition-opacity duration-150 disabled:pointer-events-none",
-    canSend ? "enabled:cursor-pointer opacity-100" : "opacity-40",
+    canSend ? "enabled:cursor-pointer bg-[#222222] opacity-100" : "opacity-40",
     className,
   );
 }
