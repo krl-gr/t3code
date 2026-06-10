@@ -323,7 +323,8 @@ function keyExtractor(item: MessagesTimelineRow) {
 
 type TimelineEntry = ReturnType<typeof deriveTimelineEntries>[number];
 type TimelineMessage = Extract<TimelineEntry, { kind: "message" }>["message"];
-type TimelineWorkEntry = Extract<MessagesTimelineRow, { kind: "work" }>["groupedEntries"][number];
+type WorkGroupEntries = Extract<MessagesTimelineRow, { kind: "work" }>["groupedEntries"];
+type TimelineWorkEntry = WorkGroupEntries[number];
 type TimelineRow = MessagesTimelineRow;
 type TimelineProcessChildRow = Extract<TimelineRow, { kind: "process" }>["children"][number];
 type VisibleProcessChildRow = Exclude<TimelineProcessChildRow, { kind: "working" }>;
@@ -609,6 +610,7 @@ function ProcessTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "proces
   const [expanded, setExpanded] = useState(() => row.isActive || row.hasErrorEntries);
   const titleText = formatProcessAccordionTitle(row);
   const visibleChildren = row.children.filter(isVisibleProcessChild);
+  const workingChild = row.children.find(isWorkingProcessChild);
 
   useEffect(() => {
     if (row.hasErrorEntries) {
@@ -623,6 +625,30 @@ function ProcessTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "proces
 
     setExpanded(false);
   }, [row.hasErrorEntries, row.id, row.isActive]);
+
+  if (row.isActive) {
+    return (
+      <div className="space-y-4 pt-0.5">
+        {visibleChildren.map((child) => (
+          <ProcessChildFrame
+            key={`process-child:${child.id}`}
+            row={child}
+            forceWorkGroupsExpanded
+          />
+        ))}
+        {workingChild ? (
+          <div
+            key={`process-child:${workingChild.id}`}
+            className="min-w-0"
+            data-process-child-row-id={workingChild.id}
+            data-process-child-row-kind={workingChild.kind}
+          >
+            <WorkingTimelineRow row={workingChild} />
+          </div>
+        ) : null}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-2">
@@ -651,19 +677,11 @@ function ProcessTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "proces
       {expanded && visibleChildren.length > 0 ? (
         <div id={contentId} className="space-y-4 pt-0.5">
           {visibleChildren.map((child) => (
-            <div
+            <ProcessChildFrame
               key={`process-child:${child.id}`}
-              className={cn(
-                "min-w-0",
-                child.kind === "message" && child.message.role === "assistant"
-                  ? "group/assistant"
-                  : null,
-              )}
-              data-process-child-row-id={child.id}
-              data-process-child-row-kind={child.kind}
-            >
-              <TimelineProcessChildBody row={child} forceWorkGroupsExpanded={row.isActive} />
-            </div>
+              row={child}
+              forceWorkGroupsExpanded={false}
+            />
           ))}
         </div>
       ) : null}
@@ -673,6 +691,33 @@ function ProcessTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "proces
 
 function isVisibleProcessChild(row: TimelineProcessChildRow): row is VisibleProcessChildRow {
   return row.kind !== "working";
+}
+
+function isWorkingProcessChild(
+  row: TimelineProcessChildRow,
+): row is Extract<TimelineProcessChildRow, { kind: "working" }> {
+  return row.kind === "working";
+}
+
+function ProcessChildFrame({
+  row,
+  forceWorkGroupsExpanded,
+}: {
+  row: VisibleProcessChildRow;
+  forceWorkGroupsExpanded: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "min-w-0",
+        row.kind === "message" && row.message.role === "assistant" ? "group/assistant" : null,
+      )}
+      data-process-child-row-id={row.id}
+      data-process-child-row-kind={row.kind}
+    >
+      <TimelineProcessChildBody row={row} forceWorkGroupsExpanded={forceWorkGroupsExpanded} />
+    </div>
+  );
 }
 
 function TimelineProcessChildBody({
@@ -774,7 +819,7 @@ const WorkGroupSection = memo(function WorkGroupSection({
   groupedEntries,
   forceExpanded = false,
 }: {
-  groupedEntries: Extract<MessagesTimelineRow, { kind: "work" }>["groupedEntries"];
+  groupedEntries: WorkGroupEntries;
   forceExpanded?: boolean;
 }) {
   const { workspaceRoot } = use(TimelineRowCtx);
@@ -797,6 +842,10 @@ const WorkGroupSection = memo(function WorkGroupSection({
     setAgentActionsExpanded(false);
     setWorkLogExpanded(false);
   }, [forceExpanded, hasErrorEntries]);
+
+  if (forceExpanded) {
+    return <WorkEntriesPanel groupedEntries={groupedEntries} workspaceRoot={workspaceRoot} />;
+  }
 
   if (shouldUseAgentActionsAccordion) {
     const summaryText = formatActionCount(groupedEntries.length);
@@ -825,20 +874,11 @@ const WorkGroupSection = memo(function WorkGroupSection({
           </span>
         </button>
         {agentActionsExpanded ? (
-          <div
+          <WorkEntriesPanel
             id={agentActionsContentId}
-            className="rounded-xl border border-border bg-[#EFEFEF]/95 px-2 py-1.5 dark:bg-muted"
-          >
-            <div className="space-y-0.5">
-              {groupedEntries.map((workEntry) => (
-                <SimpleWorkEntryRow
-                  key={`work-row:${workEntry.id}`}
-                  workEntry={workEntry}
-                  workspaceRoot={workspaceRoot}
-                />
-              ))}
-            </div>
-          </div>
+            groupedEntries={groupedEntries}
+            workspaceRoot={workspaceRoot}
+          />
         ) : null}
       </div>
     );
@@ -870,24 +910,42 @@ const WorkGroupSection = memo(function WorkGroupSection({
         </span>
       </button>
       {workLogExpanded ? (
-        <div
+        <WorkEntriesPanel
           id={agentActionsContentId}
-          className="rounded-xl border border-border bg-[#EFEFEF]/95 px-2 py-1.5 dark:bg-muted"
-        >
-          <div className="space-y-0.5">
-            {groupedEntries.map((workEntry) => (
-              <SimpleWorkEntryRow
-                key={`work-row:${workEntry.id}`}
-                workEntry={workEntry}
-                workspaceRoot={workspaceRoot}
-              />
-            ))}
-          </div>
-        </div>
+          groupedEntries={groupedEntries}
+          workspaceRoot={workspaceRoot}
+        />
       ) : null}
     </div>
   );
 });
+
+function WorkEntriesPanel({
+  id,
+  groupedEntries,
+  workspaceRoot,
+}: {
+  id?: string;
+  groupedEntries: WorkGroupEntries;
+  workspaceRoot: string | undefined;
+}) {
+  return (
+    <div
+      id={id}
+      className="rounded-xl border border-border bg-[#EFEFEF]/95 px-2 py-1.5 dark:bg-muted"
+    >
+      <div className="space-y-0.5">
+        {groupedEntries.map((workEntry) => (
+          <SimpleWorkEntryRow
+            key={`work-row:${workEntry.id}`}
+            workEntry={workEntry}
+            workspaceRoot={workspaceRoot}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
 
 /** Subscribes directly to the UI state store for expand/collapse state,
  *  so toggling re-renders only this component — not the entire list. */
