@@ -69,7 +69,7 @@ import {
 import { cn } from "~/lib/utils";
 import { useUiStateStore } from "~/uiStateStore";
 import { type TimestampFormat } from "@t3tools/contracts/settings";
-import { formatTimestamp } from "../../timestampFormat";
+import { formatShortTimestamp } from "../../timestampFormat";
 
 import {
   buildInlineTerminalContextText,
@@ -424,7 +424,7 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
         <div className="mt-1.5 flex min-h-8 w-full items-center justify-end px-1">
           <div className="relative ml-auto min-h-8 min-w-[7rem]">
             <p className="absolute inset-y-0 right-0 flex items-center text-right text-sm leading-relaxed text-muted-foreground/50 transition-opacity duration-200 group-focus-within:opacity-0 group-hover:opacity-0">
-              {formatTimestamp(row.message.createdAt, ctx.timestampFormat)}
+              {formatShortTimestamp(row.message.createdAt, ctx.timestampFormat)}
             </p>
             <div className="absolute inset-y-0 right-0 flex items-center gap-1.5 opacity-0 transition-opacity duration-200 group-focus-within:opacity-100 group-hover:opacity-100">
               {displayedUserMessage.copyText && (
@@ -470,9 +470,8 @@ function AssistantTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "mess
     showCopyButton: row.showAssistantCopyButton,
     streaming: row.assistantCopyStreaming,
   });
-  const showAssistantFooter = row.showAssistantCopyButton;
-  const hasAssistantActions =
-    showAssistantFooter && (!row.message.streaming || assistantCopyState.visible);
+  const showAssistantFooter = row.showAssistantCopyButton && !row.assistantCopyStreaming;
+  const hasAssistantActions = showAssistantFooter && assistantCopyState.visible;
 
   return (
     <>
@@ -493,34 +492,20 @@ function AssistantTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "mess
           onOpenTurnDiff={ctx.onOpenTurnDiff}
         />
         {showAssistantFooter ? (
-          <div className="group/assistant-actions relative mt-1.5 min-h-8 w-fit min-w-[10rem]">
+          <div className="group/assistant-actions relative mt-1.5 min-h-8 w-fit min-w-[7rem]">
             <p
               className={cn(
-                "absolute inset-y-0 left-0 flex items-center text-sm leading-relaxed text-muted-foreground/30",
+                "absolute inset-y-0 left-0 flex items-center text-sm leading-relaxed text-muted-foreground/50",
                 hasAssistantActions
                   ? "transition-opacity duration-200 group-focus-within/assistant-actions:opacity-0 group-hover/assistant-actions:opacity-0"
                   : null,
               )}
             >
-              {row.message.streaming ? (
-                <LiveMessageMeta
-                  createdAt={row.message.createdAt}
-                  durationStart={row.durationStart}
-                  timestampFormat={ctx.timestampFormat}
-                />
-              ) : (
-                formatMessageMeta(
-                  row.message.createdAt,
-                  formatElapsed(row.durationStart, row.message.completedAt),
-                  ctx.timestampFormat,
-                )
-              )}
+              {formatShortTimestamp(row.message.createdAt, ctx.timestampFormat)}
             </p>
             {hasAssistantActions ? (
               <div className="absolute inset-y-0 left-0 flex items-center gap-1.5 opacity-0 transition-opacity duration-200 group-focus-within/assistant-actions:opacity-100 group-hover/assistant-actions:opacity-100">
-                {!row.message.streaming ? (
-                  <ForkAssistantMessageButton messageId={row.message.id} />
-                ) : null}
+                <ForkAssistantMessageButton messageId={row.message.id} />
                 <AssistantCopyButton copyState={assistantCopyState} />
               </div>
             ) : null}
@@ -774,40 +759,6 @@ function WorkingTimer({ createdAt }: { createdAt: string }) {
     const id = setInterval(updateText, 1000);
     return () => clearInterval(id);
   }, [createdAt]);
-
-  return <span ref={textRef}>{initialText}</span>;
-}
-
-/** Live timestamp + elapsed duration for a streaming assistant message. */
-function LiveMessageMeta({
-  createdAt,
-  durationStart,
-  timestampFormat,
-}: {
-  createdAt: string;
-  durationStart: string | null | undefined;
-  timestampFormat: TimestampFormat;
-}) {
-  const textRef = useRef<HTMLSpanElement>(null);
-  const initialText = formatLiveMessageMetaNow(createdAt, durationStart, timestampFormat);
-
-  useEffect(() => {
-    const updateText = () => {
-      if (textRef.current) {
-        textRef.current.textContent = formatLiveMessageMetaNow(
-          createdAt,
-          durationStart,
-          timestampFormat,
-        );
-      }
-    };
-    updateText();
-    if (!durationStart) {
-      return;
-    }
-    const id = setInterval(updateText, 1000);
-    return () => clearInterval(id);
-  }, [createdAt, durationStart, timestampFormat]);
 
   return <span ref={textRef}>{initialText}</span>;
 }
@@ -1336,24 +1287,6 @@ function formatWorkingTimer(startIso: string, endIso: string): string | null {
 
 function formatWorkingTimerNow(startIso: string): string {
   return formatWorkingTimer(startIso, new Date().toISOString()) ?? "0s";
-}
-
-function formatLiveMessageMetaNow(
-  createdAt: string,
-  durationStart: string | null | undefined,
-  timestampFormat: TimestampFormat,
-): string {
-  const elapsed = durationStart ? formatElapsed(durationStart, new Date().toISOString()) : null;
-  return formatMessageMeta(createdAt, elapsed, timestampFormat);
-}
-
-function formatMessageMeta(
-  createdAt: string,
-  duration: string | null,
-  timestampFormat: TimestampFormat,
-): string {
-  if (!duration) return formatTimestamp(createdAt, timestampFormat);
-  return `${formatTimestamp(createdAt, timestampFormat)} • ${duration}`;
 }
 
 function workToneIcon(tone: TimelineWorkEntry["tone"]): {
