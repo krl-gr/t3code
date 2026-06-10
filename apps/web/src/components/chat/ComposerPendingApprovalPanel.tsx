@@ -1,5 +1,11 @@
 import { memo } from "react";
 import { type PendingApproval } from "../../session-logic";
+import { cn } from "~/lib/utils";
+import {
+  SIDEBAR_LABEL_COLOR_CLASS,
+  SIDEBAR_LABEL_TEXT_CLASS,
+  SIDEBAR_MUTED_TEXT_CLASS,
+} from "../sidebar/sidebarTextStyles";
 
 interface ComposerPendingApprovalPanelProps {
   approval: PendingApproval;
@@ -22,10 +28,16 @@ export const ComposerPendingApprovalPanel = memo(function ComposerPendingApprova
   return (
     <div className="px-4 py-3.5 sm:px-5 sm:py-4">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="uppercase text-sm tracking-[0.2em]">PENDING APPROVAL</span>
-        <span className="text-sm font-medium">{approvalSummary}</span>
+        <span className={cn("uppercase", SIDEBAR_LABEL_COLOR_CLASS, SIDEBAR_LABEL_TEXT_CLASS)}>
+          PENDING APPROVAL
+        </span>
+        <span className={cn(SIDEBAR_LABEL_COLOR_CLASS, SIDEBAR_LABEL_TEXT_CLASS)}>
+          {approvalSummary}
+        </span>
         {pendingCount > 1 ? (
-          <span className="text-xs text-muted-foreground">1/{pendingCount}</span>
+          <span className={cn(SIDEBAR_MUTED_TEXT_CLASS, SIDEBAR_LABEL_TEXT_CLASS)}>
+            1/{pendingCount}
+          </span>
         ) : null}
       </div>
     </div>

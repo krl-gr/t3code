@@ -1,6 +1,11 @@
 import { cn } from "~/lib/utils";
 import { type ContextWindowSnapshot, formatContextWindowTokens } from "~/lib/contextWindow";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
+import {
+  SIDEBAR_LABEL_COLOR_CLASS,
+  SIDEBAR_LABEL_TEXT_CLASS,
+  SIDEBAR_MUTED_TEXT_CLASS,
+} from "../sidebar/sidebarTextStyles";
 
 function formatPercentage(value: number | null): string | null {
   if (value === null || !Number.isFinite(value)) {
@@ -78,12 +83,18 @@ export function ContextWindowMeter(props: { usage: ContextWindowSnapshot }) {
         }
       />
       <PopoverPopup tooltipStyle side="top" align="end" className="w-max max-w-none px-3 py-2">
-        <div className="space-y-1.5 leading-tight">
-          <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+        <div className="space-y-1.5">
+          <div className={cn("uppercase", SIDEBAR_MUTED_TEXT_CLASS, SIDEBAR_LABEL_TEXT_CLASS)}>
             Context window
           </div>
           {usage.maxTokens !== null && usedPercentage ? (
-            <div className="whitespace-nowrap text-xs font-medium text-foreground">
+            <div
+              className={cn(
+                "whitespace-nowrap",
+                SIDEBAR_LABEL_COLOR_CLASS,
+                SIDEBAR_LABEL_TEXT_CLASS,
+              )}
+            >
               <span>{usedPercentage}</span>
               <span className="mx-1">⋅</span>
               <span>{formatContextWindowTokens(usage.usedTokens)}</span>
@@ -91,19 +102,19 @@ export function ContextWindowMeter(props: { usage: ContextWindowSnapshot }) {
               <span>{formatContextWindowTokens(usage.maxTokens ?? null)} context used</span>
             </div>
           ) : (
-            <div className="text-sm text-foreground">
+            <div className={cn(SIDEBAR_LABEL_COLOR_CLASS, SIDEBAR_LABEL_TEXT_CLASS)}>
               {formatContextWindowTokens(usage.usedTokens)} tokens used so far
             </div>
           )}
           {(usage.totalProcessedTokens ?? null) !== null &&
           (usage.totalProcessedTokens ?? 0) > usage.usedTokens ? (
-            <div className="text-xs text-muted-foreground">
+            <div className={cn(SIDEBAR_MUTED_TEXT_CLASS, SIDEBAR_LABEL_TEXT_CLASS)}>
               Total processed: {formatContextWindowTokens(usage.totalProcessedTokens ?? null)}{" "}
               tokens
             </div>
           ) : null}
           {usage.compactsAutomatically ? (
-            <div className="text-xs text-muted-foreground">
+            <div className={cn(SIDEBAR_MUTED_TEXT_CLASS, SIDEBAR_LABEL_TEXT_CLASS)}>
               Automatically compacts its context when needed.
             </div>
           ) : null}

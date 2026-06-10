@@ -2,6 +2,7 @@ import { type ProviderInteractionMode, type RuntimeMode } from "@t3tools/contrac
 import { memo, type ReactNode } from "react";
 import { EllipsisIcon, ListTodoIcon } from "lucide-react";
 import { INTERACTION_MODE_ORDER, interactionModeConfig } from "../../interactionModes";
+import { cn } from "~/lib/utils";
 import { Button } from "../ui/button";
 import {
   Menu,
@@ -13,6 +14,10 @@ import {
   MenuTrigger,
 } from "../ui/menu";
 import { COMPOSER_CONTROL_ICON_TRIGGER_CLASS } from "./composerControlStyles";
+import {
+  SIDEBAR_LABEL_TEXT_CLASS,
+  SIDEBAR_MUTED_TEXT_CLASS,
+} from "../sidebar/sidebarTextStyles";
 
 export const CompactComposerControlsMenu = memo(function CompactComposerControlsMenu(props: {
   activePlan: boolean;
@@ -49,7 +54,9 @@ export const CompactComposerControlsMenu = memo(function CompactComposerControls
         ) : null}
         {props.showInteractionModeToggle ? (
           <>
-            <div className="px-2 py-1.5 font-medium text-muted-foreground text-xs">Mode</div>
+            <div className={cn("px-2 py-1.5", SIDEBAR_MUTED_TEXT_CLASS, SIDEBAR_LABEL_TEXT_CLASS)}>
+              Mode
+            </div>
             <MenuRadioGroup
               value={props.interactionMode}
               onValueChange={(value) => {
@@ -66,7 +73,9 @@ export const CompactComposerControlsMenu = memo(function CompactComposerControls
             <MenuDivider />
           </>
         ) : null}
-        <div className="px-2 py-1.5 font-medium text-muted-foreground text-xs">Access</div>
+        <div className={cn("px-2 py-1.5", SIDEBAR_MUTED_TEXT_CLASS, SIDEBAR_LABEL_TEXT_CLASS)}>
+          Access
+        </div>
         <MenuRadioGroup
           value={props.runtimeMode}
           onValueChange={(value) => {

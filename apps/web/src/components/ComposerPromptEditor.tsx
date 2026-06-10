@@ -72,6 +72,11 @@ import {
   COMPOSER_INLINE_SKILL_CHIP_CLASS_NAME,
   SKILL_CHIP_ICON_SVG,
 } from "./composerInlineChip";
+import {
+  SIDEBAR_LABEL_COLOR_CLASS,
+  SIDEBAR_LABEL_TEXT_CLASS,
+  SIDEBAR_MUTED_TEXT_CLASS,
+} from "./sidebar/sidebarTextStyles";
 import { ComposerPendingTerminalContextChip } from "./chat/ComposerPendingTerminalContexts";
 import { formatProviderSkillDisplayName } from "~/providerSkillPresentation";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
@@ -1612,7 +1617,9 @@ function ComposerPromptEditorInner({
           contentEditable={
             <ContentEditable
               className={cn(
-                "block max-h-50 min-h-17.5 w-full overflow-y-auto whitespace-pre-wrap wrap-break-word bg-transparent text-[16px] leading-relaxed text-foreground focus:outline-none sm:text-[14px]",
+                "block max-h-50 min-h-8 w-full overflow-y-auto whitespace-pre-wrap wrap-break-word bg-transparent focus:outline-none",
+                SIDEBAR_LABEL_TEXT_CLASS,
+                SIDEBAR_LABEL_COLOR_CLASS,
                 className,
               )}
               data-testid="composer-editor"
@@ -1623,7 +1630,14 @@ function ComposerPromptEditorInner({
           }
           placeholder={
             terminalContexts.length > 0 ? null : (
-              <div className="pointer-events-none absolute inset-0 text-[16px] font-medium leading-[18px] text-muted-foreground/50 dark:text-[rgba(186,185,186,0.5)] sm:text-[14px]">
+              <div
+                className={cn(
+                  "pointer-events-none absolute inset-0",
+                  SIDEBAR_LABEL_TEXT_CLASS,
+                  SIDEBAR_MUTED_TEXT_CLASS,
+                  "not-dark:text-muted-foreground/60",
+                )}
+              >
                 {placeholder}
               </div>
             )

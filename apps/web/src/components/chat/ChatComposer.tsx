@@ -77,6 +77,11 @@ import {
   COMPOSER_CONTROL_SEPARATOR_CLASS,
   COMPOSER_CONTROL_TEXT_TRIGGER_CLASS,
 } from "./composerControlStyles";
+import {
+  SIDEBAR_LABEL_COLOR_CLASS,
+  SIDEBAR_LABEL_TEXT_CLASS,
+  SIDEBAR_MUTED_TEXT_CLASS,
+} from "../sidebar/sidebarTextStyles";
 import { resolveComposerMenuActiveItemId } from "./composerMenuHighlight";
 import { searchSlashCommandItems } from "./composerSlashCommandSearch";
 import {
@@ -378,8 +383,10 @@ const ComposerFooterModeControls = memo(function ComposerFooterModeControls(prop
                 return (
                   <SelectItem key={mode} value={mode} className="min-w-56 py-2">
                     <div className="grid min-w-0 gap-0.5">
-                      <span className="font-medium text-foreground">{option.label}</span>
-                      <span className="text-muted-foreground text-xs leading-4">
+                      <span className={cn(SIDEBAR_LABEL_COLOR_CLASS, SIDEBAR_LABEL_TEXT_CLASS)}>
+                        {option.label}
+                      </span>
+                      <span className={cn(SIDEBAR_MUTED_TEXT_CLASS, SIDEBAR_LABEL_TEXT_CLASS)}>
                         {option.description}
                       </span>
                     </div>
@@ -413,11 +420,17 @@ const ComposerFooterModeControls = memo(function ComposerFooterModeControls(prop
             return (
               <SelectItem key={mode} value={mode} className="min-w-64 py-2">
                 <div className="grid min-w-0 gap-0.5">
-                  <span className="inline-flex items-center gap-1.5 font-medium text-foreground">
+                  <span
+                    className={cn(
+                      "inline-flex items-center gap-1.5",
+                      SIDEBAR_LABEL_COLOR_CLASS,
+                      SIDEBAR_LABEL_TEXT_CLASS,
+                    )}
+                  >
                     <OptionIcon className="size-3.5 shrink-0 text-muted-foreground" />
                     {option.label}
                   </span>
-                  <span className="text-muted-foreground text-xs leading-4">
+                  <span className={cn(SIDEBAR_MUTED_TEXT_CLASS, SIDEBAR_LABEL_TEXT_CLASS)}>
                     {option.description}
                   </span>
                 </div>
@@ -482,7 +495,9 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
     <>
       {props.activeContextWindow ? <ContextWindowMeter usage={props.activeContextWindow} /> : null}
       {props.isPreparingWorktree ? (
-        <span className="text-muted-foreground/70 text-xs">Preparing worktree...</span>
+        <span className={cn(SIDEBAR_MUTED_TEXT_CLASS, SIDEBAR_LABEL_TEXT_CLASS)}>
+          Preparing worktree...
+        </span>
       ) : null}
       <ComposerPrimaryActions
         compact={props.compact}
@@ -2231,7 +2246,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         >
           <div
             className={cn(
-              "flex min-h-32 flex-col rounded-[32px] bg-card shadow-[0_4px_14.4px_rgba(9,9,9,0.08)] transition-colors duration-200 dark:bg-[#1e1e1e] dark:shadow-[inset_-1px_-1px_1px_rgba(255,255,255,0.06),inset_1px_1px_1px_rgba(255,255,255,0.12),0_4px_14.4px_rgba(9,9,9,0.08)]",
+              "flex min-h-24 flex-col rounded-[32px] bg-card shadow-[0_4px_14.4px_rgba(9,9,9,0.035)] transition-colors duration-200 not-dark:border not-dark:border-border dark:bg-[#1e1e1e] dark:shadow-[inset_-1px_-1px_1px_rgba(255,255,255,0.06),inset_1px_1px_1px_rgba(255,255,255,0.12),0_4px_14.4px_rgba(9,9,9,0.08)]",
               environmentUnavailable ? "opacity-75" : null,
             )}
           >
@@ -2305,7 +2320,13 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                       <Tooltip key={binding.id}>
                         <TooltipTrigger
                           render={
-                            <span className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-border/70 bg-background/55 px-2 py-1 text-xs text-muted-foreground shadow-xs/5" />
+                            <span
+                              className={cn(
+                                "inline-flex max-w-full items-center gap-1.5 rounded-full border border-border/70 bg-background/55 px-2 py-1 shadow-xs/5",
+                                SIDEBAR_MUTED_TEXT_CLASS,
+                                SIDEBAR_LABEL_TEXT_CLASS,
+                              )}
+                            />
                           }
                         >
                           <GitBranchIcon className="size-3.5 shrink-0" />
@@ -2359,7 +2380,13 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                             />
                           </button>
                         ) : (
-                          <div className="flex h-full w-full items-center justify-center px-1 text-center text-[10px] text-muted-foreground/70">
+                          <div
+                            className={cn(
+                              "flex h-full w-full items-center justify-center px-1 text-center",
+                              SIDEBAR_MUTED_TEXT_CLASS,
+                              SIDEBAR_LABEL_TEXT_CLASS,
+                            )}
+                          >
                             {image.name}
                           </div>
                         )}
@@ -2416,7 +2443,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                       : []
                   }
                   skills={selectedProviderStatus?.skills ?? []}
-                  className="min-h-14 sm:min-h-14"
+                  className="min-h-8 sm:min-h-8"
                   onRemoveTerminalContext={removeComposerTerminalContextFromDraft}
                   onChange={onPromptChange}
                   onCommandKeyDown={onComposerCommandKey}
@@ -2545,10 +2572,20 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                                 return (
                                   <SelectItem key={mode} value={mode} className="min-w-56 py-2">
                                     <div className="grid min-w-0 gap-0.5">
-                                      <span className="font-medium text-foreground">
+                                      <span
+                                        className={cn(
+                                          SIDEBAR_LABEL_COLOR_CLASS,
+                                          SIDEBAR_LABEL_TEXT_CLASS,
+                                        )}
+                                      >
                                         {option.label}
                                       </span>
-                                      <span className="text-muted-foreground text-xs leading-4">
+                                      <span
+                                        className={cn(
+                                          SIDEBAR_MUTED_TEXT_CLASS,
+                                          SIDEBAR_LABEL_TEXT_CLASS,
+                                        )}
+                                      >
                                         {option.description}
                                       </span>
                                     </div>
@@ -2685,7 +2722,13 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
 
             <div className="max-h-72 space-y-1 overflow-y-auto pr-1">
               {chatContextCandidates.length === 0 ? (
-                <div className="rounded-lg border border-border/70 bg-muted/20 px-3 py-6 text-center text-muted-foreground text-sm">
+                <div
+                  className={cn(
+                    "rounded-lg border border-border/70 bg-muted/20 px-3 py-6 text-center",
+                    SIDEBAR_MUTED_TEXT_CLASS,
+                    SIDEBAR_LABEL_TEXT_CLASS,
+                  )}
+                >
                   No other chats in this environment.
                 </div>
               ) : (
@@ -2706,12 +2749,32 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                       onClick={() => setSelectedChatContextSourceId(thread.id)}
                     >
                       <span className="min-w-0">
-                        <span className="block truncate text-sm font-medium">{thread.title}</span>
-                        <span className="block truncate text-muted-foreground text-xs">
+                        <span
+                          className={cn(
+                            "block truncate",
+                            SIDEBAR_LABEL_COLOR_CLASS,
+                            SIDEBAR_LABEL_TEXT_CLASS,
+                          )}
+                        >
+                          {thread.title}
+                        </span>
+                        <span
+                          className={cn(
+                            "block truncate",
+                            SIDEBAR_MUTED_TEXT_CLASS,
+                            SIDEBAR_LABEL_TEXT_CLASS,
+                          )}
+                        >
                           {project ? `${project.name} · ${project.cwd}` : thread.id}
                         </span>
                       </span>
-                      <span className="shrink-0 text-muted-foreground text-xs">
+                      <span
+                        className={cn(
+                          "shrink-0",
+                          SIDEBAR_MUTED_TEXT_CLASS,
+                          SIDEBAR_LABEL_TEXT_CLASS,
+                        )}
+                      >
                         {thread.archivedAt ? "Archived" : ""}
                       </span>
                     </button>

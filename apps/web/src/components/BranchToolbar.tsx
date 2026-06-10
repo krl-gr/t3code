@@ -45,6 +45,10 @@ import {
   CONTEXT_BAR_TEXT_TRIGGER_CLASS,
 } from "./BranchToolbar.styles";
 import {
+  SIDEBAR_LABEL_TEXT_CLASS,
+  SIDEBAR_MUTED_TEXT_CLASS,
+} from "./sidebar/sidebarTextStyles";
+import {
   ContextBarDiffIcon,
   ContextBarMoreIcon,
   ContextBarTerminalIcon,
@@ -201,7 +205,7 @@ function ContextBarSlash() {
     <svg
       aria-hidden="true"
       viewBox="0 0 6 12"
-      className="h-[12px] w-[6px] shrink-0 text-[#2b2b2c]"
+      className="h-[12px] w-[6px] shrink-0 text-foreground/35 dark:text-border"
       fill="none"
     >
       <path d="M5.25 0.5L0.75 11.5" stroke="currentColor" strokeWidth="1" />
@@ -619,7 +623,7 @@ export const BranchToolbar = memo(function BranchToolbar({
   return (
     <div
       ref={toolbarRef}
-      className="mx-auto flex w-full max-w-208 min-w-0 items-center justify-between gap-2 pb-2 pl-3 pr-4 pt-1 drop-shadow-[0_4px_2px_rgba(0,0,0,0.25)]"
+      className="mx-auto flex w-full max-w-208 min-w-0 items-center justify-between gap-2 pb-2 pl-3 pr-4 pt-1 dark:drop-shadow-[0_4px_2px_rgba(0,0,0,0.25)]"
       data-chat-context-bar="true"
     >
       <div
@@ -638,7 +642,9 @@ export const BranchToolbar = memo(function BranchToolbar({
               projectKey={activeProject.id}
               className="size-4 dark:text-white/[0.175]"
             />
-            <span className="min-w-0 truncate text-sm font-medium leading-5 text-[rgba(186,185,186,0.7)]">
+            <span
+              className={`min-w-0 truncate ${SIDEBAR_MUTED_TEXT_CLASS} ${SIDEBAR_LABEL_TEXT_CLASS}`}
+            >
               {activeProject.name}
             </span>
           </div>
@@ -693,7 +699,9 @@ export const BranchToolbar = memo(function BranchToolbar({
         )}
       </div>
 
-      <div className="relative flex shrink-0 items-center justify-end gap-0 text-[rgba(186,185,186,0.7)]">
+      <div
+        className={`relative flex shrink-0 items-center justify-end gap-0 ${SIDEBAR_MUTED_TEXT_CLASS} ${SIDEBAR_LABEL_TEXT_CLASS}`}
+      >
         {quickAccessNodes.length > 0 ? (
           <div
             ref={quickAccessRef}
