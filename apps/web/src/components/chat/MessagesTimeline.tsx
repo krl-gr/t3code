@@ -380,62 +380,64 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
 
   return (
     <div className="flex justify-end">
-      <div className="group relative max-w-[80%] rounded-2xl rounded-br-sm border border-border bg-white/90 px-4 py-3 dark:bg-secondary">
-        {userImages.length > 0 && (
-          <div className="mb-2 grid max-w-[420px] grid-cols-2 gap-2">
-            {userImages.map((image: NonNullable<TimelineMessage["attachments"]>[number]) => (
-              <div
-                key={image.id}
-                className="overflow-hidden rounded-lg border border-border/80 bg-background/70"
-              >
-                {image.previewUrl ? (
-                  <button
-                    type="button"
-                    className="h-full w-full cursor-zoom-in"
-                    aria-label={`Preview ${image.name}`}
-                    onClick={() => {
-                      const preview = buildExpandedImagePreview(userImages, image.id);
-                      if (!preview) return;
-                      ctx.onImageExpand(preview);
-                    }}
-                  >
-                    <img
-                      src={image.previewUrl}
-                      alt={image.name}
-                      className="block h-auto max-h-[220px] w-full object-cover"
-                    />
-                  </button>
-                ) : (
-                  <div className="flex min-h-[72px] items-center justify-center px-2 py-3 text-center text-sm leading-relaxed text-muted-foreground/70">
-                    {image.name}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-        <CollapsibleUserMessageBody
-          text={displayedUserMessage.visibleText}
-          terminalContexts={terminalContexts}
-          skills={ctx.skills}
-          footer={
-            <div className="relative ml-auto min-h-8 min-w-[7rem]">
-              <p className="absolute inset-y-0 right-0 flex items-center text-right text-sm leading-relaxed text-muted-foreground/50 transition-opacity duration-200 group-focus-within:opacity-0 group-hover:opacity-0">
-                {formatTimestamp(row.message.createdAt, ctx.timestampFormat)}
-              </p>
-              <div className="absolute inset-y-0 right-0 flex items-center gap-1.5 opacity-0 transition-opacity duration-200 group-focus-within:opacity-100 group-hover:opacity-100">
-                {displayedUserMessage.copyText && (
-                  <MessageCopyButton
-                    text={displayedUserMessage.copyText}
-                    size="icon-sm"
-                    className="shadow-none before:hidden"
-                  />
-                )}
-                {canRevertAgentWork && <RevertUserMessageButton messageId={row.message.id} />}
-              </div>
+      <div className="group flex max-w-[80%] flex-col items-end">
+        <div className="max-w-full rounded-2xl rounded-br-sm border border-border bg-white/90 px-4 py-3 dark:bg-secondary">
+          {userImages.length > 0 && (
+            <div className="mb-2 grid max-w-[420px] grid-cols-2 gap-2">
+              {userImages.map((image: NonNullable<TimelineMessage["attachments"]>[number]) => (
+                <div
+                  key={image.id}
+                  className="overflow-hidden rounded-lg border border-border/80 bg-background/70"
+                >
+                  {image.previewUrl ? (
+                    <button
+                      type="button"
+                      className="h-full w-full cursor-zoom-in"
+                      aria-label={`Preview ${image.name}`}
+                      onClick={() => {
+                        const preview = buildExpandedImagePreview(userImages, image.id);
+                        if (!preview) return;
+                        ctx.onImageExpand(preview);
+                      }}
+                    >
+                      <img
+                        src={image.previewUrl}
+                        alt={image.name}
+                        className="block h-auto max-h-[220px] w-full object-cover"
+                      />
+                    </button>
+                  ) : (
+                    <div className="flex min-h-[72px] items-center justify-center px-2 py-3 text-center text-sm leading-relaxed text-muted-foreground/70">
+                      {image.name}
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
-          }
-        />
+          )}
+          <CollapsibleUserMessageBody
+            text={displayedUserMessage.visibleText}
+            terminalContexts={terminalContexts}
+            skills={ctx.skills}
+          />
+        </div>
+        <div className="mt-1.5 flex min-h-8 w-full items-center justify-end px-1">
+          <div className="relative ml-auto min-h-8 min-w-[7rem]">
+            <p className="absolute inset-y-0 right-0 flex items-center text-right text-sm leading-relaxed text-muted-foreground/50 transition-opacity duration-200 group-focus-within:opacity-0 group-hover:opacity-0">
+              {formatTimestamp(row.message.createdAt, ctx.timestampFormat)}
+            </p>
+            <div className="absolute inset-y-0 right-0 flex items-center gap-1.5 opacity-0 transition-opacity duration-200 group-focus-within:opacity-100 group-hover:opacity-100">
+              {displayedUserMessage.copyText && (
+                <MessageCopyButton
+                  text={displayedUserMessage.copyText}
+                  size="icon-sm"
+                  className="shadow-none before:hidden"
+                />
+              )}
+              {canRevertAgentWork && <RevertUserMessageButton messageId={row.message.id} />}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -1075,7 +1077,6 @@ const CollapsibleUserMessageBody = memo(function CollapsibleUserMessageBody(prop
   text: string;
   terminalContexts: ParsedTerminalContextEntry[];
   skills: ReadonlyArray<Pick<ServerProviderSkill, "name" | "displayName">>;
-  footer?: ReactNode;
 }) {
   const [expanded, setExpanded] = useState(false);
   const hasVisibleBody = props.text.trim().length > 0 || props.terminalContexts.length > 0;
@@ -1107,30 +1108,19 @@ const CollapsibleUserMessageBody = memo(function CollapsibleUserMessageBody(prop
           />
         </div>
       ) : null}
-      {canCollapse || props.footer ? (
-        <div
-          className={cn(
-            "mt-1.5 flex items-center gap-2",
-            canCollapse && props.footer ? "justify-between" : "justify-end",
-          )}
-          data-user-message-footer="true"
-        >
-          {canCollapse ? (
-            <Button
-              type="button"
-              size="xs"
-              variant="ghost"
-              aria-expanded={expanded}
-              data-scroll-anchor-ignore
-              onClick={() => setExpanded((value) => !value)}
-              className="-ml-1 h-auto min-h-7 rounded-md px-1.5 text-sm leading-relaxed text-muted-foreground/72 hover:bg-muted/55 hover:text-foreground/85 sm:text-sm"
-            >
-              {expanded ? "Show less" : "Show full message"}
-            </Button>
-          ) : null}
-          {props.footer ? (
-            <div className="ml-auto flex items-center gap-2">{props.footer}</div>
-          ) : null}
+      {canCollapse ? (
+        <div className="mt-1.5 flex items-center gap-2" data-user-message-footer="true">
+          <Button
+            type="button"
+            size="xs"
+            variant="ghost"
+            aria-expanded={expanded}
+            data-scroll-anchor-ignore
+            onClick={() => setExpanded((value) => !value)}
+            className="-ml-1 h-auto min-h-7 rounded-md px-1.5 text-sm leading-relaxed text-muted-foreground/72 hover:bg-muted/55 hover:text-foreground/85 sm:text-sm"
+          >
+            {expanded ? "Show less" : "Show full message"}
+          </Button>
         </div>
       ) : null}
     </div>
