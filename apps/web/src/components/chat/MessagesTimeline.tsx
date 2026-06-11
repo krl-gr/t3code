@@ -999,7 +999,7 @@ function AssistantChangedFilesSectionInner({
 
   return (
     <div className="group/changed-files mt-2 rounded-xl border border-border bg-[#EFEFEF]/95 px-2.5 pt-0 pb-2.5 dark:bg-muted">
-      <div className="sticky top-0 z-10 -mx-2.5 flex items-center justify-between gap-2 rounded-t-xl bg-[linear-gradient(to_bottom,#EFEFEFF2_0%,transparent_100%)] px-2.5 py-1.5 dark:bg-[linear-gradient(to_bottom,var(--muted)_0%,transparent_100%)]">
+      <div className="-mx-2.5 flex items-center justify-between gap-2 rounded-t-xl px-2.5 py-1.5">
         <p className="text-sm leading-relaxed text-muted-foreground/65">
           <span>Changed files ({changedFileCountLabel})</span>
           {hasNonZeroStat(summaryStat) && (
