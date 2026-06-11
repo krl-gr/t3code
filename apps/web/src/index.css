@@ -556,6 +556,10 @@ label:has(> select#reasoning-effort) select {
   margin-top: 0.25rem;
 }
 
+.chat-markdown strong {
+  font-weight: 550;
+}
+
 .chat-markdown a {
   color: var(--info-foreground);
   text-decoration: underline;
