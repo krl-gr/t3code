@@ -629,10 +629,34 @@ label:has(> select#reasoning-effort) select {
 .chat-markdown pre {
   max-width: 100%;
   overflow-x: auto;
+  overflow-y: hidden;
   border: 1px solid var(--border);
   border-radius: 0.75rem;
   background: rgb(239 239 239 / 95%);
-  padding: 0.8rem 0.9rem;
+  padding: 0.8rem 0.9rem 1rem;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--foreground) 18%, transparent) transparent;
+}
+
+.chat-markdown pre::-webkit-scrollbar:horizontal {
+  height: 5px;
+}
+
+.chat-markdown pre::-webkit-scrollbar-track {
+  background: transparent;
+  margin-inline: 0.75rem;
+}
+
+.chat-markdown pre::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--foreground) 20%, transparent);
+  background-clip: content-box;
+}
+
+.chat-markdown pre::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--foreground) 32%, transparent);
+  background-clip: content-box;
 }
 
 .dark .chat-markdown pre {
@@ -667,6 +691,8 @@ label:has(> select#reasoning-effort) select {
 .chat-markdown .chat-markdown-codeblock {
   --chat-markdown-codeblock-copy-button-space: 1.5rem;
   position: relative;
+  overflow: hidden;
+  border-radius: 0.75rem;
   margin: 0.65rem 0;
 }
 
