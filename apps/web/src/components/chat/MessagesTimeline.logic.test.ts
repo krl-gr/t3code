@@ -768,6 +768,114 @@ describe("computeStableMessagesTimelineRows", () => {
     expect(repeated.result).toBe(initial.result);
   });
 
+  it("reuses message rows when an equivalent server message replaces an optimistic object", () => {
+    const optimisticUserMessage = {
+      id: "user-1" as never,
+      role: "user" as const,
+      text: "Ship it",
+      turnId: null,
+      createdAt: "2026-01-01T00:00:00Z",
+      streaming: false,
+      attachments: [
+        {
+          type: "image" as const,
+          id: "image-1",
+          name: "screen.png",
+          mimeType: "image/png",
+          sizeBytes: 123,
+          previewUrl: "blob:optimistic-preview",
+        },
+      ],
+    };
+    const serverUserMessage = {
+      ...optimisticUserMessage,
+      completedAt: optimisticUserMessage.createdAt,
+      attachments: optimisticUserMessage.attachments.map((attachment) => ({ ...attachment })),
+    };
+    const createRows = (message: typeof optimisticUserMessage) =>
+      deriveMessagesTimelineRows({
+        timelineEntries: [
+          {
+            id: message.id,
+            kind: "message",
+            createdAt: message.createdAt,
+            message,
+          },
+        ],
+        completionDividerBeforeEntryId: null,
+        isWorking: false,
+        activeTurnStartedAt: null,
+        turnDiffSummaryByAssistantMessageId: new Map(),
+        revertTurnCountByUserMessageId: new Map(),
+      });
+
+    const initial = computeStableMessagesTimelineRows(createRows(optimisticUserMessage), {
+      byId: new Map(),
+      result: [],
+    });
+    const repeated = computeStableMessagesTimelineRows(createRows(serverUserMessage), initial);
+
+    expect(repeated).toBe(initial);
+    expect(repeated.result[0]).toBe(initial.result[0]);
+  });
+
+  it("does not reuse message rows when render-relevant message fields change", () => {
+    const baseUserMessage = {
+      id: "user-1" as never,
+      role: "user" as const,
+      text: "Ship it",
+      turnId: null,
+      createdAt: "2026-01-01T00:00:00Z",
+      streaming: false,
+      attachments: [
+        {
+          type: "image" as const,
+          id: "image-1",
+          name: "screen.png",
+          mimeType: "image/png",
+          sizeBytes: 123,
+          previewUrl: "blob:optimistic-preview",
+        },
+      ],
+    };
+    const createRows = (message: typeof baseUserMessage) =>
+      deriveMessagesTimelineRows({
+        timelineEntries: [
+          {
+            id: message.id,
+            kind: "message",
+            createdAt: message.createdAt,
+            message,
+          },
+        ],
+        completionDividerBeforeEntryId: null,
+        isWorking: false,
+        activeTurnStartedAt: null,
+        turnDiffSummaryByAssistantMessageId: new Map(),
+        revertTurnCountByUserMessageId: new Map(),
+      });
+
+    const initial = computeStableMessagesTimelineRows(createRows(baseUserMessage), {
+      byId: new Map(),
+      result: [],
+    });
+    const changed = computeStableMessagesTimelineRows(
+      createRows({
+        ...baseUserMessage,
+        attachments: [
+          {
+            ...baseUserMessage.attachments[0]!,
+            previewUrl: "/attachments/server-preview",
+          },
+        ],
+      }),
+      initial,
+    );
+
+    expect(changed).not.toBe(initial);
+    expect(changed.result[0]).not.toBe(initial.result[0]);
+  });
+
   it("reuses process rows when equivalent timeline derivations create new grouped work arrays", () => {
     const firstWorkEntry = {
       id: "work-1",

@@ -518,6 +518,92 @@ export function computeStableMessagesTimelineRows(
   return anyChanged ? { byId: next, result } : previous;
 }
 
+function areMessagesRenderEquivalent(a: ChatMessage, b: ChatMessage): boolean {
+  return (
+    a.id === b.id &&
+    a.role === b.role &&
+    a.text === b.text &&
+    (a.turnId ?? null) === (b.turnId ?? null) &&
+    a.createdAt === b.createdAt &&
+    (a.role !== "assistant" || (a.completedAt ?? null) === (b.completedAt ?? null)) &&
+    a.streaming === b.streaming &&
+    areAttachmentsRenderEquivalent(a.attachments, b.attachments)
+  );
+}
+
+function areAttachmentsRenderEquivalent(
+  a: ChatMessage["attachments"],
+  b: ChatMessage["attachments"],
+): boolean {
+  if (a === b) return true;
+  const left = a ?? [];
+  const right = b ?? [];
+  if (left.length !== right.length) return false;
+
+  for (let index = 0; index < left.length; index += 1) {
+    const leftAttachment = left[index];
+    const rightAttachment = right[index];
+    if (!leftAttachment || !rightAttachment) return false;
+    if (
+      leftAttachment.type !== rightAttachment.type ||
+      leftAttachment.id !== rightAttachment.id ||
+      leftAttachment.name !== rightAttachment.name ||
+      leftAttachment.mimeType !== rightAttachment.mimeType ||
+      leftAttachment.sizeBytes !== rightAttachment.sizeBytes ||
+      (leftAttachment.previewUrl ?? null) !== (rightAttachment.previewUrl ?? null)
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function areProcessChildrenUnchanged(
+  a: readonly ProcessTimelineChildRow[],
+  b: readonly ProcessTimelineChildRow[],
+): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+
+  for (let index = 0; index < a.length; index += 1) {
+    const left = a[index];
+    const right = b[index];
+    if (!left || !right || !isProcessChildUnchanged(left, right)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function isProcessChildUnchanged(
+  a: ProcessTimelineChildRow,
+  b: ProcessTimelineChildRow,
+): boolean {
+  if (a.kind !== b.kind || a.id !== b.id || a.createdAt !== b.createdAt) return false;
+
+  switch (a.kind) {
+    case "working":
+      return true;
+    case "work":
+      return Equal.equals(a.groupedEntries, (b as typeof a).groupedEntries);
+    case "message": {
+      const bm = b as typeof a;
+      return (
+        areMessagesRenderEquivalent(a.message, bm.message) &&
+        a.durationStart === bm.durationStart &&
+        a.showCompletionDivider === bm.showCompletionDivider &&
+        a.completionSummary === bm.completionSummary &&
+        a.showAssistantCopyButton === bm.showAssistantCopyButton &&
+        a.assistantCopyStreaming === bm.assistantCopyStreaming &&
+        a.assistantTurnDiffSummary === bm.assistantTurnDiffSummary &&
+        a.revertTurnCount === bm.revertTurnCount
+      );
+    }
+  }
+}
+
 /** Shallow field comparison per row variant — avoids deep equality cost. */
 function isRowUnchanged(a: MessagesTimelineRow, b: MessagesTimelineRow): boolean {
   if (a.kind !== b.kind || a.id !== b.id) return false;
@@ -542,14 +628,15 @@ function isRowUnchanged(a: MessagesTimelineRow, b: MessagesTimelineRow): boolean
         a.completionSummary === bp.completionSummary &&
         a.isActive === bp.isActive &&
         a.hasErrorEntries === bp.hasErrorEntries &&
-        Equal.equals(a.children, bp.children)
+        areProcessChildrenUnchanged(a.children, bp.children)
       );
     }
 
     case "message": {
       const bm = b as typeof a;
       return (
-        a.message === bm.message &&
+        a.createdAt === bm.createdAt &&
+        areMessagesRenderEquivalent(a.message, bm.message) &&
         a.durationStart === bm.durationStart &&
         a.showCompletionDivider === bm.showCompletionDivider &&
         a.completionSummary === bm.completionSummary &&
