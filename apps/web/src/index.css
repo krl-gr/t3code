@@ -91,6 +91,70 @@
   animation-duration: 0s !important;
 }
 
+/* Chat timeline animations — applied only when the user allows motion.
+   `.no-transitions` (theme switches) zeroes these via animation-duration. */
+@keyframes chat-row-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes chat-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes chat-pill-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes chat-working-dot {
+  0%,
+  60%,
+  100% {
+    opacity: 0.4;
+    transform: scale(1);
+  }
+  30% {
+    opacity: 1;
+    transform: scale(1.25);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .chat-row-enter {
+    animation: chat-row-enter 180ms ease-out both;
+  }
+
+  .chat-fade-in {
+    animation: chat-fade-in 150ms ease-out both;
+  }
+
+  .chat-pill-enter {
+    animation: chat-pill-enter 150ms ease-out both;
+  }
+
+  .chat-working-dot {
+    animation: chat-working-dot 1.2s ease-in-out infinite;
+  }
+}
+
 :root {
   color-scheme: light;
   --radius: 0.625rem;

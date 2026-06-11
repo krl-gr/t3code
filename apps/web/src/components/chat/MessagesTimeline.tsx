@@ -46,6 +46,7 @@ import {
   ZapIcon,
 } from "lucide-react";
 import { Button } from "../ui/button";
+import { AnimatedHeight } from "../AnimatedHeight";
 import { buildExpandedImagePreview, ExpandedImagePreview } from "./ExpandedImagePreview";
 import { ProposedPlanCard } from "./ProposedPlanCard";
 import { ChangedFilesTree } from "./ChangedFilesTree";
@@ -329,11 +330,30 @@ type TimelineRow = MessagesTimelineRow;
 type TimelineProcessChildRow = Extract<TimelineRow, { kind: "process" }>["children"][number];
 type VisibleProcessChildRow = Exclude<TimelineProcessChildRow, { kind: "working" }>;
 
+const ROW_ENTER_ANIMATION_WINDOW_MS = 2000;
+
+/** Enter-animation class for rows that appear while the user is watching —
+ *  i.e. whose createdAt is within a short window of the row mounting. Rows
+ *  from the initial thread load and rows re-mounted by list virtualization
+ *  are older than the window, so they render without animation. */
+function useRowEnterClass(createdAt: string | null | undefined): string | null {
+  const [enterClass] = useState(() => {
+    if (!createdAt) return null;
+    const createdAtMs = Date.parse(createdAt);
+    if (Number.isNaN(createdAtMs)) return null;
+    return Date.now() - createdAtMs < ROW_ENTER_ANIMATION_WINDOW_MS ? "chat-row-enter" : null;
+  });
+  return enterClass;
+}
+
 const TimelineRowContent = memo(function TimelineRowContent({ row }: { row: TimelineRow }) {
+  const enterClass = useRowEnterClass(row.createdAt);
+
   return (
     <div
       className={cn(
         "pb-4",
+        enterClass,
         row.kind === "message" && row.message.role === "assistant" ? "group/assistant" : null,
       )}
       data-timeline-row-id={row.id}
@@ -493,7 +513,7 @@ function AssistantTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "mess
           onOpenTurnDiff={ctx.onOpenTurnDiff}
         />
         {showAssistantFooter ? (
-          <div className="group/assistant-actions relative mt-1.5 min-h-8 w-fit min-w-[7rem]">
+          <div className="group/assistant-actions chat-fade-in relative mt-1.5 min-h-8 w-fit min-w-[7rem]">
             <p
               className={cn(
                 "absolute inset-y-0 left-0 flex items-center text-sm leading-relaxed text-muted-foreground/50",
@@ -538,7 +558,7 @@ function ForkAssistantMessageButton({ messageId }: { messageId: MessageId }) {
 
 function AssistantCompletionDivider({ completionSummary }: { completionSummary: string | null }) {
   return (
-    <div className="my-3 flex items-center gap-3">
+    <div className="chat-fade-in my-3 flex items-center gap-3">
       <span className="h-px flex-1 bg-border" />
       <span className="rounded-full border border-border bg-background px-2.5 py-1 text-sm leading-relaxed text-muted-foreground/80">
         {completionSummary ? `Response • ${completionSummary}` : "Response"}
@@ -626,66 +646,72 @@ function ProcessTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "proces
     setExpanded(false);
   }, [row.hasErrorEntries, row.id, row.isActive]);
 
+  // A single AnimatedHeight smooths streaming growth, the active → collapsed
+  // swap at turn end, and accordion expand/collapse — instead of snapping.
   if (row.isActive) {
     return (
-      <div className="space-y-4 pt-0.5">
-        {visibleChildren.map((child) => (
-          <ProcessChildFrame
-            key={`process-child:${child.id}`}
-            row={child}
-            forceWorkGroupsExpanded
-          />
-        ))}
-        {workingChild ? (
-          <div
-            key={`process-child:${workingChild.id}`}
-            className="min-w-0"
-            data-process-child-row-id={workingChild.id}
-            data-process-child-row-kind={workingChild.kind}
-          >
-            <WorkingTimelineRow row={workingChild} />
-          </div>
-        ) : null}
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-2">
-      <button
-        type="button"
-        aria-controls={contentId}
-        aria-expanded={expanded}
-        className="-mx-1 flex w-fit max-w-full min-w-0 items-center gap-1 rounded-md px-1 py-0.5 text-left text-muted-foreground/60 transition-colors duration-150 hover:text-foreground/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-        title={titleText}
-        onClick={() => {
-          setExpanded((value) => !value);
-        }}
-      >
-        <span className="min-w-0 truncate text-sm leading-relaxed">
-          <ProcessAccordionLabel row={row} />
-        </span>
-        <span className="flex size-4 shrink-0 items-center justify-center">
-          <ChevronRightIcon
-            className={cn(
-              "size-3.5 transition-transform duration-150",
-              expanded ? "rotate-90" : null,
-            )}
-          />
-        </span>
-      </button>
-      {expanded && visibleChildren.length > 0 ? (
-        <div id={contentId} className="space-y-4 pt-0.5">
+      <AnimatedHeight>
+        <div className="space-y-4 pt-0.5">
           {visibleChildren.map((child) => (
             <ProcessChildFrame
               key={`process-child:${child.id}`}
               row={child}
-              forceWorkGroupsExpanded={false}
+              forceWorkGroupsExpanded
             />
           ))}
+          {workingChild ? (
+            <div
+              key={`process-child:${workingChild.id}`}
+              className="chat-fade-in min-w-0"
+              data-process-child-row-id={workingChild.id}
+              data-process-child-row-kind={workingChild.kind}
+            >
+              <WorkingTimelineRow row={workingChild} />
+            </div>
+          ) : null}
         </div>
-      ) : null}
-    </div>
+      </AnimatedHeight>
+    );
+  }
+
+  return (
+    <AnimatedHeight>
+      <div>
+        <button
+          type="button"
+          aria-controls={contentId}
+          aria-expanded={expanded}
+          className="-mx-1 flex w-fit max-w-full min-w-0 items-center gap-1 rounded-md px-1 py-0.5 text-left text-muted-foreground/60 transition-colors duration-150 hover:text-foreground/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          title={titleText}
+          onClick={() => {
+            setExpanded((value) => !value);
+          }}
+        >
+          <span className="min-w-0 truncate text-sm leading-relaxed">
+            <ProcessAccordionLabel row={row} />
+          </span>
+          <span className="flex size-4 shrink-0 items-center justify-center">
+            <ChevronRightIcon
+              className={cn(
+                "size-3.5 transition-transform duration-150",
+                expanded ? "rotate-90" : null,
+              )}
+            />
+          </span>
+        </button>
+        {expanded && visibleChildren.length > 0 ? (
+          <div id={contentId} className="space-y-4 pt-2.5">
+            {visibleChildren.map((child) => (
+              <ProcessChildFrame
+                key={`process-child:${child.id}`}
+                row={child}
+                forceWorkGroupsExpanded={false}
+              />
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </AnimatedHeight>
   );
 }
 
@@ -706,10 +732,13 @@ function ProcessChildFrame({
   row: VisibleProcessChildRow;
   forceWorkGroupsExpanded: boolean;
 }) {
+  const enterClass = useRowEnterClass(row.createdAt);
+
   return (
     <div
       className={cn(
         "min-w-0",
+        enterClass,
         row.kind === "message" && row.message.role === "assistant" ? "group/assistant" : null,
       )}
       data-process-child-row-id={row.id}
@@ -741,9 +770,9 @@ function ProcessAccordionLabel({ row }: { row: Extract<TimelineRow, { kind: "pro
 function WorkingStatusDots() {
   return (
     <span className="inline-flex shrink-0 items-center gap-[3px]">
-      <span className="h-1 w-1 rounded-full bg-muted-foreground/30 animate-pulse" />
-      <span className="h-1 w-1 rounded-full bg-muted-foreground/30 animate-pulse [animation-delay:200ms]" />
-      <span className="h-1 w-1 rounded-full bg-muted-foreground/30 animate-pulse [animation-delay:400ms]" />
+      <span className="chat-working-dot h-1 w-1 rounded-full bg-muted-foreground/40" />
+      <span className="chat-working-dot h-1 w-1 rounded-full bg-muted-foreground/40 [animation-delay:160ms]" />
+      <span className="chat-working-dot h-1 w-1 rounded-full bg-muted-foreground/40 [animation-delay:320ms]" />
     </span>
   );
 }
@@ -851,7 +880,7 @@ const WorkGroupSection = memo(function WorkGroupSection({
     const summaryText = formatActionCount(groupedEntries.length);
 
     return (
-      <div className="space-y-1">
+      <div>
         <button
           type="button"
           aria-controls={agentActionsContentId}
@@ -873,13 +902,17 @@ const WorkGroupSection = memo(function WorkGroupSection({
             />
           </span>
         </button>
-        {agentActionsExpanded ? (
-          <WorkEntriesPanel
-            id={agentActionsContentId}
-            groupedEntries={groupedEntries}
-            workspaceRoot={workspaceRoot}
-          />
-        ) : null}
+        <AnimatedHeight>
+          {agentActionsExpanded ? (
+            <div className="pt-1">
+              <WorkEntriesPanel
+                id={agentActionsContentId}
+                groupedEntries={groupedEntries}
+                workspaceRoot={workspaceRoot}
+              />
+            </div>
+          ) : null}
+        </AnimatedHeight>
       </div>
     );
   }
@@ -887,7 +920,7 @@ const WorkGroupSection = memo(function WorkGroupSection({
   const summaryText = formatWorkLogEntryCount(groupedEntries.length);
 
   return (
-    <div className="space-y-1">
+    <div>
       <button
         type="button"
         aria-controls={agentActionsContentId}
@@ -909,13 +942,17 @@ const WorkGroupSection = memo(function WorkGroupSection({
           />
         </span>
       </button>
-      {workLogExpanded ? (
-        <WorkEntriesPanel
-          id={agentActionsContentId}
-          groupedEntries={groupedEntries}
-          workspaceRoot={workspaceRoot}
-        />
-      ) : null}
+      <AnimatedHeight>
+        {workLogExpanded ? (
+          <div className="pt-1">
+            <WorkEntriesPanel
+              id={agentActionsContentId}
+              groupedEntries={groupedEntries}
+              workspaceRoot={workspaceRoot}
+            />
+          </div>
+        ) : null}
+      </AnimatedHeight>
     </div>
   );
 });

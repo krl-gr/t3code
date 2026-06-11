@@ -9,6 +9,7 @@ import React, {
   use,
   useCallback,
   memo,
+  useDeferredValue,
   useEffect,
   useMemo,
   useRef,
@@ -194,22 +195,44 @@ function MarkdownCodeBlock({ code, children }: { code: string; children: ReactNo
   );
 }
 
+interface DeferredShikiCodeBlockProps {
+  className: string | undefined;
+  code: string;
+  themeName: DiffThemeName;
+  fallback: ReactNode;
+}
+
+/**
+ * Defers code updates so highlighting runs in a non-blocking render, and —
+ * because the Suspense boundary lives below the deferral — keeps showing the
+ * previous highlighted content while a new language grammar loads instead of
+ * flashing the plain-text fallback.
+ */
+function DeferredShikiCodeBlock({
+  className,
+  code,
+  themeName,
+  fallback,
+}: DeferredShikiCodeBlockProps) {
+  const deferredCode = useDeferredValue(code);
+
+  return (
+    <Suspense fallback={fallback}>
+      <SuspenseShikiCodeBlock className={className} code={deferredCode} themeName={themeName} />
+    </Suspense>
+  );
+}
+
 interface SuspenseShikiCodeBlockProps {
   className: string | undefined;
   code: string;
   themeName: DiffThemeName;
-  isStreaming: boolean;
 }
 
-function SuspenseShikiCodeBlock({
-  className,
-  code,
-  themeName,
-  isStreaming,
-}: SuspenseShikiCodeBlockProps) {
+function SuspenseShikiCodeBlock({ className, code, themeName }: SuspenseShikiCodeBlockProps) {
   const language = extractFenceLanguage(className);
   const cacheKey = createHighlightCacheKey(code, language, themeName);
-  const cachedHighlightedHtml = !isStreaming ? highlightedCodeCache.get(cacheKey) : null;
+  const cachedHighlightedHtml = highlightedCodeCache.get(cacheKey);
 
   if (cachedHighlightedHtml != null) {
     return (
@@ -226,7 +249,6 @@ function SuspenseShikiCodeBlock({
       language={language}
       themeName={themeName}
       cacheKey={cacheKey}
-      isStreaming={isStreaming}
     />
   );
 }
@@ -236,7 +258,6 @@ interface UncachedShikiCodeBlockProps {
   language: string;
   themeName: DiffThemeName;
   cacheKey: string;
-  isStreaming: boolean;
 }
 
 function UncachedShikiCodeBlock({
@@ -244,7 +265,6 @@ function UncachedShikiCodeBlock({
   language,
   themeName,
   cacheKey,
-  isStreaming,
 }: UncachedShikiCodeBlockProps) {
   const highlighter = use(getHighlighterPromise(language));
   const highlightedHtml = useMemo(() => {
@@ -261,15 +281,15 @@ function UncachedShikiCodeBlock({
     }
   }, [code, highlighter, language, themeName]);
 
+  // Cache during streaming as well — re-renders between deltas reuse the entry
+  // instead of re-running codeToHtml; the LRU bounds keep churn in check.
   useEffect(() => {
-    if (!isStreaming) {
-      highlightedCodeCache.set(
-        cacheKey,
-        highlightedHtml,
-        estimateHighlightedSize(highlightedHtml, code),
-      );
-    }
-  }, [cacheKey, code, highlightedHtml, isStreaming]);
+    highlightedCodeCache.set(
+      cacheKey,
+      highlightedHtml,
+      estimateHighlightedSize(highlightedHtml, code),
+    );
+  }, [cacheKey, code, highlightedHtml]);
 
   return (
     <div className="chat-markdown-shiki" dangerouslySetInnerHTML={{ __html: highlightedHtml }} />
@@ -513,11 +533,16 @@ function areMarkdownFileLinkPropsEqual(
 }
 
 function ChatMarkdown({
-  text,
+  text: textProp,
   cwd,
   isStreaming = false,
   skills = EMPTY_MARKDOWN_SKILLS,
 }: ChatMarkdownProps) {
+  // While streaming, defer text updates so the expensive markdown re-parse
+  // happens in a non-blocking render and React can skip intermediate deltas
+  // under load.
+  const deferredText = useDeferredValue(textProp);
+  const text = isStreaming ? deferredText : textProp;
   const { resolvedTheme } = useTheme();
   const diffThemeName = resolveDiffThemeName(resolvedTheme);
   const markdownFileLinkMetaByHref = useMemo(() => {
@@ -589,27 +614,18 @@ function ChatMarkdown({
         return (
           <MarkdownCodeBlock code={codeBlock.code}>
             <CodeHighlightErrorBoundary fallback={<pre {...props}>{children}</pre>}>
-              <Suspense fallback={<pre {...props}>{children}</pre>}>
-                <SuspenseShikiCodeBlock
-                  className={codeBlock.className}
-                  code={codeBlock.code}
-                  themeName={diffThemeName}
-                  isStreaming={isStreaming}
-                />
-              </Suspense>
+              <DeferredShikiCodeBlock
+                className={codeBlock.className}
+                code={codeBlock.code}
+                themeName={diffThemeName}
+                fallback={<pre {...props}>{children}</pre>}
+              />
             </CodeHighlightErrorBoundary>
           </MarkdownCodeBlock>
         );
       },
     }),
-    [
-      diffThemeName,
-      fileLinkParentSuffixByPath,
-      isStreaming,
-      markdownFileLinkMetaByHref,
-      resolvedTheme,
-      skills,
-    ],
+    [diffThemeName, fileLinkParentSuffixByPath, markdownFileLinkMetaByHref, resolvedTheme, skills],
   );
 
   return (
