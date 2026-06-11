@@ -4,6 +4,7 @@
 @custom-variant dark (&:is(.dark, .dark *));
 /* Window Controls Overlay: active when Electron exposes native titlebar control geometry. */
 @custom-variant wco (&:is(.wco, .wco *));
+@custom-variant wco-windows (&:is(.wco-windows, .wco-windows *));
 
 @theme inline {
   --animate-skeleton: skeleton 2s -1s infinite linear;
@@ -296,6 +297,10 @@ body::after {
   border-bottom: 0;
 }
 
+.wco-windows .t3code-dockview-theme {
+  --dv-tabs-and-actions-container-height: env(titlebar-area-height);
+}
+
 .electron .t3code-dockview-theme .dv-tabs-and-actions-container {
   -webkit-app-region: drag;
 }
@@ -325,6 +330,7 @@ body::after {
 
 .t3code-dockview-theme .dv-tabs-container {
   align-items: flex-start;
+  gap: 2px;
   overflow: hidden;
   scrollbar-width: none;
 }
@@ -335,13 +341,23 @@ body::after {
 
 .t3code-dockview-theme .dv-tab {
   box-sizing: border-box;
-  flex: 1 1 160px;
+  flex: 0 0 auto;
   height: 48px;
   letter-spacing: 0;
-  max-width: 200px;
+  max-width: none;
   min-width: 96px;
   overflow: visible;
   padding: 8px 0;
+  width: max-content;
+}
+
+.wco-windows .t3code-dockview-theme .dv-tab {
+  height: env(titlebar-area-height);
+  padding: 4px 0;
+}
+
+.t3code-dockview-theme .dv-tabs-container[data-tab-sizing="fill"] .dv-tab {
+  flex: 1 1 0;
   width: auto;
 }
 
@@ -354,6 +370,12 @@ body::after {
   border-color: transparent;
   border-radius: 0;
   box-shadow: none;
+}
+
+.t3code-dockview-theme .dv-tabs-and-actions-container.dv-single-tab .dv-tab {
+  flex: 1 1 auto;
+  max-width: none;
+  width: auto;
 }
 
 .t3code-dockview-theme .dv-tabs-and-actions-container.dv-single-tab .dv-tab:focus::after,

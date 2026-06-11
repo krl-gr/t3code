@@ -66,6 +66,7 @@ import {
 import { threadHasStarted } from "../ChatView.logic";
 import { NoActiveThreadContent } from "../NoActiveThreadState";
 import { resolveSidebarNewThreadEnvMode } from "../Sidebar.logic";
+import { SIDEBAR_LABEL_TEXT_CLASS } from "../sidebar/sidebarTextStyles";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
 import { SidebarInset, SidebarTrigger, useSidebar } from "../ui/sidebar";
 import { ChatWorkspacePanel } from "./ChatWorkspacePanel";
@@ -73,6 +74,11 @@ import { ChatWorkspacePanel } from "./ChatWorkspacePanel";
 const CHAT_PANEL_COMPONENT_ID = "chatContainer";
 const WORKSPACE_PERSIST_DEBOUNCE_MS = 250;
 const TOP_RIGHT_HEADER_EDGE_TOLERANCE_PX = 2;
+const WORKSPACE_TAB_MIN_WIDTH_PX = 96;
+const WORKSPACE_TAB_HORIZONTAL_PADDING_PX = 16;
+const WORKSPACE_TAB_ITEM_GAP_PX = 4;
+const WORKSPACE_TAB_CONTAINER_GAP_PX = 2;
+const WORKSPACE_TAB_SIZING_TOLERANCE_PX = 1;
 
 type WorkspaceRestorePhase = "pending" | "restoring" | "settled";
 type StartupRoutePolicy = "restore-saved-active";
@@ -199,13 +205,17 @@ function DockviewWatermark(_props: IWatermarkPanelProps) {
 function DockviewHeaderIconButton(props: {
   "aria-label": string;
   children: ReactNode;
+  className?: string;
   onClick: () => void;
   title: string;
 }) {
   return (
     <button
       aria-label={props["aria-label"]}
-      className="inline-flex size-8 items-center justify-center rounded-full text-[#7a7a7a] transition-colors hover:bg-white/[0.05] hover:text-[#bab9ba] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#3a3a3a]"
+      className={cn(
+        "inline-flex size-8 items-center justify-center rounded-full text-[#7a7a7a] transition-colors hover:bg-white/[0.05] hover:text-[#bab9ba] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#3a3a3a]",
+        props.className,
+      )}
       onClick={(event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -236,6 +246,35 @@ function getDockviewHeaderElements(actionsElement: HTMLElement | null): {
     headerElement: headerElement instanceof HTMLElement ? headerElement : null,
     tabsContainer: tabsContainer instanceof HTMLElement ? tabsContainer : null,
   };
+}
+
+function getWorkspaceTabNaturalWidth(tabElement: HTMLElement): number {
+  const titleElement = tabElement.querySelector<HTMLElement>(".t3-workspace-tab-title");
+  const closeElement = tabElement.querySelector<HTMLElement>(".t3-workspace-tab-close");
+  const closeWidth = closeElement?.offsetWidth ?? 0;
+  const closeChromeWidth = closeWidth > 0 ? closeWidth + WORKSPACE_TAB_ITEM_GAP_PX : 0;
+  const contentWidth =
+    (titleElement?.scrollWidth ?? tabElement.scrollWidth) +
+    WORKSPACE_TAB_HORIZONTAL_PADDING_PX +
+    closeChromeWidth;
+
+  return Math.max(WORKSPACE_TAB_MIN_WIDTH_PX, Math.ceil(contentWidth));
+}
+
+function resolveWorkspaceTabSizing(
+  tabsContainer: HTMLElement,
+  tabElements: readonly HTMLElement[],
+): "fill" | "hug" {
+  if (tabElements.length <= 1) {
+    return "hug";
+  }
+
+  const availableWidth = tabsContainer.clientWidth;
+  const naturalTabsWidth =
+    tabElements.reduce((total, tabElement) => total + getWorkspaceTabNaturalWidth(tabElement), 0) +
+    Math.max(0, tabElements.length - 1) * WORKSPACE_TAB_CONTAINER_GAP_PX;
+
+  return naturalTabsWidth > availableWidth + WORKSPACE_TAB_SIZING_TOLERANCE_PX ? "fill" : "hug";
 }
 
 function isTopRightDockviewHeader(actionsElement: HTMLElement | null): boolean {
@@ -269,12 +308,12 @@ function DockviewPrefixHeaderActions(props: IDockviewHeaderActionsProps) {
   return (
     <div
       className={cn(
-        "flex h-full items-start py-0 pl-2 pr-2 pt-2",
+        "flex h-full items-start py-0 pl-2 pr-2 pt-2 wco-windows:pt-1",
         shouldReserveMacTrafficLights && "pl-[90px]",
       )}
     >
       <SidebarTrigger
-        className="size-8 rounded-full text-[#7a7a7a] hover:bg-white/[0.05] hover:text-[#bab9ba]"
+        className="size-8 rounded-full !bg-transparent text-muted-foreground hover:!bg-transparent hover:text-foreground focus-visible:!ring-0 focus-visible:ring-offset-0 active:!bg-transparent data-pressed:!bg-transparent dark:text-white/50 dark:hover:text-white/86"
         onPointerDown={(event) => {
           event.stopPropagation();
         }}
@@ -306,6 +345,11 @@ function DockviewRightHeaderActions(props: IDockviewHeaderActionsProps) {
       (element): element is HTMLElement =>
         element instanceof HTMLElement && element.classList.contains("dv-tab"),
     );
+    const tabSizing = resolveWorkspaceTabSizing(tabsContainer, tabElements);
+    if (tabsContainer.dataset.tabSizing !== tabSizing) {
+      tabsContainer.dataset.tabSizing = tabSizing;
+    }
+
     const containerRect = tabsContainer.getBoundingClientRect();
     const groupPanels = props.group.panels.length > 0 ? props.group.panels : props.panels;
     const nextItems: Array<{ id: string; title: string; isActive: boolean }> = [];
@@ -381,6 +425,7 @@ function DockviewRightHeaderActions(props: IDockviewHeaderActionsProps) {
         attributeFilter: ["class", "style"],
         attributes: true,
         childList: true,
+        characterData: true,
         subtree: true,
       });
     }
@@ -417,7 +462,7 @@ function DockviewRightHeaderActions(props: IDockviewHeaderActionsProps) {
     <div
       ref={actionsRef}
       className={cn(
-        "flex h-full items-start gap-1 px-2 pt-2",
+        "flex h-full items-start gap-1 px-2 pt-2 wco-windows:pt-1",
         reserveWindowControlsInset &&
           "wco:pr-[calc(100vw-env(titlebar-area-width)-env(titlebar-area-x)+8px)]",
       )}
@@ -465,6 +510,7 @@ function DockviewRightHeaderActions(props: IDockviewHeaderActionsProps) {
       ) : null}
       <DockviewHeaderIconButton
         aria-label="New workspace tab"
+        className="!bg-transparent !text-muted-foreground hover:!bg-transparent hover:!text-foreground focus-visible:!ring-0 dark:!text-white/50 dark:hover:!text-white/86"
         onClick={() => {
           onCreateDraftPanel(props.group.id);
         }}
@@ -514,18 +560,21 @@ function DockviewChatTab(props: IDockviewPanelHeaderProps) {
   return (
     <div
       className={cn(
-        "t3-workspace-tab flex h-8 w-full items-center gap-1 overflow-hidden rounded-lg border border-transparent px-2 py-[7px] text-[14px] font-medium leading-[18px] tracking-normal text-[#bab9ba]",
-        isActive && "bg-white/[0.03] shadow-[inset_0_0_0_1px_#282828]",
+        "t3-workspace-tab flex h-8 w-full items-center gap-1 overflow-hidden rounded-md border border-transparent px-2 py-0 transition-colors",
+        SIDEBAR_LABEL_TEXT_CLASS,
+        isActive
+          ? "bg-sidebar-accent text-sidebar-accent-foreground"
+          : "text-sidebar-foreground/72 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground dark:text-white/82",
       )}
       title={title}
     >
-      <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
+      <span className="t3-workspace-tab-title min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
         {title}
       </span>
       {isActive ? (
         <button
           aria-label={`Close ${title}`}
-          className="t3-workspace-tab-close inline-flex size-4 shrink-0 items-center justify-center rounded-sm text-[#7a7a7a] transition-colors hover:bg-white/[0.06] hover:text-[#bab9ba] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#3a3a3a]"
+          className="t3-workspace-tab-close inline-flex size-4 shrink-0 items-center justify-center rounded-sm text-sidebar-foreground/55 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
           onClick={(event) => {
             event.preventDefault();
             event.stopPropagation();

@@ -1,7 +1,7 @@
 import { mergeProps } from "@base-ui/react/merge-props";
 import { useRender } from "@base-ui/react/use-render";
 import { cva, type VariantProps } from "class-variance-authority";
-import { PanelLeftCloseIcon, PanelLeftIcon } from "lucide-react";
+import { PanelLeftCloseIcon } from "lucide-react";
 import * as React from "react";
 import { cn } from "~/lib/utils";
 import { Button } from "~/components/ui/button";
@@ -20,6 +20,17 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useIsMobile } from "~/hooks/useMediaQuery";
 import { getLocalStorageItem, setLocalStorageItem } from "~/hooks/useLocalStorage";
 import * as Schema from "effect/Schema";
+
+function SidebarLeftIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" {...props}>
+      <path
+        d="M12.1543 2.00391C13.7394 2.08421 15 3.39489 15 5V11C15 12.6051 13.7394 13.9158 12.1543 13.9961L12 14H4C2.34315 14 1 12.6569 1 11V5C1 3.34315 2.34315 2 4 2H12L12.1543 2.00391ZM4 3.25C3.0335 3.25 2.25 4.0335 2.25 5V11C2.25 11.9665 3.0335 12.75 4 12.75H12C12.9665 12.75 13.75 11.9665 13.75 11V5C13.75 4.0335 12.9665 3.25 12 3.25H4ZM4 4.375C4.34518 4.375 4.625 4.65482 4.625 5V11C4.625 11.3452 4.34518 11.625 4 11.625C3.65482 11.625 3.375 11.3452 3.375 11V5C3.375 4.65482 3.65482 4.375 4 4.375Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
 
 const SIDEBAR_COOKIE_NAME = "sidebar_state";
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7;
@@ -325,7 +336,7 @@ function SidebarTrigger({ className, onClick, ...props }: React.ComponentProps<t
       variant="ghost"
       {...props}
     >
-      {openMobile ? <PanelLeftCloseIcon /> : <PanelLeftIcon />}
+      {openMobile ? <PanelLeftCloseIcon /> : <SidebarLeftIcon />}
       <span className="sr-only">Toggle Sidebar</span>
     </Button>
   );
