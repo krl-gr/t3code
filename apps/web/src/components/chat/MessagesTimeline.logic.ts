@@ -233,7 +233,7 @@ function deriveProcessTimelineRows(
   },
 ): MessagesTimelineRow[] {
   const result: MessagesTimelineRow[] = [];
-  const workingRow: WorkingTimelineRow | null = input.isWorking
+  const workingRow: WorkingTimelineRow | null = input.isWorking && input.activeTurnId != null
     ? {
         kind: "working",
         id: "working-indicator-row",
