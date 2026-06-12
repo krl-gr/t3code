@@ -82,6 +82,16 @@
   padding-right: max(env(safe-area-inset-right), 0px);
 }
 
+@media (max-width: 639px) {
+  .electron .t3-titlebar-left-inset-when-sidebar-overlay {
+    padding-left: 90px;
+  }
+
+  .wco .t3-titlebar-left-inset-when-sidebar-overlay {
+    padding-left: calc(env(titlebar-area-x) + 1em);
+  }
+}
+
 /* Suppress all transitions during theme changes */
 .no-transitions,
 .no-transitions *,

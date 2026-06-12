@@ -297,8 +297,7 @@ function DockviewPrefixHeaderActions(props: IDockviewHeaderActionsProps) {
   const shouldReserveMacTrafficLights =
     isPrimaryGroup &&
     isElectron &&
-    !sidebar.isMobile &&
-    !sidebar.open &&
+    (sidebar.isMobile || !sidebar.open) &&
     isMacPlatform(typeof navigator === "undefined" ? "" : navigator.platform);
 
   if (!isPrimaryGroup) {
@@ -309,7 +308,7 @@ function DockviewPrefixHeaderActions(props: IDockviewHeaderActionsProps) {
     <div
       className={cn(
         "flex h-full items-start py-0 pl-2 pr-2 pt-2 wco-windows:pt-1",
-        shouldReserveMacTrafficLights && "pl-[90px]",
+        shouldReserveMacTrafficLights && "pl-[90px] wco:pl-[calc(env(titlebar-area-x)+1em)]",
       )}
     >
       <SidebarTrigger

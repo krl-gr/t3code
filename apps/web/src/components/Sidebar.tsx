@@ -2662,7 +2662,7 @@ const SidebarChromeHeader = memo(function SidebarChromeHeader({
   const hideBrand = isElectron && isMacPlatform(platform);
   const headerContent = (
     <div className="flex items-center gap-2">
-      <SidebarTrigger className="shrink-0 md:hidden" />
+      <SidebarTrigger className="shrink-0 sm:hidden" />
       {hideBrand ? null : (
         <Tooltip>
           <TooltipTrigger

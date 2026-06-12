@@ -3975,7 +3975,7 @@ export default function ChatView(props: ChatViewProps) {
             "t3-chat-header-overlay absolute inset-x-0 top-0 z-40 border-b border-transparent",
             isElectron
               ? cn(
-                  "drag-region flex h-[52px] items-center px-3 sm:px-5 wco:h-[env(titlebar-area-height)]",
+                  "drag-region t3-titlebar-left-inset-when-sidebar-overlay flex h-[52px] items-center px-3 sm:px-5 wco:h-[env(titlebar-area-height)]",
                   reserveTitleBarControlInset &&
                     "wco:pr-[calc(100vw-env(titlebar-area-width)-env(titlebar-area-x)+1em)]",
                 )

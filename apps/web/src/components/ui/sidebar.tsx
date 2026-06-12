@@ -17,8 +17,13 @@ import {
 } from "~/components/ui/sheet";
 import { Skeleton } from "~/components/ui/skeleton";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
-import { useIsMobile } from "~/hooks/useMediaQuery";
+import { useMediaQuery } from "~/hooks/useMediaQuery";
 import { getLocalStorageItem, setLocalStorageItem } from "~/hooks/useLocalStorage";
+import {
+  getResponsiveThreadSidebarWidth,
+  SIDEBAR_OVERLAY_BREAKPOINT,
+  THREAD_SIDEBAR_MIN_WIDTH,
+} from "~/sidebarLayout";
 import * as Schema from "effect/Schema";
 
 function SidebarLeftIcon(props: React.SVGProps<SVGSVGElement>) {
@@ -34,10 +39,10 @@ function SidebarLeftIcon(props: React.SVGProps<SVGSVGElement>) {
 
 const SIDEBAR_COOKIE_NAME = "sidebar_state";
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7;
-const SIDEBAR_WIDTH = "16rem";
+const SIDEBAR_WIDTH = getResponsiveThreadSidebarWidth();
 const SIDEBAR_WIDTH_MOBILE = "calc(100vw - var(--spacing(3)))";
 const SIDEBAR_WIDTH_ICON = "3rem";
-const SIDEBAR_RESIZE_DEFAULT_MIN_WIDTH = 16 * 16;
+const SIDEBAR_RESIZE_DEFAULT_MIN_WIDTH = THREAD_SIDEBAR_MIN_WIDTH;
 
 type SidebarContextProps = {
   state: "expanded" | "collapsed";
@@ -109,7 +114,7 @@ function SidebarProvider({
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
 }) {
-  const isMobile = useIsMobile();
+  const isMobile = useMediaQuery({ max: SIDEBAR_OVERLAY_BREAKPOINT });
   const [openMobile, setOpenMobile] = React.useState(false);
 
   // This is the internal state of the sidebar.
@@ -273,7 +278,7 @@ function Sidebar({
   return (
     <SidebarInstanceContext value={instanceContextValue}>
       <div
-        className="group peer hidden text-sidebar-foreground md:block"
+        className="group peer hidden text-sidebar-foreground sm:block"
         data-collapsible={state === "collapsed" ? collapsible : ""}
         data-side={side}
         data-slot="sidebar"
@@ -294,7 +299,7 @@ function Sidebar({
         />
         <div
           className={cn(
-            "fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) transition-[left,right,width] duration-200 ease-linear md:flex",
+            "fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) transition-[left,right,width] duration-200 ease-linear sm:flex",
             side === "left"
               ? "left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]"
               : "right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]",
@@ -449,7 +454,7 @@ function SidebarRail({
         width: initialWidth,
         wrapper,
       };
-      wrapper.style.setProperty("--sidebar-width", `${initialWidth}px`);
+      wrapper.style.setProperty("--sidebar-width", getResponsiveThreadSidebarWidth(initialWidth));
       event.currentTarget.setPointerCapture(event.pointerId);
       document.body.style.cursor = "col-resize";
       document.body.style.userSelect = "none";
@@ -499,7 +504,10 @@ function SidebarRail({
           return;
         }
 
-        activeResizeState.wrapper.style.setProperty("--sidebar-width", `${nextWidth}px`);
+        activeResizeState.wrapper.style.setProperty(
+          "--sidebar-width",
+          getResponsiveThreadSidebarWidth(nextWidth),
+        );
         activeResizeState.width = nextWidth;
       });
     },
@@ -559,14 +567,25 @@ function SidebarRail({
     const rail = railRef.current;
     if (!rail) return;
     const wrapper = rail.closest<HTMLElement>("[data-slot='sidebar-wrapper']");
-    if (!wrapper) return;
+    const sidebarRoot = rail.closest<HTMLElement>("[data-slot='sidebar']");
+    if (!wrapper || !sidebarRoot) return;
 
     const storedWidth = getLocalStorageItem(resolvedResizable.storageKey, Schema.Finite);
     if (storedWidth === null) return;
     const clampedWidth = clampSidebarWidth(storedWidth, resolvedResizable);
-    wrapper.style.setProperty("--sidebar-width", `${clampedWidth}px`);
+    const accepted =
+      resolvedResizable.shouldAcceptWidth?.({
+        currentWidth: sidebarRoot.getBoundingClientRect().width,
+        nextWidth: clampedWidth,
+        rail,
+        side: sidebarInstance?.side ?? "left",
+        sidebarRoot,
+        wrapper,
+      }) ?? true;
+    if (!accepted) return;
+    wrapper.style.setProperty("--sidebar-width", getResponsiveThreadSidebarWidth(clampedWidth));
     resolvedResizable.onResize?.(clampedWidth);
-  }, [resolvedResizable]);
+  }, [resolvedResizable, sidebarInstance?.side]);
 
   React.useEffect(() => {
     return () => {
