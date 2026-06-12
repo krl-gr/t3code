@@ -28,6 +28,11 @@ import {
   type ContextQuickActionId,
 } from "../contextQuickActions";
 import { usePrimaryEnvironmentId } from "../environments/primary";
+import { useSettings } from "../hooks/useSettings";
+import {
+  deriveLogicalProjectKeyFromSettings,
+  selectProjectGroupingSettings,
+} from "../logicalProject";
 import { useStore } from "../store";
 import { createProjectSelectorByRef, createThreadSelectorByRef } from "../storeSelectors";
 import { useUiStateStore } from "../uiStateStore";
@@ -289,6 +294,14 @@ export const BranchToolbar = memo(function BranchToolbar({
     availableEnvironments && availableEnvironments.length > 1 && onEnvironmentChange,
   );
   const primaryEnvironmentId = usePrimaryEnvironmentId();
+  const projectGroupingSettings = useSettings(selectProjectGroupingSettings);
+  const activeProjectFaviconKey = useMemo(
+    () =>
+      activeProject
+        ? deriveLogicalProjectKeyFromSettings(activeProject, projectGroupingSettings)
+        : null,
+    [activeProject, projectGroupingSettings],
+  );
   const showOpenInPicker = shouldShowOpenInPicker({
     activeProjectName: activeProject?.name,
     activeThreadEnvironmentId: environmentId,
@@ -639,7 +652,7 @@ export const BranchToolbar = memo(function BranchToolbar({
               environmentId={activeProject.environmentId}
               cwd={activeProject.cwd}
               label={activeProject.name}
-              projectKey={activeProject.id}
+              projectKey={activeProjectFaviconKey ?? activeProject.id}
               className="size-4 dark:text-white/[0.175]"
             />
             <span
@@ -656,7 +669,7 @@ export const BranchToolbar = memo(function BranchToolbar({
                   environmentId={activeProject.environmentId}
                   cwd={activeProject.cwd}
                   label={activeProject.name}
-                  projectKey={activeProject.id}
+                  projectKey={activeProjectFaviconKey ?? activeProject.id}
                   className="size-4"
                 />
               </span>
