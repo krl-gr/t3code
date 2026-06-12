@@ -81,8 +81,8 @@ function SortableDraftItem({
     <div
       ref={setNodeRef}
       className={cn(
-        "w-full rounded-lg bg-[#1e1e1e] px-[7px] py-2 text-left text-[14px] leading-[18px] text-[#bab9ba] transition-colors hover:bg-[#242424]",
-        selected && "text-[#d7d7d7]",
+        "w-full rounded-lg bg-muted/45 px-[7px] py-2 text-left text-[14px] leading-[18px] text-muted-foreground ring-1 ring-transparent transition-colors hover:bg-muted/70 hover:text-foreground",
+        selected && "bg-muted text-foreground ring-border/70",
         isDragging && "z-10 opacity-80 shadow-lg",
       )}
       style={{
@@ -99,7 +99,7 @@ function SortableDraftItem({
           value={draft.body}
           placeholder="New draft"
           rows={Math.max(1, draft.body.split("\n").length)}
-          className="field-sizing-content block max-h-40 min-h-[18px] w-full resize-none overflow-hidden bg-transparent p-0 text-[14px] leading-[18px] text-inherit outline-none placeholder:text-[#bab9ba]"
+          className="field-sizing-content block max-h-40 min-h-[18px] w-full resize-none overflow-hidden bg-transparent p-0 text-[14px] leading-[18px] text-inherit outline-none placeholder:text-muted-foreground/70"
           onChange={(event) => onUpdate(event.target.value)}
           onFocus={onFocus}
           onBlur={onPersist}
@@ -110,14 +110,24 @@ function SortableDraftItem({
           className="block min-h-[18px] w-full p-0 text-left text-[14px] leading-[18px] text-inherit outline-none"
           onClick={onEdit}
         >
-          <span className={cn("line-clamp-3 break-words", !draft.body.trim() && "text-[#bab9ba]")}>
+          <span
+            className={cn(
+              "line-clamp-3 break-words",
+              !draft.body.trim() && "text-muted-foreground/70",
+            )}
+          >
             {draft.body.trim() || "New draft"}
           </span>
         </button>
       )}
       {selected ? (
         <div className="mt-2 flex h-8 items-end justify-between gap-2">
-          <div className="min-w-0 pb-1 text-xs leading-none text-[#6e6e6e]">
+          <div
+            className={cn(
+              "min-w-0 pb-1 text-xs leading-none",
+              saveState === "error" ? "text-destructive-foreground" : "text-muted-foreground/70",
+            )}
+          >
             {saveState === "saving" ? "Saving" : saveState === "error" ? "Not saved" : "Saved"}
           </div>
           <div className="flex shrink-0 items-center gap-1">
@@ -128,7 +138,7 @@ function SortableDraftItem({
                     size="icon-xs"
                     variant="ghost"
                     aria-label="Delete draft"
-                    className="text-[#949494] hover:text-[#f2b8b5]"
+                    className="text-muted-foreground hover:text-destructive-foreground"
                     onClick={onDelete}
                   />
                 }
@@ -317,10 +327,10 @@ export const ThreadPromptDraftsPanel = memo(function ThreadPromptDraftsPanel({
   }, []);
 
   return (
-    <div className="flex h-full min-h-0 flex-col p-2 text-[#bab9ba]">
+    <div className="flex h-full min-h-0 flex-col p-2 text-foreground">
       <div className="flex h-9 shrink-0 items-center justify-between gap-2 px-1">
         <div className="flex min-w-0 items-center gap-1.5">
-          <span className="truncate font-medium text-[15px] text-[#bab9ba]">Drafts</span>
+          <span className="truncate font-medium text-[15px] text-foreground">Drafts</span>
         </div>
         <Tooltip>
           <TooltipTrigger
@@ -329,7 +339,7 @@ export const ThreadPromptDraftsPanel = memo(function ThreadPromptDraftsPanel({
                 size="icon-xs"
                 variant="ghost"
                 aria-label="New draft"
-                className="text-[#949494] hover:text-[#d7d7d7]"
+                className="text-muted-foreground hover:text-foreground"
                 onClick={createDraft}
               />
             }
@@ -342,13 +352,13 @@ export const ThreadPromptDraftsPanel = memo(function ThreadPromptDraftsPanel({
 
       <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pt-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {!hydrated ? (
-          <div className="flex h-32 items-center justify-center text-[#949494]">
+          <div className="flex h-32 items-center justify-center text-muted-foreground">
             <Loader2Icon className="size-4 animate-spin" />
           </div>
         ) : drafts.length === 0 ? (
           <button
             type="button"
-            className="flex min-h-20 w-full items-center justify-center rounded-lg border border-dashed border-[#2f2f2f] bg-[#1e1e1e]/70 px-3 text-center text-sm text-[#949494] transition-colors hover:border-[#3a3a3a] hover:text-[#d7d7d7]"
+            className="flex min-h-20 w-full items-center justify-center rounded-lg border border-dashed border-border/70 bg-muted/30 px-3 text-center text-sm text-muted-foreground transition-colors hover:border-border hover:bg-muted/50 hover:text-foreground"
             onClick={createDraft}
           >
             New draft

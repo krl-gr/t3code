@@ -4214,7 +4214,7 @@ export default function ChatView(props: ChatViewProps) {
         <ThreadFloatingPanelShell
           label="Drafts panel"
           onClose={closeDraftsPanel}
-          panelClassName="w-[min(320px,calc(100%-24px))] border-[#2f2f2f] bg-[rgba(26,26,26,0.8)] backdrop-blur-[66px]"
+          panelClassName="w-[min(320px,calc(100%-24px))]"
         >
           <ThreadPromptDraftsPanel threadRef={activeThreadRef} onSendPrompt={sendPromptDraft} />
         </ThreadFloatingPanelShell>
