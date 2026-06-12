@@ -35,7 +35,10 @@ interface ElectronAppCalls {
   readonly setName: string[];
 }
 
-const makeElectronAppLayer = (calls: ElectronAppCalls) =>
+const makeElectronAppLayer = (
+  calls: ElectronAppCalls,
+  options: { readonly failDockIcon?: boolean } = {},
+) =>
   Layer.succeed(ElectronApp.ElectronApp, {
     metadata: Effect.die("unexpected metadata read"),
     name: Effect.succeed("Up.computer"),
@@ -57,6 +60,9 @@ const makeElectronAppLayer = (calls: ElectronAppCalls) =>
     setDockIcon: (iconPath) =>
       Effect.sync(() => {
         calls.setDockIcon.push(iconPath);
+        if (options.failDockIcon === true) {
+          throw new Error("failed to load icon");
+        }
       }),
     appendCommandLineSwitch: () => Effect.void,
     on: () => Effect.void,
@@ -105,6 +111,7 @@ const withIdentity = <A, E, R>(
     readonly environment?: TestEnvironmentInput;
     readonly legacyPathExists?: boolean;
     readonly packageJson?: string;
+    readonly failDockIcon?: boolean;
     readonly pngIconPath?: Option.Option<string>;
   } = {},
 ) => {
@@ -126,7 +133,7 @@ const withIdentity = <A, E, R>(
           }),
         ),
         Layer.provideMerge(makeAssetsLayer(input.pngIconPath ?? Option.none())),
-        Layer.provideMerge(makeElectronAppLayer(calls)),
+        Layer.provideMerge(makeElectronAppLayer(calls, { failDockIcon: input.failDockIcon })),
         Layer.provideMerge(makeEnvironmentLayer(input.environment)),
       ),
     ),
@@ -195,6 +202,36 @@ describe("DesktopAppIdentity", () => {
       }),
       {
         calls,
+        environment: {
+          isPackaged: false,
+          appPath: "/repo",
+          resourcesPath: "/repo/apps/desktop/resources",
+          env: {
+            VITE_DEV_SERVER_URL: "http://localhost:5173",
+          },
+        },
+        pngIconPath: Option.some("/icon.png"),
+      },
+    );
+  });
+
+  it.effect("ignores development Dock icon override failures", () => {
+    const calls: ElectronAppCalls = {
+      setAboutPanelOptions: [],
+      setDockIcon: [],
+      setName: [],
+    };
+
+    return withIdentity(
+      Effect.gen(function* () {
+        const identity = yield* DesktopAppIdentity.DesktopAppIdentity;
+        yield* identity.configure;
+
+        assert.deepEqual(calls.setDockIcon, ["/icon.png"]);
+      }),
+      {
+        calls,
+        failDockIcon: true,
         environment: {
           isPackaged: false,
           appPath: "/repo",
