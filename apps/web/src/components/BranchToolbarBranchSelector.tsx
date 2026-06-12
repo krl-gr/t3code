@@ -594,7 +594,7 @@ export function BranchToolbarBranchSelector({
         className={cn(CONTEXT_BAR_TEXT_TRIGGER_CLASS, className)}
         disabled={isInitialBranchesLoadPending || isBranchActionPending}
       >
-        <span className="min-w-0 max-w-[240px] truncate">{triggerLabel}</span>
+        <span className="min-w-0 max-w-full truncate">{triggerLabel}</span>
       </ComboboxTrigger>
       <ComboboxPopup align="end" side="top" className="w-80">
         <div className="border-b p-1">

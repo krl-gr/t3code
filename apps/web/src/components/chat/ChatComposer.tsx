@@ -2521,29 +2521,70 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   ) : null}
 
                   {isComposerFooterCompact ? (
-                    <ComposerProviderModelPicker
-                      compact
-                      activeInstanceId={selectedInstanceId}
-                      model={selectedModelForPickerWithCustomFallback}
-                      lockedProvider={lockedProvider}
-                      lockedContinuationGroupKey={lockedContinuationGroupKey}
-                      instanceEntries={providerInstanceEntries}
-                      keybindings={keybindings}
-                      modelOptionsByInstance={modelOptionsByInstance}
-                      terminalOpen={terminalOpen}
-                      open={isComposerModelPickerOpen}
-                      triggerClassName="max-w-42"
-                      {...(composerProviderState.modelPickerIconClassName
-                        ? {
-                            activeProviderIconClassName:
-                              composerProviderState.modelPickerIconClassName,
-                          }
-                        : {})}
-                      onOpenChange={(open) => {
-                        setIsComposerModelPickerOpen(open);
-                      }}
-                      onInstanceModelChange={onProviderModelSelect}
-                    />
+                    <>
+                      {composerProviderControls.showInteractionModeToggle ? (
+                        <>
+                          <Select
+                            value={interactionMode}
+                            onValueChange={(value) => {
+                              if (!value) return;
+                              handleInteractionModeChange(value as ProviderInteractionMode);
+                            }}
+                          >
+                            <ComposerSelectTrigger
+                              variant="ghost"
+                              size="sm"
+                              className="max-w-28"
+                              aria-label="Interaction mode"
+                              title={interactionModeConfig[interactionMode].description}
+                            >
+                              <SelectValue>
+                                {interactionModeConfig[interactionMode].label}
+                              </SelectValue>
+                            </ComposerSelectTrigger>
+                            <SelectPopup alignItemWithTrigger={false}>
+                              {INTERACTION_MODE_ORDER.map((mode) => {
+                                const option = interactionModeConfig[mode];
+                                return (
+                                  <SelectItem key={mode} value={mode} className="min-w-56 py-2">
+                                    <div className="grid min-w-0 gap-0.5">
+                                      <span
+                                        className={cn(
+                                          SIDEBAR_LABEL_COLOR_CLASS,
+                                          SIDEBAR_LABEL_TEXT_CLASS,
+                                        )}
+                                      >
+                                        {option.label}
+                                      </span>
+                                      <span
+                                        className={cn(
+                                          SIDEBAR_MUTED_TEXT_CLASS,
+                                          SIDEBAR_LABEL_TEXT_CLASS,
+                                        )}
+                                      >
+                                        {option.description}
+                                      </span>
+                                    </div>
+                                  </SelectItem>
+                                );
+                              })}
+                            </SelectPopup>
+                          </Select>
+                          <ComposerToolbarSeparator />
+                        </>
+                      ) : null}
+                      <ComposerFooterModeControls
+                        showInteractionModeToggle={false}
+                        interactionMode={interactionMode}
+                        runtimeMode={runtimeMode}
+                        showPlanToggle={showPlanSidebarToggle}
+                        planSidebarLabel={planSidebarLabel}
+                        planSidebarOpen={planSidebarOpen}
+                        onInteractionModeChange={handleInteractionModeChange}
+                        onRuntimeModeChange={handleRuntimeModeChange}
+                        onTogglePlanSidebar={togglePlanSidebar}
+                      />
+                    </>
                   ) : (
                     <>
                       {composerProviderControls.showInteractionModeToggle ? (
@@ -2643,18 +2684,18 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     </>
                   )}
 
-                  {isComposerFooterCompact ? (
+                  {isComposerFooterCompact && providerTraitsMenuContent ? (
                     <>
                       <ComposerToolbarSeparator />
                       <CompactComposerControlsMenu
-                        activePlan={showPlanSidebarToggle}
+                        activePlan={false}
                         interactionMode={interactionMode}
                         planSidebarLabel={planSidebarLabel}
                         planSidebarOpen={planSidebarOpen}
                         runtimeMode={runtimeMode}
-                        showInteractionModeToggle={
-                          composerProviderControls.showInteractionModeToggle
-                        }
+                        showInteractionModeToggle={false}
+                        showRuntimeModeToggle={false}
+                        showPlanToggle={false}
                         traitsMenuContent={providerTraitsMenuContent}
                         onInteractionModeChange={handleInteractionModeChange}
                         onTogglePlanSidebar={togglePlanSidebar}

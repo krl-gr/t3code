@@ -7,7 +7,6 @@ import type {
   ThreadId,
 } from "@t3tools/contracts";
 import {
-  Fragment,
   memo,
   useCallback,
   useLayoutEffect,
@@ -195,6 +194,7 @@ type ContextQuickActionNode = {
 
 const EMPTY_PROJECT_QUICK_ACTION_IDS: readonly string[] = [];
 const QUICK_ACCESS_LAYOUT_EPSILON_PX = 1;
+const CONTEXT_BAR_MIN_LEFT_CONTENT_WIDTH_PX = 240;
 
 function readCssPixelValue(value: string): number {
   const parsedValue = Number.parseFloat(value);
@@ -253,11 +253,12 @@ export const BranchToolbar = memo(function BranchToolbar({
   onEnvironmentChange,
 }: BranchToolbarProps) {
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
-  const [quickAccessHidden, setQuickAccessHidden] = useState(false);
+  const [visibleQuickAccessCount, setVisibleQuickAccessCount] = useState<number | null>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
   const leftContentRef = useRef<HTMLDivElement>(null);
   const quickAccessRef = useRef<HTMLDivElement>(null);
   const moreActionsRef = useRef<HTMLDivElement>(null);
+  const quickAccessUpdateFrameRef = useRef<number | null>(null);
   const threadRef = useMemo(
     () => scopeThreadRef(environmentId, threadId),
     [environmentId, threadId],
@@ -377,7 +378,7 @@ export const BranchToolbar = memo(function BranchToolbar({
     const quickAccessElement = quickAccessRef.current;
 
     if (!toolbarElement || !leftContentElement || !moreActionsElement || !quickAccessElement) {
-      setQuickAccessHidden(false);
+      setVisibleQuickAccessCount(null);
       return;
     }
 
@@ -387,20 +388,53 @@ export const BranchToolbar = memo(function BranchToolbar({
       readCssPixelValue(toolbarStyle.paddingLeft) -
       readCssPixelValue(toolbarStyle.paddingRight);
     const toolbarGapWidth = readCssPixelValue(toolbarStyle.columnGap);
-    const fullQuickAccessWidth = quickAccessElement.scrollWidth;
-    const requiredWidthWithQuickAccess =
-      leftContentElement.scrollWidth +
-      moreActionsElement.offsetWidth +
-      toolbarGapWidth +
-      fullQuickAccessWidth;
-    const shouldHideQuickAccess =
-      fullQuickAccessWidth > 0 &&
-      requiredWidthWithQuickAccess > toolbarContentWidth + QUICK_ACCESS_LAYOUT_EPSILON_PX;
-
-    setQuickAccessHidden((currentValue) =>
-      currentValue === shouldHideQuickAccess ? currentValue : shouldHideQuickAccess,
+    const quickAccessActionElements = Array.from(
+      quickAccessElement.querySelectorAll<HTMLElement>("[data-chat-context-quick-action]"),
     );
+    if (quickAccessActionElements.length === 0) {
+      setVisibleQuickAccessCount(null);
+      return;
+    }
+
+    const availableQuickAccessWidth = Math.max(
+      0,
+      toolbarContentWidth -
+        moreActionsElement.offsetWidth -
+        toolbarGapWidth -
+        CONTEXT_BAR_MIN_LEFT_CONTENT_WIDTH_PX,
+    );
+    let usedQuickAccessWidth = 0;
+    let nextVisibleQuickAccessCount = 0;
+    for (const actionElement of quickAccessActionElements) {
+      const nextWidth = actionElement.offsetWidth;
+      if (
+        usedQuickAccessWidth + nextWidth >
+        availableQuickAccessWidth + QUICK_ACCESS_LAYOUT_EPSILON_PX
+      ) {
+        break;
+      }
+      usedQuickAccessWidth += nextWidth;
+      nextVisibleQuickAccessCount += 1;
+    }
+
+    setVisibleQuickAccessCount((currentValue) => {
+      const nextValue =
+        nextVisibleQuickAccessCount >= quickAccessActionElements.length
+          ? null
+          : nextVisibleQuickAccessCount;
+      return currentValue === nextValue ? currentValue : nextValue;
+    });
   }, []);
+
+  const scheduleQuickAccessVisibilityUpdate = useCallback(() => {
+    if (quickAccessUpdateFrameRef.current !== null) {
+      window.cancelAnimationFrame(quickAccessUpdateFrameRef.current);
+    }
+    quickAccessUpdateFrameRef.current = window.requestAnimationFrame(() => {
+      quickAccessUpdateFrameRef.current = null;
+      updateQuickAccessVisibility();
+    });
+  }, [updateQuickAccessVisibility]);
 
   useLayoutEffect(() => {
     if (!hasRenderableToolbar) return;
@@ -410,22 +444,25 @@ export const BranchToolbar = memo(function BranchToolbar({
   useLayoutEffect(() => {
     if (!hasRenderableToolbar) return;
 
-    updateQuickAccessVisibility();
-    window.addEventListener("resize", updateQuickAccessVisibility);
+    scheduleQuickAccessVisibilityUpdate();
+    window.addEventListener("resize", scheduleQuickAccessVisibilityUpdate);
 
     if (typeof ResizeObserver === "undefined") {
       return () => {
-        window.removeEventListener("resize", updateQuickAccessVisibility);
+        window.removeEventListener("resize", scheduleQuickAccessVisibilityUpdate);
+        if (quickAccessUpdateFrameRef.current !== null) {
+          window.cancelAnimationFrame(quickAccessUpdateFrameRef.current);
+          quickAccessUpdateFrameRef.current = null;
+        }
       };
     }
 
     const resizeObserver = new ResizeObserver(() => {
-      updateQuickAccessVisibility();
+      scheduleQuickAccessVisibilityUpdate();
     });
     const observedElements = [
       toolbarRef.current,
       leftContentRef.current,
-      quickAccessRef.current,
       moreActionsRef.current,
     ];
 
@@ -434,10 +471,14 @@ export const BranchToolbar = memo(function BranchToolbar({
     }
 
     return () => {
-      window.removeEventListener("resize", updateQuickAccessVisibility);
+      window.removeEventListener("resize", scheduleQuickAccessVisibilityUpdate);
+      if (quickAccessUpdateFrameRef.current !== null) {
+        window.cancelAnimationFrame(quickAccessUpdateFrameRef.current);
+        quickAccessUpdateFrameRef.current = null;
+      }
       resizeObserver.disconnect();
     };
-  }, [hasRenderableToolbar, updateQuickAccessVisibility]);
+  }, [hasRenderableToolbar, scheduleQuickAccessVisibilityUpdate]);
 
   if (!hasActiveThread || !activeProject) return null;
 
@@ -632,6 +673,7 @@ export const BranchToolbar = memo(function BranchToolbar({
     quickActionNodesWithDrafts.push(draftsQuickActionNode);
   }
   const quickAccessNodes = [...projectQuickActionNodes, ...quickActionNodesWithDrafts];
+  const visibleQuickAccessLimit = visibleQuickAccessCount ?? quickAccessNodes.length;
 
   return (
     <div
@@ -641,7 +683,7 @@ export const BranchToolbar = memo(function BranchToolbar({
     >
       <div
         ref={leftContentRef}
-        className="flex min-w-0 items-center gap-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="flex min-w-0 flex-1 items-center gap-0 overflow-hidden"
       >
         {!isGitRepo ? (
           <div
@@ -695,7 +737,7 @@ export const BranchToolbar = memo(function BranchToolbar({
 
             <ContextBarSeparator />
             <BranchToolbarBranchSelector
-              className="min-w-0 max-w-40 justify-start"
+              className="min-w-0 flex-1 justify-start"
               environmentId={environmentId}
               threadId={threadId}
               {...(draftId ? { draftId } : {})}
@@ -718,18 +760,26 @@ export const BranchToolbar = memo(function BranchToolbar({
         {quickAccessNodes.length > 0 ? (
           <div
             ref={quickAccessRef}
-            aria-hidden={quickAccessHidden}
-            className={`flex shrink-0 items-center justify-end gap-0 ${
-              quickAccessHidden ? "invisible pointer-events-none absolute right-0 top-0" : ""
-            }`}
+            aria-hidden={visibleQuickAccessLimit === 0}
+            className="flex shrink-0 items-center justify-end gap-0"
           >
-            {quickAccessNodes.map((entry, index) => (
-              <Fragment key={entry.actionId}>
-                {index > 0 ? <ContextBarSeparator /> : null}
-                {entry.node}
-              </Fragment>
-            ))}
-            <ContextBarSeparator />
+            {quickAccessNodes.map((entry, index) => {
+              const hidden = index >= visibleQuickAccessLimit;
+              return (
+                <div
+                  key={entry.actionId}
+                  aria-hidden={hidden}
+                  className={`flex shrink-0 items-center gap-0 ${
+                    hidden ? "invisible pointer-events-none absolute right-0 top-0" : ""
+                  }`}
+                  data-chat-context-quick-action={entry.actionId}
+                >
+                  {index > 0 ? <ContextBarSeparator /> : null}
+                  {entry.node}
+                </div>
+              );
+            })}
+            {visibleQuickAccessLimit > 0 ? <ContextBarSeparator /> : null}
           </div>
         ) : null}
         <div ref={moreActionsRef} className="flex shrink-0 items-center justify-end">
