@@ -47,7 +47,8 @@ import {
 } from "lucide-react";
 import { Button } from "../ui/button";
 import { AnimatedHeight } from "../AnimatedHeight";
-import { buildExpandedImagePreview, ExpandedImagePreview } from "./ExpandedImagePreview";
+import { type ExpandedImagePreview } from "./ExpandedImagePreview";
+import { ImageAttachmentPreviewStrip } from "./ImageAttachmentPreviewStrip";
 import { ProposedPlanCard } from "./ProposedPlanCard";
 import { ChangedFilesTree } from "./ChangedFilesTree";
 import { DiffStatLabel, hasNonZeroStat } from "./DiffStatLabel";
@@ -323,7 +324,6 @@ function keyExtractor(item: MessagesTimelineRow) {
 // ---------------------------------------------------------------------------
 
 type TimelineEntry = ReturnType<typeof deriveTimelineEntries>[number];
-type TimelineMessage = Extract<TimelineEntry, { kind: "message" }>["message"];
 type WorkGroupEntries = Extract<MessagesTimelineRow, { kind: "work" }>["groupedEntries"];
 type TimelineWorkEntry = WorkGroupEntries[number];
 type TimelineRow = MessagesTimelineRow;
@@ -403,39 +403,7 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
     <div className="flex justify-end">
       <div className="group flex max-w-[80%] flex-col items-end">
         <div className="max-w-full rounded-2xl rounded-br-sm border border-border bg-white/90 px-4 py-3 dark:bg-secondary">
-          {userImages.length > 0 && (
-            <div className="mb-2 grid max-w-[420px] grid-cols-2 gap-2">
-              {userImages.map((image: NonNullable<TimelineMessage["attachments"]>[number]) => (
-                <div
-                  key={image.id}
-                  className="overflow-hidden rounded-lg border border-border/80 bg-background/70"
-                >
-                  {image.previewUrl ? (
-                    <button
-                      type="button"
-                      className="h-full w-full cursor-zoom-in"
-                      aria-label={`Preview ${image.name}`}
-                      onClick={() => {
-                        const preview = buildExpandedImagePreview(userImages, image.id);
-                        if (!preview) return;
-                        ctx.onImageExpand(preview);
-                      }}
-                    >
-                      <img
-                        src={image.previewUrl}
-                        alt={image.name}
-                        className="block h-auto max-h-[220px] w-full object-cover"
-                      />
-                    </button>
-                  ) : (
-                    <div className="flex min-h-[72px] items-center justify-center px-2 py-3 text-center text-sm leading-relaxed text-muted-foreground/70">
-                      {image.name}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
+          <ImageAttachmentPreviewStrip images={userImages} onExpandImage={ctx.onImageExpand} />
           <CollapsibleUserMessageBody
             text={displayedUserMessage.visibleText}
             terminalContexts={terminalContexts}
