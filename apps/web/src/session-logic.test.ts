@@ -655,6 +655,94 @@ describe("deriveWorkLogEntries", () => {
     expect(entries[0]?.tone).toBe("error");
   });
 
+  it("uses runtime warning messages and marks warning severity", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "runtime-warning",
+        kind: "runtime.warning",
+        summary: "Runtime warning",
+        tone: "info",
+        payload: {
+          message: "MCP server disconnected",
+        },
+      }),
+    ];
+
+    const [entry] = deriveWorkLogEntries(activities, undefined);
+    expect(entry).toMatchObject({
+      id: "runtime-warning",
+      label: "Runtime warning",
+      detail: "MCP server disconnected",
+      severity: "warning",
+    });
+  });
+
+  it("keeps upstream runtime warning summaries as labels", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "runtime-warning-upstream-summary",
+        kind: "runtime.warning",
+        summary: "MCP server disconnected",
+        tone: "info",
+        payload: {
+          message: "MCP server disconnected",
+        },
+      }),
+    ];
+
+    const [entry] = deriveWorkLogEntries(activities, undefined);
+    expect(entry).toMatchObject({
+      id: "runtime-warning-upstream-summary",
+      label: "MCP server disconnected",
+      severity: "warning",
+    });
+    expect(entry?.detail).toBeUndefined();
+  });
+
+  it("exposes runtime error messages as detail", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "runtime-error",
+        kind: "runtime.error",
+        summary: "Runtime error",
+        tone: "error",
+        payload: {
+          message: "Failed to start Codex app-server",
+        },
+      }),
+    ];
+
+    const [entry] = deriveWorkLogEntries(activities, undefined);
+    expect(entry).toMatchObject({
+      id: "runtime-error",
+      label: "Runtime error",
+      detail: "Failed to start Codex app-server",
+    });
+  });
+
+  it("labels approval resolutions by decision", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "approval-accepted",
+        kind: "approval.resolved",
+        summary: "Approval resolved",
+        tone: "approval",
+        payload: {
+          requestKind: "command",
+          decision: "acceptForSession",
+        },
+      }),
+    ];
+
+    const [entry] = deriveWorkLogEntries(activities, undefined);
+    expect(entry).toMatchObject({
+      id: "approval-accepted",
+      label: "Approval accepted for session",
+      detail: "command",
+      requestKind: "command",
+    });
+  });
+
   it("filters by turn id when provided", () => {
     const activities: OrchestrationThreadActivity[] = [
       makeActivity({ id: "turn-1", turnId: "turn-1", summary: "Tool call", kind: "tool.started" }),
@@ -1163,11 +1251,81 @@ describe("deriveWorkLogEntries", () => {
     expect(entries[0]).toMatchObject({
       id: "tool-complete",
       createdAt: "2026-02-23T00:00:03.000Z",
-      label: "Tool call completed",
+      label: "Ran tool",
       detail: 'Read: {"file_path":"/tmp/app.ts"}',
       command: "sed -n 1,40p /tmp/app.ts",
       itemType: "dynamic_tool_call",
-      toolTitle: "Tool call",
+      toolTitle: "Ran tool",
+    });
+  });
+
+  it("uses semantic labels for generic tool titles", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "generic-read-tool",
+        createdAt: "2026-02-23T00:00:01.000Z",
+        kind: "tool.completed",
+        summary: "Tool call completed",
+        payload: {
+          itemType: "dynamic_tool_call",
+          title: "Tool call",
+          detail: "Tool call",
+          data: {
+            kind: "read",
+            rawInput: {},
+          },
+        },
+      }),
+      makeActivity({
+        id: "generic-file-tool",
+        createdAt: "2026-02-23T00:00:02.000Z",
+        kind: "tool.completed",
+        summary: "Tool call completed",
+        payload: {
+          itemType: "file_change",
+          title: "Tool",
+          data: {
+            item: {
+              changes: [{ path: "apps/web/src/session-logic.ts" }],
+            },
+          },
+        },
+      }),
+      makeActivity({
+        id: "generic-web-search-tool",
+        createdAt: "2026-02-23T00:00:03.000Z",
+        kind: "tool.completed",
+        summary: "Tool call completed",
+        payload: {
+          itemType: "web_search",
+          title: "Tool",
+          data: {
+            query: "latest release notes",
+          },
+        },
+      }),
+    ];
+
+    const entries = deriveWorkLogEntries(activities, undefined);
+    expect(entries[0]).toMatchObject({
+      id: "generic-read-tool",
+      label: "Read file",
+      toolTitle: "Read file",
+      itemType: "dynamic_tool_call",
+    });
+    expect(entries[0]?.detail).toBeUndefined();
+    expect(entries[1]).toMatchObject({
+      id: "generic-file-tool",
+      label: "Changed files",
+      toolTitle: "Changed files",
+      itemType: "file_change",
+      changedFiles: ["apps/web/src/session-logic.ts"],
+    });
+    expect(entries[2]).toMatchObject({
+      id: "generic-web-search-tool",
+      label: "Web search",
+      toolTitle: "Web search",
+      itemType: "web_search",
     });
   });
 

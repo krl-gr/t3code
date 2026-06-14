@@ -2458,6 +2458,10 @@ describe("ProviderRuntimeIngestion", () => {
     expect(thread.session?.status).toBe("running");
     expect(thread.session?.activeTurnId).toBe("turn-warning");
     expect(thread.session?.lastError).toBeNull();
+    const warning = thread.activities.find(
+      (activity: ProviderRuntimeTestActivity) => activity.id === "evt-warning-runtime",
+    );
+    expect(warning?.summary).toBe("Reconnecting... 2/5");
   });
 
   it("maps session/thread lifecycle and item.started into session/activity projections", async () => {
@@ -2636,6 +2640,7 @@ describe("ProviderRuntimeIngestion", () => {
         ? (warning.payload as Record<string, unknown>)
         : undefined;
     expect(warning?.kind).toBe("runtime.warning");
+    expect(warning?.summary).toBe("Provider got slow");
     expect(warningPayload?.message).toBe("Provider got slow");
 
     const checkpoint = thread.checkpoints.find(
