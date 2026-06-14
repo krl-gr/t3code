@@ -908,9 +908,6 @@ export default function ChatView(props: ChatViewProps) {
   // Tracks plan/sidebar dismissals by thread so returning to a chat doesn't
   // re-open a panel the user already hid for that same turn.
   const planSidebarDismissedTurnByThreadRef = useRef(new Map<string, string>());
-  // When set, the thread-change reset effect will open the sidebar instead of closing it.
-  // Used by "Implement in a new thread" to carry the sidebar-open intent across navigation.
-  const planSidebarOpenOnNextThreadRef = useRef(false);
   const [terminalFocusRequestId, setTerminalFocusRequestId] = useState(0);
   const [pullRequestDialogState, setPullRequestDialogState] =
     useState<PullRequestDialogState | null>(null);
@@ -1103,6 +1100,7 @@ export default function ChatView(props: ChatViewProps) {
     terminalUiState.terminalOpen,
   ]);
   const activeLatestTurn = activeThread?.latestTurn ?? null;
+  const latestTurnImplementsProposedPlan = activeLatestTurn?.sourceProposedPlan != null;
   const threadPlanCatalog = useThreadPlanCatalog(
     useMemo(() => {
       const threadIds: ThreadId[] = [];
@@ -2616,13 +2614,7 @@ export default function ChatView(props: ChatViewProps) {
     isAtEndRef.current = true;
     showScrollDebouncer.current.cancel();
     setShowScrollToBottom(false);
-    if (planSidebarOpenOnNextThreadRef.current) {
-      planSidebarOpenOnNextThreadRef.current = false;
-      setPlanSidebarOpen(true);
-    } else {
-      planSidebarOpenOnNextThreadRef.current = false;
-      setPlanSidebarOpen(false);
-    }
+    setPlanSidebarOpen(false);
   }, [activeThreadKey]);
 
   // Auto-open the plan sidebar when plan/todo steps arrive for the current turn.
@@ -2633,6 +2625,7 @@ export default function ChatView(props: ChatViewProps) {
     if (planSidebarOpen) return;
     const latestTurnId = activeLatestTurn?.turnId ?? null;
     if (latestTurnId && activePlan.turnId !== latestTurnId) return;
+    if (latestTurnImplementsProposedPlan) return;
     if (
       activeThreadKey &&
       planSidebarDismissedTurnByThreadRef.current.get(activeThreadKey) ===
@@ -2646,6 +2639,7 @@ export default function ChatView(props: ChatViewProps) {
     activeLatestTurn?.turnId,
     activeThreadKey,
     autoOpenPlanSidebar,
+    latestTurnImplementsProposedPlan,
     planSidebarDismissalTurnKey,
     planSidebarOpen,
   ]);
@@ -3588,15 +3582,6 @@ export default function ChatView(props: ChatViewProps) {
             : {}),
           createdAt: messageCreatedAt,
         });
-        // Optimistically open the plan sidebar when implementing (not refining).
-        // "default" mode here means the agent is executing the plan, which produces
-        // step-tracking activities that the sidebar will display.
-        if (nextInteractionMode === "default" && autoOpenPlanSidebar) {
-          if (activeThreadKey) {
-            planSidebarDismissedTurnByThreadRef.current.delete(activeThreadKey);
-          }
-          setPlanSidebarOpen(true);
-        }
         sendInFlightRef.current = false;
       } catch (err) {
         setOptimisticUserMessages((existing) =>
@@ -3612,7 +3597,6 @@ export default function ChatView(props: ChatViewProps) {
     },
     [
       activeThread,
-      activeThreadKey,
       activeProposedPlan,
       beginLocalDispatch,
       isConnecting,
@@ -3623,7 +3607,6 @@ export default function ChatView(props: ChatViewProps) {
       runtimeMode,
       setComposerDraftInteractionMode,
       setThreadError,
-      autoOpenPlanSidebar,
       composerRef,
       environmentId,
     ],
@@ -3718,8 +3701,6 @@ export default function ChatView(props: ChatViewProps) {
         return waitForStartedServerThread(scopeThreadRef(activeThread.environmentId, nextThreadId));
       })
       .then(() => {
-        // Signal that the plan sidebar should open on the new thread when enabled.
-        planSidebarOpenOnNextThreadRef.current = autoOpenPlanSidebar;
         const nextThreadRef = scopeThreadRef(activeThread.environmentId, nextThreadId);
         const openedPanelId = openChatWorkspaceTarget({
           disposition: "new-panel",
@@ -3769,7 +3750,6 @@ export default function ChatView(props: ChatViewProps) {
     navigate,
     resetLocalDispatch,
     runtimeMode,
-    autoOpenPlanSidebar,
     composerRef,
     environmentId,
   ]);
