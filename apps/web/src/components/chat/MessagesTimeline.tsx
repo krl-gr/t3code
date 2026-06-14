@@ -914,10 +914,7 @@ function WorkEntriesPanel({
   workspaceRoot: string | undefined;
 }) {
   return (
-    <div
-      id={id}
-      className="rounded-xl border border-border bg-[#EFEFEF]/95 px-2 py-1.5 dark:bg-muted"
-    >
+    <div id={id} className="min-w-0">
       <div className="space-y-0.5">
         {groupedEntries.map((workEntry) => (
           <SimpleWorkEntryRow
@@ -1477,7 +1474,7 @@ const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
   const previewIsChangedFiles = hasChangedFiles && !workEntry.command && !workEntry.detail;
 
   return (
-    <div className="rounded-lg px-1 py-1">
+    <div className="rounded-lg py-1">
       <div className="flex items-center gap-2 transition-[opacity,translate] duration-200">
         <span
           className={cn("flex size-5 shrink-0 items-center justify-center", iconConfig.className)}
