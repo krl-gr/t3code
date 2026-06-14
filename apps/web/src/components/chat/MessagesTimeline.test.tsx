@@ -450,6 +450,55 @@ describe("MessagesTimeline", () => {
     expect(markup).not.toContain("rg -n plan apps/web/src");
   });
 
+  it("does not render replayable timeline animation classes", async () => {
+    const { MessagesTimeline } = await import("./MessagesTimeline");
+    const assistantMarkup = renderToStaticMarkup(
+      <MessagesTimeline
+        {...buildProps()}
+        completionDividerBeforeEntryId="assistant-final-entry"
+        completionSummary="Worked for 1s"
+        timelineEntries={[
+          buildAssistantTimelineEntry({
+            id: "assistant-final",
+            entryId: "assistant-final-entry",
+            text: "Final answer.",
+            createdAt: "2026-03-17T19:13:00.000Z",
+            completedAt: "2026-03-17T19:13:01.000Z",
+            turnId: "turn-1",
+          }),
+        ]}
+      />,
+    );
+    const activeWorkMarkup = renderToStaticMarkup(
+      <MessagesTimeline
+        {...buildProps()}
+        isWorking
+        activeTurnInProgress
+        activeTurnId={"turn-active" as never}
+        activeTurnStartedAt="2026-03-17T19:12:27.000Z"
+        timelineEntries={[
+          {
+            id: "work-entry",
+            kind: "work",
+            createdAt: "2026-03-17T19:12:28.000Z",
+            entry: {
+              id: "work-1",
+              createdAt: "2026-03-17T19:12:28.000Z",
+              label: "Ran command",
+              tone: "tool",
+              command: "rg -n animation apps/web/src",
+            },
+          },
+        ]}
+      />,
+    );
+
+    expect(assistantMarkup).toContain("Response");
+    expect(activeWorkMarkup).toContain("Working for");
+    expect(`${assistantMarkup}${activeWorkMarkup}`).not.toContain("chat-fade-in");
+    expect(`${assistantMarkup}${activeWorkMarkup}`).not.toContain("chat-row-enter");
+  });
+
   it("formats changed file paths from the workspace root", async () => {
     const { MessagesTimeline } = await import("./MessagesTimeline");
     const markup = renderToStaticMarkup(

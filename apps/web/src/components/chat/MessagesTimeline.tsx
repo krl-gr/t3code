@@ -330,30 +330,11 @@ type TimelineRow = MessagesTimelineRow;
 type TimelineProcessChildRow = Extract<TimelineRow, { kind: "process" }>["children"][number];
 type VisibleProcessChildRow = Exclude<TimelineProcessChildRow, { kind: "working" }>;
 
-const ROW_ENTER_ANIMATION_WINDOW_MS = 2000;
-
-/** Enter-animation class for rows that appear while the user is watching —
- *  i.e. whose createdAt is within a short window of the row mounting. Rows
- *  from the initial thread load and rows re-mounted by list virtualization
- *  are older than the window, so they render without animation. */
-function useRowEnterClass(createdAt: string | null | undefined): string | null {
-  const [enterClass] = useState(() => {
-    if (!createdAt) return null;
-    const createdAtMs = Date.parse(createdAt);
-    if (Number.isNaN(createdAtMs)) return null;
-    return Date.now() - createdAtMs < ROW_ENTER_ANIMATION_WINDOW_MS ? "chat-row-enter" : null;
-  });
-  return enterClass;
-}
-
 const TimelineRowContent = memo(function TimelineRowContent({ row }: { row: TimelineRow }) {
-  const enterClass = useRowEnterClass(row.createdAt);
-
   return (
     <div
       className={cn(
         "pb-4",
-        enterClass,
         row.kind === "message" && row.message.role === "assistant" ? "group/assistant" : null,
       )}
       data-timeline-row-id={row.id}
@@ -481,7 +462,7 @@ function AssistantTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "mess
           onOpenTurnDiff={ctx.onOpenTurnDiff}
         />
         {showAssistantFooter ? (
-          <div className="group/assistant-actions chat-fade-in relative mt-1.5 min-h-8 w-fit min-w-[7rem]">
+          <div className="group/assistant-actions relative mt-1.5 min-h-8 w-fit min-w-[7rem]">
             <p
               className={cn(
                 "absolute inset-y-0 left-0 flex items-center text-sm leading-relaxed text-muted-foreground/50",
@@ -526,7 +507,7 @@ function ForkAssistantMessageButton({ messageId }: { messageId: MessageId }) {
 
 function AssistantCompletionDivider({ completionSummary }: { completionSummary: string | null }) {
   return (
-    <div className="chat-fade-in my-3 flex items-center gap-3">
+    <div className="my-3 flex items-center gap-3">
       <span className="h-px flex-1 bg-border" />
       <span className="rounded-full border border-border bg-background px-2.5 py-1 text-sm leading-relaxed text-muted-foreground/80">
         {completionSummary ? `Response • ${completionSummary}` : "Response"}
@@ -630,7 +611,7 @@ function ProcessTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "proces
           {workingChild ? (
             <div
               key={`process-child:${workingChild.id}`}
-              className="chat-fade-in min-w-0"
+              className="min-w-0"
               data-process-child-row-id={workingChild.id}
               data-process-child-row-kind={workingChild.kind}
             >
@@ -700,13 +681,10 @@ function ProcessChildFrame({
   row: VisibleProcessChildRow;
   forceWorkGroupsExpanded: boolean;
 }) {
-  const enterClass = useRowEnterClass(row.createdAt);
-
   return (
     <div
       className={cn(
         "min-w-0",
-        enterClass,
         row.kind === "message" && row.message.role === "assistant" ? "group/assistant" : null,
       )}
       data-process-child-row-id={row.id}
