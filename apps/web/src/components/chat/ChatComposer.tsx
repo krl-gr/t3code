@@ -98,21 +98,11 @@ import {
 import { basenameOfPath } from "../../vscode-icons";
 import { cn, newCommandId, randomUUID } from "~/lib/utils";
 import { Button } from "../ui/button";
-import {
-  Dialog,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogPanel,
-  DialogPopup,
-  DialogTitle,
-} from "../ui/dialog";
-import { Input } from "../ui/input";
+import { AttachChatContextPicker } from "./AttachChatContextPicker";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { toastManager } from "../ui/toast";
 import {
-  GitBranchIcon,
   ListTodoIcon,
   type LucideIcon,
   LockIcon,
@@ -804,11 +794,13 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const composerEnvironmentId = activeThreadEnvironmentId ?? environmentId;
   const showComposerWorkspaceContextControl =
     primaryEnvironmentId !== null && composerEnvironmentId === primaryEnvironmentId;
-  const [chatContextDialogOpen, setChatContextDialogOpen] = useState(false);
+  const [chatContextPickerOpen, setChatContextPickerOpen] = useState(false);
   const [chatContextSearch, setChatContextSearch] = useState("");
-  const [selectedChatContextSourceId, setSelectedChatContextSourceId] = useState<ThreadId | null>(
-    null,
-  );
+  const [highlightedChatContextSourceId, setHighlightedChatContextSourceId] =
+    useState<ThreadId | null>(null);
+  const [attachingChatContextSourceId, setAttachingChatContextSourceId] =
+    useState<ThreadId | null>(null);
+  const attachingChatContextSourceIdRef = useRef<ThreadId | null>(null);
   const chatContextThreads = useStore(
     useShallow(
       useCallback(
@@ -856,19 +848,19 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       });
   }, [chatContextPickerState, chatContextSearch]);
   useEffect(() => {
-    if (!chatContextDialogOpen) {
+    if (!chatContextPickerOpen) {
       return;
     }
     if (
-      selectedChatContextSourceId &&
-      chatContextCandidates.some((thread) => thread.id === selectedChatContextSourceId)
+      highlightedChatContextSourceId &&
+      chatContextCandidates.some((thread) => thread.id === highlightedChatContextSourceId)
     ) {
       return;
     }
-    setSelectedChatContextSourceId(chatContextCandidates[0]?.id ?? null);
-  }, [chatContextCandidates, chatContextDialogOpen, selectedChatContextSourceId]);
+    setHighlightedChatContextSourceId(chatContextCandidates[0]?.id ?? null);
+  }, [chatContextCandidates, chatContextPickerOpen, highlightedChatContextSourceId]);
 
-  const openChatContextDialog = useCallback(() => {
+  const openChatContextPicker = useCallback(() => {
     if (!activeThread || !isServerThread) {
       toastManager.add({
         type: "warning",
@@ -878,42 +870,61 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       return;
     }
     setChatContextSearch("");
-    setSelectedChatContextSourceId(chatContextCandidates[0]?.id ?? null);
-    setChatContextDialogOpen(true);
+    setHighlightedChatContextSourceId(chatContextCandidates[0]?.id ?? null);
+    setChatContextPickerOpen(true);
   }, [activeThread, chatContextCandidates, isServerThread]);
 
-  const confirmAttachChatContext = useCallback(async () => {
-    if (!activeThread || !selectedChatContextSourceId) {
-      return;
-    }
-    const api = readEnvironmentApi(activeThread.environmentId);
-    if (!api) {
-      toastManager.add({
-        type: "error",
-        title: "Environment unavailable",
-        description: "Reconnect before attaching chat context.",
-      });
-      return;
-    }
-    try {
-      await api.orchestration.dispatchCommand({
-        type: "thread.context-binding.add",
-        commandId: newCommandId(),
-        threadId: activeThread.id,
-        bindingId: ThreadContextBindingId.make(`ctx-${randomUUID()}`),
-        sourceThreadId: selectedChatContextSourceId,
-        mode: "snapshot",
-        createdAt: new Date().toISOString(),
-      });
-      setChatContextDialogOpen(false);
-    } catch (error) {
-      toastManager.add({
-        type: "error",
-        title: "Failed to attach chat context",
-        description: error instanceof Error ? error.message : "An error occurred.",
-      });
-    }
-  }, [activeThread, selectedChatContextSourceId]);
+  const handleChatContextPickerOpenChange = useCallback(
+    (open: boolean) => {
+      if (!open) {
+        setChatContextPickerOpen(false);
+        return;
+      }
+      openChatContextPicker();
+    },
+    [openChatContextPicker],
+  );
+
+  const attachChatContextSource = useCallback(
+    async (sourceThreadId: ThreadId) => {
+      if (!activeThread || attachingChatContextSourceIdRef.current !== null) {
+        return;
+      }
+      const api = readEnvironmentApi(activeThread.environmentId);
+      if (!api) {
+        toastManager.add({
+          type: "error",
+          title: "Environment unavailable",
+          description: "Reconnect before attaching chat context.",
+        });
+        return;
+      }
+      attachingChatContextSourceIdRef.current = sourceThreadId;
+      setAttachingChatContextSourceId(sourceThreadId);
+      try {
+        await api.orchestration.dispatchCommand({
+          type: "thread.context-binding.add",
+          commandId: newCommandId(),
+          threadId: activeThread.id,
+          bindingId: ThreadContextBindingId.make(`ctx-${randomUUID()}`),
+          sourceThreadId,
+          mode: "snapshot",
+          createdAt: new Date().toISOString(),
+        });
+        setChatContextPickerOpen(false);
+      } catch (error) {
+        toastManager.add({
+          type: "error",
+          title: "Failed to attach chat context",
+          description: error instanceof Error ? error.message : "An error occurred.",
+        });
+      } finally {
+        attachingChatContextSourceIdRef.current = null;
+        setAttachingChatContextSourceId(null);
+      }
+    },
+    [activeThread],
+  );
 
   const removeChatContextBinding = useCallback(
     async (bindingId: ThreadContextBindingId) => {
@@ -2442,10 +2453,17 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                       <ComposerToolbarSeparator />
                     </>
                   ) : null}
-                  <ComposerToolbarIconAction
-                    label="Attach chat context"
-                    icon={GitBranchIcon}
-                    onClick={openChatContextDialog}
+                  <AttachChatContextPicker
+                    open={chatContextPickerOpen}
+                    onOpenChange={handleChatContextPickerOpenChange}
+                    candidates={chatContextCandidates}
+                    projectById={chatContextPickerState.projectById}
+                    search={chatContextSearch}
+                    onSearchChange={setChatContextSearch}
+                    highlightedSourceId={highlightedChatContextSourceId}
+                    onHighlightedSourceIdChange={setHighlightedChatContextSourceId}
+                    attachingSourceId={attachingChatContextSourceId}
+                    onSelectSource={attachChatContextSource}
                   />
                   <ComposerToolbarSeparator />
                   {showComposerBrowserUseControl ? (
@@ -2675,108 +2693,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           </div>
         </div>
       </form>
-
-      <Dialog open={chatContextDialogOpen} onOpenChange={setChatContextDialogOpen}>
-        <DialogPopup className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <GitBranchIcon className="size-4" />
-              Attach chat context
-            </DialogTitle>
-            <DialogDescription>Select a source chat to attach as a snapshot.</DialogDescription>
-          </DialogHeader>
-          <DialogPanel className="space-y-4">
-            <Input
-              value={chatContextSearch}
-              placeholder="Search chats, projects, paths"
-              onChange={(event) => setChatContextSearch(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key !== "Enter") {
-                  return;
-                }
-                event.preventDefault();
-                void confirmAttachChatContext();
-              }}
-            />
-
-            <div className="max-h-72 space-y-1 overflow-y-auto pr-1">
-              {chatContextCandidates.length === 0 ? (
-                <div
-                  className={cn(
-                    "rounded-lg border border-border/70 bg-muted/20 px-3 py-6 text-center",
-                    SIDEBAR_MUTED_TEXT_CLASS,
-                    SIDEBAR_LABEL_TEXT_CLASS,
-                  )}
-                >
-                  No other chats in this environment.
-                </div>
-              ) : (
-                chatContextCandidates.map((thread) => {
-                  const project = chatContextPickerState.projectById[thread.projectId];
-                  const selected = selectedChatContextSourceId === thread.id;
-                  return (
-                    <button
-                      key={thread.id}
-                      type="button"
-                      className={cn(
-                        "flex w-full min-w-0 items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left transition-colors",
-                        selected
-                          ? "border-ring/55 bg-accent/60 text-foreground"
-                          : "border-border/60 bg-background/40 text-foreground hover:bg-accent/40",
-                      )}
-                      aria-pressed={selected}
-                      onClick={() => setSelectedChatContextSourceId(thread.id)}
-                    >
-                      <span className="min-w-0">
-                        <span
-                          className={cn(
-                            "block truncate",
-                            SIDEBAR_LABEL_COLOR_CLASS,
-                            SIDEBAR_LABEL_TEXT_CLASS,
-                          )}
-                        >
-                          {thread.title}
-                        </span>
-                        <span
-                          className={cn(
-                            "block truncate",
-                            SIDEBAR_MUTED_TEXT_CLASS,
-                            SIDEBAR_LABEL_TEXT_CLASS,
-                          )}
-                        >
-                          {project ? `${project.name} · ${project.cwd}` : thread.id}
-                        </span>
-                      </span>
-                      <span
-                        className={cn(
-                          "shrink-0",
-                          SIDEBAR_MUTED_TEXT_CLASS,
-                          SIDEBAR_LABEL_TEXT_CLASS,
-                        )}
-                      >
-                        {thread.archivedAt ? "Archived" : ""}
-                      </span>
-                    </button>
-                  );
-                })
-              )}
-            </div>
-          </DialogPanel>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setChatContextDialogOpen(false);
-              }}
-            >
-              Cancel
-            </Button>
-            <Button disabled={!selectedChatContextSourceId} onClick={confirmAttachChatContext}>
-              Attach
-            </Button>
-          </DialogFooter>
-        </DialogPopup>
-      </Dialog>
     </>
   );
 });
