@@ -3524,15 +3524,13 @@ export default function ChatView(props: ChatViewProps) {
       });
 
       sendInFlightRef.current = true;
-      beginLocalDispatch({ preparingWorktree: false });
-      setThreadError(threadIdForSend, null);
-
-      // Scroll to the current end *before* adding the optimistic message.
       isAtEndRef.current = true;
       showScrollDebouncer.current.cancel();
       setShowScrollToBottom(false);
-      await legendListRef.current?.scrollToEnd?.({ animated: false });
 
+      // Match the regular send path: add the optimistic row first, then set
+      // local busy state and stick to bottom after render. Pre-scrolling here
+      // creates an intermediate frame before the new row exists.
       setOptimisticUserMessages((existing) => [
         ...existing,
         {
@@ -3543,6 +3541,12 @@ export default function ChatView(props: ChatViewProps) {
           streaming: false,
         },
       ]);
+      setThreadError(threadIdForSend, null);
+      beginLocalDispatch({ preparingWorktree: false });
+      window.requestAnimationFrame(() => {
+        if (!isAtEndRef.current) return;
+        void legendListRef.current?.scrollToEnd?.({ animated: false });
+      });
 
       try {
         await persistThreadSettingsForNextTurn({

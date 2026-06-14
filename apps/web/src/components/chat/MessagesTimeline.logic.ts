@@ -523,7 +523,7 @@ function areMessagesRenderEquivalent(a: ChatMessage, b: ChatMessage): boolean {
     a.id === b.id &&
     a.role === b.role &&
     a.text === b.text &&
-    (a.turnId ?? null) === (b.turnId ?? null) &&
+    (a.role === "user" || (a.turnId ?? null) === (b.turnId ?? null)) &&
     a.createdAt === b.createdAt &&
     (a.role !== "assistant" || (a.completedAt ?? null) === (b.completedAt ?? null)) &&
     a.streaming === b.streaming &&

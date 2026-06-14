@@ -768,7 +768,7 @@ describe("computeStableMessagesTimelineRows", () => {
     expect(repeated.result).toBe(initial.result);
   });
 
-  it("reuses message rows when an equivalent server message replaces an optimistic object", () => {
+  it("reuses user message rows when a server ack only adds non-visual metadata", () => {
     const optimisticUserMessage = {
       id: "user-1" as never,
       role: "user" as const,
@@ -789,6 +789,7 @@ describe("computeStableMessagesTimelineRows", () => {
     };
     const serverUserMessage = {
       ...optimisticUserMessage,
+      turnId: "turn-1" as never,
       completedAt: optimisticUserMessage.createdAt,
       attachments: optimisticUserMessage.attachments.map((attachment) => ({ ...attachment })),
     };
