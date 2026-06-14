@@ -77,7 +77,7 @@ interface DerivedWorkLogEntry extends WorkLogEntry {
 
 export interface PendingApproval {
   requestId: ApprovalRequestId;
-  requestKind: "command" | "file-read" | "file-change" | "dynamic-tool";
+  requestKind: "command" | "file-read" | "file-change" | "dynamic-tool" | "permissions" | "unknown";
   createdAt: string;
   detail?: string;
 }
@@ -190,6 +190,8 @@ function requestKindFromRequestType(requestType: unknown): PendingApproval["requ
       return "command";
     case "dynamic_tool_call":
       return "dynamic-tool";
+    case "permissions_approval":
+      return "permissions";
     case "file_read_approval":
       return "file-read";
     case "file_change_approval":
@@ -234,17 +236,18 @@ export function derivePendingApprovals(
       (payload.requestKind === "command" ||
         payload.requestKind === "file-read" ||
         payload.requestKind === "file-change" ||
-        payload.requestKind === "dynamic-tool")
+        payload.requestKind === "dynamic-tool" ||
+        payload.requestKind === "permissions")
         ? payload.requestKind
         : payload
           ? requestKindFromRequestType(payload.requestType)
           : null;
     const detail = payload && typeof payload.detail === "string" ? payload.detail : undefined;
 
-    if (activity.kind === "approval.requested" && requestId && requestKind) {
+    if (activity.kind === "approval.requested" && requestId) {
       openByRequestId.set(requestId, {
         requestId,
-        requestKind,
+        requestKind: requestKind ?? "unknown",
         createdAt: activity.createdAt,
         ...(detail ? { detail } : {}),
       });
@@ -1146,7 +1149,8 @@ function extractWorkLogRequestKind(
     payload?.requestKind === "command" ||
     payload?.requestKind === "file-read" ||
     payload?.requestKind === "file-change" ||
-    payload?.requestKind === "dynamic-tool"
+    payload?.requestKind === "dynamic-tool" ||
+    payload?.requestKind === "permissions"
   ) {
     return payload.requestKind;
   }

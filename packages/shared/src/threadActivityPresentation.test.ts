@@ -88,6 +88,24 @@ describe("threadActivityPresentation", () => {
     });
   });
 
+  it("labels permission approval requests", () => {
+    expect(
+      deriveThreadActivityPresentation({
+        kind: "approval.requested",
+        summary: "Approval requested",
+        tone: "approval",
+        payload: {
+          requestType: "permissions_approval",
+          detail: "Allow network access",
+        },
+      }),
+    ).toEqual({
+      label: "Permission approval requested",
+      detail: "Allow network access",
+      requestKind: "permissions",
+    });
+  });
+
   it("labels approval resolutions by decision", () => {
     expect(
       deriveThreadActivityPresentation({

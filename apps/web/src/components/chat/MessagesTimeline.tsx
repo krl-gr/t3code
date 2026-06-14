@@ -39,6 +39,7 @@ import {
   GlobeIcon,
   HammerIcon,
   MousePointer2Icon,
+  ShieldIcon,
   type LucideIcon,
   SquarePenIcon,
   TerminalIcon,
@@ -1394,6 +1395,7 @@ function workEntryIcon(workEntry: TimelineWorkEntry): LucideIcon {
   if (workEntry.requestKind === "file-read") return EyeIcon;
   if (workEntry.requestKind === "file-change") return SquarePenIcon;
   if (workEntry.requestKind === "dynamic-tool") return MousePointer2Icon;
+  if (workEntry.requestKind === "permissions") return ShieldIcon;
 
   if (workEntry.itemType === "command_execution" || workEntry.command) {
     return TerminalIcon;

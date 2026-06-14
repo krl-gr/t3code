@@ -253,7 +253,7 @@ function orchestrationSessionStatusFromRuntimeState(
 
 function requestKindFromCanonicalRequestType(
   requestType: string | undefined,
-): "command" | "file-read" | "file-change" | "dynamic-tool" | undefined {
+): "command" | "file-read" | "file-change" | "dynamic-tool" | "permissions" | undefined {
   switch (requestType) {
     case "command_execution_approval":
     case "exec_command_approval":
@@ -265,6 +265,8 @@ function requestKindFromCanonicalRequestType(
       return "file-change";
     case "dynamic_tool_call":
       return "dynamic-tool";
+    case "permissions_approval":
+      return "permissions";
     default:
       return undefined;
   }
@@ -300,6 +302,8 @@ function runtimeEventToActivities(
                   ? "File-change approval requested"
                   : requestKind === "dynamic-tool"
                     ? "Computer action approval requested"
+                    : requestKind === "permissions"
+                      ? "Permission approval requested"
                     : "Approval requested",
           payload: {
             requestId: toApprovalRequestId(event.requestId),

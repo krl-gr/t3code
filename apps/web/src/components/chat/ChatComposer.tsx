@@ -2268,7 +2268,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
             )}
           >
             {activePendingApproval ? (
-              <div className="rounded-t-[19px] border-b border-border/65 bg-muted/20">
+              <div className="rounded-t-[32px] border-b border-border/65">
                 <ComposerPendingApprovalPanel
                   approval={activePendingApproval}
                   pendingCount={pendingApprovals.length}
@@ -2397,8 +2397,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   onPaste={onComposerPaste}
                   placeholder={
                     isComposerApprovalState
-                      ? (activePendingApproval?.detail ??
-                        "Resolve this approval request to continue")
+                      ? ""
                       : activePendingProgress
                         ? "Type your own answer, or leave this blank to use the selected option"
                         : showPlanFollowUpPrompt && activeProposedPlan
@@ -2426,7 +2425,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
 
             {/* Bottom toolbar */}
             {activePendingApproval ? (
-              <div className="flex items-center justify-end gap-2 px-2.5 pb-2.5 sm:px-3 sm:pb-3">
+              <div className="flex flex-wrap items-center justify-end gap-2 px-5 pb-4 sm:px-6">
                 <ComposerPendingApprovalActions
                   requestId={activePendingApproval.requestId}
                   isResponding={respondingRequestIds.includes(activePendingApproval.requestId)}

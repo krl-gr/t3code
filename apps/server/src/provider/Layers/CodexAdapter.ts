@@ -152,6 +152,104 @@ function trimText(value: string | undefined | null): string | undefined {
   return trimmed && trimmed.length > 0 ? trimmed : undefined;
 }
 
+type CodexPermissionProfile = EffectCodexSchema.ServerRequest__RequestPermissionProfile;
+type CodexPermissionFileSystemPath = EffectCodexSchema.ServerRequest__FileSystemPath;
+type CodexPermissionFileSystemEntry = EffectCodexSchema.ServerRequest__FileSystemSandboxEntry;
+type CodexPermissionSpecialPath = EffectCodexSchema.ServerRequest__FileSystemSpecialPath;
+
+interface CodexPermissionApprovalDetailPayload {
+  readonly permissions: CodexPermissionProfile;
+  readonly reason?: string | null;
+}
+
+function formatCompactList(values: ReadonlyArray<string>, limit: number): string | undefined {
+  if (values.length === 0) {
+    return undefined;
+  }
+  const shown = values.slice(0, limit);
+  const hiddenCount = values.length - shown.length;
+  return hiddenCount > 0
+    ? `${shown.join("; ")}; +${hiddenCount} more`
+    : shown.join("; ");
+}
+
+function appendSubpath(base: string, subpath: string | undefined | null): string {
+  const trimmedSubpath = trimText(subpath);
+  return trimmedSubpath ? `${base}/${trimmedSubpath}` : base;
+}
+
+function formatPermissionSpecialPath(path: CodexPermissionSpecialPath): string {
+  switch (path.kind) {
+    case "root":
+      return "workspace root";
+    case "minimal":
+      return "minimal filesystem";
+    case "project_roots":
+      return appendSubpath("project roots", path.subpath);
+    case "tmpdir":
+      return "system temp directory";
+    case "slash_tmp":
+      return "/tmp";
+    case "unknown":
+      return appendSubpath(path.path, path.subpath);
+  }
+}
+
+function formatPermissionFileSystemPath(path: CodexPermissionFileSystemPath): string {
+  switch (path.type) {
+    case "path":
+      return path.path;
+    case "glob_pattern":
+      return `glob ${path.pattern}`;
+    case "special":
+      return formatPermissionSpecialPath(path.value);
+  }
+}
+
+function formatPermissionFileSystemEntry(entry: CodexPermissionFileSystemEntry): string {
+  const path = formatPermissionFileSystemPath(entry.path);
+  return entry.access === "none"
+    ? `deny access to ${path}`
+    : `${entry.access} access to ${path}`;
+}
+
+function formatPermissionProfile(profile: CodexPermissionProfile): string | undefined {
+  const parts: string[] = [];
+  const seen = new Set<string>();
+  const pushPart = (value: string | undefined) => {
+    const trimmed = trimText(value);
+    if (!trimmed || seen.has(trimmed)) {
+      return;
+    }
+    seen.add(trimmed);
+    parts.push(trimmed);
+  };
+
+  if (profile.network?.enabled === true) {
+    pushPart("network access");
+  }
+
+  const fileSystem = profile.fileSystem;
+  fileSystem?.entries?.forEach((entry) => pushPart(formatPermissionFileSystemEntry(entry)));
+  fileSystem?.read?.forEach((path) => pushPart(`read access to ${path}`));
+  fileSystem?.write?.forEach((path) => pushPart(`write access to ${path}`));
+  if (fileSystem?.globScanMaxDepth !== undefined && fileSystem.globScanMaxDepth !== null) {
+    pushPart(`glob scan depth ${fileSystem.globScanMaxDepth}`);
+  }
+
+  const compact = formatCompactList(parts, 6);
+  return compact ? `Requested permissions: ${compact}` : undefined;
+}
+
+function formatPermissionApprovalDetail(payload: CodexPermissionApprovalDetailPayload): string {
+  const reason = trimText(payload.reason);
+  const profile = formatPermissionProfile(payload.permissions);
+  if (reason && profile) {
+    return `${reason}${/[.!?]$/.test(reason) ? "" : "."} ${profile}`;
+  }
+  return reason ?? profile ?? "Additional permissions requested";
+}
+
 const FATAL_CODEX_STDERR_SNIPPETS = ["failed to connect to websocket"];
 
 function isFatalCodexProcessStderrMessage(message: string): boolean {
@@ -295,6 +393,8 @@ function toRequestTypeFromMethod(method: string): CanonicalRequestType {
       return "file_read_approval";
     case "item/fileChange/requestApproval":
       return "file_change_approval";
+    case "item/permissions/requestApproval":
+      return "permissions_approval";
     case "applyPatchApproval":
       return "apply_patch_approval";
     case "execCommandApproval":
@@ -320,6 +420,8 @@ function toRequestTypeFromKind(kind: ProviderRequestKind | undefined): Canonical
       return "file_change_approval";
     case "dynamic-tool":
       return "dynamic_tool_call";
+    case "permissions":
+      return "permissions_approval";
     default:
       return "unknown";
   }
@@ -546,7 +648,20 @@ function mapToRuntimeEvents(
             EffectCodexSchema.ServerRequest__FileChangeRequestApprovalParams,
             event.payload,
           );
-          return payload?.reason ?? undefined;
+          return (
+            payload?.reason ??
+            (payload?.grantRoot ? `Allow file changes under ${payload.grantRoot}` : undefined) ??
+            "Codex CLI did not provide file-change details."
+          );
+        }
+        case "item/permissions/requestApproval": {
+          const payload = readPayload(
+            EffectCodexSchema.ServerRequest__PermissionsRequestApprovalParams,
+            event.payload,
+          );
+          return payload
+            ? formatPermissionApprovalDetail(payload)
+            : "Additional permissions requested";
         }
         case "applyPatchApproval": {
           const payload = readPayload(

@@ -1,4 +1,9 @@
-export type ThreadActivityRequestKind = "command" | "file-read" | "file-change" | "dynamic-tool";
+export type ThreadActivityRequestKind =
+  | "command"
+  | "file-read"
+  | "file-change"
+  | "dynamic-tool"
+  | "permissions";
 
 export interface ThreadActivityPresentationInput {
   readonly kind: string;
@@ -67,6 +72,8 @@ function requestKindFromRequestType(value: unknown): ThreadActivityRequestKind |
       return "file-change";
     case "dynamic_tool_call":
       return "dynamic-tool";
+    case "permissions_approval":
+      return "permissions";
     default:
       return undefined;
   }
@@ -77,7 +84,8 @@ function extractRequestKind(payload: Record<string, unknown> | undefined) {
     payload?.requestKind === "command" ||
     payload?.requestKind === "file-read" ||
     payload?.requestKind === "file-change" ||
-    payload?.requestKind === "dynamic-tool"
+    payload?.requestKind === "dynamic-tool" ||
+    payload?.requestKind === "permissions"
   ) {
     return payload.requestKind;
   }
@@ -94,6 +102,8 @@ function requestKindDetail(value: ThreadActivityRequestKind): string {
       return "file change";
     case "dynamic-tool":
       return "computer action";
+    case "permissions":
+      return "permissions";
   }
 }
 
@@ -107,6 +117,8 @@ function approvalRequestedLabel(requestKind: ThreadActivityRequestKind | undefin
       return "File change approval requested";
     case "dynamic-tool":
       return "Computer action approval requested";
+    case "permissions":
+      return "Permission approval requested";
     default:
       return "Approval requested";
   }

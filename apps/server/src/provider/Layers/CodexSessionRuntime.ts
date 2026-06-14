@@ -239,6 +239,23 @@ interface PendingUserInput {
   readonly answers: Deferred.Deferred<ProviderUserInputAnswers>;
 }
 
+function permissionsApprovalResponseFromDecision(
+  payload: EffectCodexSchema.PermissionsRequestApprovalParams,
+  decision: ProviderApprovalDecision,
+): EffectCodexSchema.PermissionsRequestApprovalResponse {
+  if (decision !== "accept" && decision !== "acceptForSession") {
+    return {
+      permissions: {},
+      scope: "turn",
+    };
+  }
+
+  return {
+    permissions: payload.permissions,
+    scope: decision === "acceptForSession" ? "session" : "turn",
+  };
+}
+
 type CodexServerNotification = {
   readonly [M in CodexRpc.ServerNotificationMethod]: {
     readonly method: M;
@@ -919,6 +936,40 @@ export const makeCodexSessionRuntime = (
       });
 
     const currentSessionProviderThreadId = Effect.map(Ref.get(sessionRef), currentProviderThreadId);
+    const interruptProviderTurn = (input: {
+      readonly providerThreadId: string;
+      readonly turnId: string | undefined;
+    }) =>
+      Effect.gen(function* () {
+        if (!input.turnId) {
+          return;
+        }
+        yield* client.request("turn/interrupt", {
+          threadId: input.providerThreadId,
+          turnId: input.turnId,
+        });
+      });
+    const interruptPermissionsApprovalCancel = (pending: PendingApproval) =>
+      Effect.gen(function* () {
+        const providerThreadId = currentProviderThreadId(yield* Ref.get(sessionRef));
+        if (!providerThreadId) {
+          return yield* new CodexSessionRuntimeThreadIdMissingError({
+            threadId: options.threadId,
+          });
+        }
+        if (!pending.turnId) {
+          return yield* CodexErrors.CodexAppServerRequestError.invalidParams(
+            "Cannot cancel permissions approval without an active turn id.",
+            {
+              requestId: pending.requestId,
+            },
+          );
+        }
+        yield* interruptProviderTurn({
+          providerThreadId,
+          turnId: pending.turnId,
+        });
+      });
 
     yield* client.handleServerNotification("thread/started", (payload) =>
       currentSessionProviderThreadId.pipe(
@@ -1092,6 +1143,60 @@ export const makeCodexSessionRuntime = (
         return {
           decision: resolved,
         } satisfies EffectCodexSchema.FileChangeRequestApprovalResponse;
+      }),
+    );
+
+    yield* client.handleServerRequest("item/permissions/requestApproval", (payload) =>
+      Effect.gen(function* () {
+        const requestId = ApprovalRequestId.make(yield* randomUUIDv4);
+        const turnId = TurnId.make(payload.turnId);
+        const itemId = ProviderItemId.make(payload.itemId);
+        const decision = yield* Deferred.make<ProviderApprovalDecision>();
+
+        yield* Ref.update(pendingApprovalsRef, (current) => {
+          const next = new Map(current);
+          next.set(requestId, {
+            requestId,
+            jsonRpcId: payload.itemId,
+            requestKind: "permissions",
+            turnId,
+            itemId,
+            decision,
+          });
+          return next;
+        });
+        yield* Ref.update(approvalCorrelationsRef, (current) => {
+          const next = new Map(current);
+          next.set(payload.itemId, {
+            requestId,
+            requestKind: "permissions",
+            turnId,
+            itemId,
+          });
+          return next;
+        });
+
+        yield* emitEvent({
+          kind: "request",
+          threadId: options.threadId,
+          method: "item/permissions/requestApproval",
+          requestId,
+          requestKind: "permissions",
+          ...(turnId ? { turnId } : {}),
+          ...(itemId ? { itemId } : {}),
+          payload,
+        });
+
+        const resolved = yield* Deferred.await(decision).pipe(
+          Effect.ensuring(
+            Ref.update(pendingApprovalsRef, (current) => {
+              const next = new Map(current);
+              next.delete(requestId);
+              return next;
+            }),
+          ),
+        );
+        return permissionsApprovalResponseFromDecision(payload, resolved);
       }),
     );
 
@@ -1462,11 +1567,8 @@ export const makeCodexSessionRuntime = (
           const providerThreadId = yield* readProviderThreadId;
           const session = yield* Ref.get(sessionRef);
           const effectiveTurnId = turnId ?? session.activeTurnId;
-          if (!effectiveTurnId) {
-            return;
-          }
-          yield* client.request("turn/interrupt", {
-            threadId: providerThreadId,
+          yield* interruptProviderTurn({
+            providerThreadId,
             turnId: effectiveTurnId,
           });
         }),
@@ -1498,6 +1600,11 @@ export const makeCodexSessionRuntime = (
             return yield* new CodexSessionRuntimePendingApprovalNotFoundError({
               requestId,
             });
+          }
+          if (pending.requestKind === "permissions" && decision === "cancel") {
+            // Permission approval responses cannot encode a cancel decision, so
+            // preserve the UI contract by interrupting the turn before resolving.
+            yield* interruptPermissionsApprovalCancel(pending);
           }
           yield* Ref.update(pendingApprovalsRef, (current) => {
             const next = new Map(current);

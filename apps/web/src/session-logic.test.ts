@@ -116,6 +116,56 @@ describe("derivePendingApprovals", () => {
     ]);
   });
 
+  it("maps permission requestType payloads into pending approvals", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "approval-open-permissions",
+        createdAt: "2026-02-23T00:00:01.000Z",
+        kind: "approval.requested",
+        summary: "Permission approval requested",
+        tone: "approval",
+        payload: {
+          requestId: "req-permissions",
+          requestType: "permissions_approval",
+          detail: "Allow network access",
+        },
+      }),
+    ];
+
+    expect(derivePendingApprovals(activities)).toEqual([
+      {
+        requestId: "req-permissions",
+        requestKind: "permissions",
+        createdAt: "2026-02-23T00:00:01.000Z",
+        detail: "Allow network access",
+      },
+    ]);
+  });
+
+  it("keeps unknown approval request types actionable", () => {
+    const activities: OrchestrationThreadActivity[] = [
+      makeActivity({
+        id: "approval-open-unknown",
+        createdAt: "2026-02-23T00:00:01.000Z",
+        kind: "approval.requested",
+        summary: "Approval requested",
+        tone: "approval",
+        payload: {
+          requestId: "req-unknown",
+          requestType: "future_approval",
+        },
+      }),
+    ];
+
+    expect(derivePendingApprovals(activities)).toEqual([
+      {
+        requestId: "req-unknown",
+        requestKind: "unknown",
+        createdAt: "2026-02-23T00:00:01.000Z",
+      },
+    ]);
+  });
+
   it("clears stale pending approvals when provider reports unknown pending request", () => {
     const activities: OrchestrationThreadActivity[] = [
       makeActivity({

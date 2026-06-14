@@ -18,7 +18,13 @@ import * as Order from "effect/Order";
 
 export interface PendingApproval {
   readonly requestId: ApprovalRequestId;
-  readonly requestKind: "command" | "file-read" | "file-change" | "dynamic-tool";
+  readonly requestKind:
+    | "command"
+    | "file-read"
+    | "file-change"
+    | "dynamic-tool"
+    | "permissions"
+    | "unknown";
   readonly createdAt: string;
   readonly detail?: string;
 }
@@ -115,6 +121,8 @@ function requestKindFromRequestType(requestType: unknown): PendingApproval["requ
       return "file-change";
     case "dynamic_tool_call":
       return "dynamic-tool";
+    case "permissions_approval":
+      return "permissions";
     default:
       return null;
   }
@@ -722,7 +730,9 @@ function extractWorkLogRequestKind(
   if (
     payload?.requestKind === "command" ||
     payload?.requestKind === "file-read" ||
-    payload?.requestKind === "file-change"
+    payload?.requestKind === "file-change" ||
+    payload?.requestKind === "dynamic-tool" ||
+    payload?.requestKind === "permissions"
   ) {
     return payload.requestKind;
   }
@@ -871,15 +881,17 @@ export function derivePendingApprovals(
     const requestKind =
       payload?.requestKind === "command" ||
       payload?.requestKind === "file-read" ||
-      payload?.requestKind === "file-change"
+      payload?.requestKind === "file-change" ||
+      payload?.requestKind === "dynamic-tool" ||
+      payload?.requestKind === "permissions"
         ? payload.requestKind
         : requestKindFromRequestType(payload?.requestType);
     const detail = typeof payload?.detail === "string" ? payload.detail : undefined;
 
-    if (activity.kind === "approval.requested" && requestId && requestKind) {
+    if (activity.kind === "approval.requested" && requestId) {
       openByRequestId.set(requestId, {
         requestId,
-        requestKind,
+        requestKind: requestKind ?? "unknown",
         createdAt: activity.createdAt,
         ...(detail ? { detail } : {}),
       });
