@@ -24,6 +24,22 @@ interface AttachChatContextPickerProps {
 
 const TRIGGER_LABEL = "Attach chat context";
 
+export function resolveNextHighlightedChatContextSourceId(
+  candidates: ReadonlyArray<Pick<ThreadShell, "id">>,
+  highlightedSourceId: ThreadId | null,
+  direction: "next" | "previous",
+): ThreadId | null {
+  if (candidates.length === 0) {
+    return null;
+  }
+  const currentIndex = candidates.findIndex((thread) => thread.id === highlightedSourceId);
+  if (currentIndex < 0) {
+    return candidates[direction === "next" ? 0 : candidates.length - 1]?.id ?? null;
+  }
+  const delta = direction === "next" ? 1 : -1;
+  return candidates[(currentIndex + delta + candidates.length) % candidates.length]?.id ?? null;
+}
+
 export function AttachChatContextPicker({
   open,
   onOpenChange,
@@ -66,15 +82,13 @@ export function AttachChatContextPicker({
       return;
     }
     event.preventDefault();
-    const currentIndex = candidates.findIndex((thread) => thread.id === highlightedSourceId);
-    const delta = event.key === "ArrowDown" ? 1 : -1;
-    const nextIndex =
-      currentIndex < 0
-        ? event.key === "ArrowDown"
-          ? 0
-          : candidates.length - 1
-        : (currentIndex + delta + candidates.length) % candidates.length;
-    onHighlightedSourceIdChange(candidates[nextIndex].id);
+    onHighlightedSourceIdChange(
+      resolveNextHighlightedChatContextSourceId(
+        candidates,
+        highlightedSourceId,
+        event.key === "ArrowDown" ? "next" : "previous",
+      ),
+    );
   };
 
   return (

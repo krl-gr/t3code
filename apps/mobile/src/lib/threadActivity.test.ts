@@ -157,6 +157,60 @@ describe("buildThreadFeed", () => {
     ]);
   });
 
+  it("keeps task completion rows hidden on the compact mobile feed", () => {
+    const thread = makeThread({
+      id: ThreadId.make("thread-task"),
+      projectId: ProjectId.make("project-1"),
+      title: "Task thread",
+      latestTurn: {
+        turnId: TurnId.make("turn-task"),
+        state: "completed",
+        requestedAt: "2026-04-01T00:00:00.000Z",
+        startedAt: "2026-04-01T00:00:01.000Z",
+        completedAt: "2026-04-01T00:00:03.000Z",
+        assistantMessageId: null,
+      },
+      activities: [
+        makeActivity({
+          id: EventId.make("task-progress"),
+          kind: "task.progress",
+          summary: "Reviewing tests",
+          createdAt: "2026-04-01T00:00:02.000Z",
+          turnId: TurnId.make("turn-task"),
+          payload: {},
+        }),
+        makeActivity({
+          id: EventId.make("task-completed"),
+          kind: "task.completed",
+          summary: "Review complete",
+          createdAt: "2026-04-01T00:00:03.000Z",
+          turnId: TurnId.make("turn-task"),
+          payload: {},
+        }),
+      ],
+    });
+
+    const feed = buildThreadFeed(thread, [], null);
+    const group = feed[0];
+
+    expect(group).toMatchObject({
+      type: "activity-group",
+    });
+    if (!group || group.type !== "activity-group") {
+      return;
+    }
+
+    expect(group.activities).toEqual([
+      {
+        id: "task-progress",
+        createdAt: "2026-04-01T00:00:02.000Z",
+        summary: "Reviewing tests",
+        detail: null,
+        status: null,
+      },
+    ]);
+  });
+
   it("uses semantic labels for generic tool titles", () => {
     const thread = makeThread({
       id: ThreadId.make("thread-generic-tool"),

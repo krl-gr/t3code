@@ -850,6 +850,23 @@ export const makeCodexSessionRuntime = (
         method,
         message,
       });
+    const rememberApprovalCorrelation = (
+      keys: ReadonlyArray<string | number | undefined | null>,
+      correlation: ApprovalCorrelation,
+    ) =>
+      Ref.update(approvalCorrelationsRef, (current) => {
+        const next = new Map(current);
+        for (const key of keys) {
+          if (key === undefined || key === null) {
+            continue;
+          }
+          const normalizedKey = String(key);
+          if (normalizedKey.length > 0) {
+            next.set(normalizedKey, correlation);
+          }
+        }
+        return next;
+      });
 
     const settlePendingApprovals = (decision: ProviderApprovalDecision) =>
       Ref.get(pendingApprovalsRef).pipe(
@@ -913,7 +930,11 @@ export const makeCodexSessionRuntime = (
             itemId = correlation.itemId ?? itemId;
             yield* Ref.update(approvalCorrelationsRef, (current) => {
               const next = new Map(current);
-              next.delete(rawRequestId);
+              for (const [key, value] of next) {
+                if (value.requestId === correlation.requestId) {
+                  next.delete(key);
+                }
+              }
               return next;
             });
           }
@@ -1034,74 +1055,77 @@ export const makeCodexSessionRuntime = (
       ),
     );
 
-    yield* client.handleServerRequest("item/commandExecution/requestApproval", (payload) =>
-      Effect.gen(function* () {
-        const requestId = ApprovalRequestId.make(yield* randomUUIDv4);
-        const turnId = TurnId.make(payload.turnId);
-        const itemId = ProviderItemId.make(payload.itemId);
-        const decision = yield* Deferred.make<ProviderApprovalDecision>();
+    yield* client.handleServerRequest(
+      "item/commandExecution/requestApproval",
+      (payload, context) =>
+        Effect.gen(function* () {
+          const requestId = ApprovalRequestId.make(yield* randomUUIDv4);
+          const turnId = TurnId.make(payload.turnId);
+          const itemId = ProviderItemId.make(payload.itemId);
+          const decision = yield* Deferred.make<ProviderApprovalDecision>();
+          const jsonRpcId = String(context.requestId);
 
-        yield* Ref.update(pendingApprovalsRef, (current) => {
-          const next = new Map(current);
-          next.set(requestId, {
-            requestId,
-            jsonRpcId: payload.approvalId ?? payload.itemId,
-            requestKind: "command",
-            turnId,
-            itemId,
-            decision,
+          yield* Ref.update(pendingApprovalsRef, (current) => {
+            const next = new Map(current);
+            next.set(requestId, {
+              requestId,
+              jsonRpcId,
+              requestKind: "command",
+              turnId,
+              itemId,
+              decision,
+            });
+            return next;
           });
-          return next;
-        });
-        yield* Ref.update(approvalCorrelationsRef, (current) => {
-          const next = new Map(current);
-          next.set(payload.approvalId ?? payload.itemId, {
+          yield* rememberApprovalCorrelation(
+            [jsonRpcId, payload.approvalId ?? payload.itemId],
+            {
+              requestId,
+              requestKind: "command",
+              turnId,
+              itemId,
+            },
+          );
+
+          yield* emitEvent({
+            kind: "request",
+            threadId: options.threadId,
+            method: "item/commandExecution/requestApproval",
             requestId,
             requestKind: "command",
-            turnId,
-            itemId,
+            ...(turnId ? { turnId } : {}),
+            ...(itemId ? { itemId } : {}),
+            payload,
           });
-          return next;
-        });
 
-        yield* emitEvent({
-          kind: "request",
-          threadId: options.threadId,
-          method: "item/commandExecution/requestApproval",
-          requestId,
-          requestKind: "command",
-          ...(turnId ? { turnId } : {}),
-          ...(itemId ? { itemId } : {}),
-          payload,
-        });
-
-        const resolved = yield* Deferred.await(decision).pipe(
-          Effect.ensuring(
-            Ref.update(pendingApprovalsRef, (current) => {
-              const next = new Map(current);
-              next.delete(requestId);
-              return next;
-            }),
-          ),
-        );
-        return {
-          decision: resolved,
-        } satisfies EffectCodexSchema.CommandExecutionRequestApprovalResponse;
-      }),
+          const resolved = yield* Deferred.await(decision).pipe(
+            Effect.ensuring(
+              Ref.update(pendingApprovalsRef, (current) => {
+                const next = new Map(current);
+                next.delete(requestId);
+                return next;
+              }),
+            ),
+          );
+          return {
+            decision: resolved,
+          } satisfies EffectCodexSchema.CommandExecutionRequestApprovalResponse;
+        }),
     );
 
-    yield* client.handleServerRequest("item/fileChange/requestApproval", (payload) =>
+    yield* client.handleServerRequest("item/fileChange/requestApproval", (payload, context) =>
       Effect.gen(function* () {
         const requestId = ApprovalRequestId.make(yield* randomUUIDv4);
         const turnId = TurnId.make(payload.turnId);
         const itemId = ProviderItemId.make(payload.itemId);
         const decision = yield* Deferred.make<ProviderApprovalDecision>();
+        const jsonRpcId = String(context.requestId);
 
         yield* Ref.update(pendingApprovalsRef, (current) => {
           const next = new Map(current);
           next.set(requestId, {
             requestId,
-            jsonRpcId: payload.itemId,
+            jsonRpcId,
             requestKind: "file-change",
             turnId,
             itemId,
@@ -1109,15 +1133,11 @@ export const makeCodexSessionRuntime = (
           });
           return next;
         });
-        yield* Ref.update(approvalCorrelationsRef, (current) => {
-          const next = new Map(current);
-          next.set(payload.itemId, {
-            requestId,
-            requestKind: "file-change",
-            turnId,
-            itemId,
-          });
-          return next;
+        yield* rememberApprovalCorrelation([jsonRpcId, payload.itemId], {
+          requestId,
+          requestKind: "file-change",
+          turnId,
+          itemId,
         });
 
         yield* emitEvent({
@@ -1146,18 +1166,19 @@ export const makeCodexSessionRuntime = (
       }),
     );
 
-    yield* client.handleServerRequest("item/permissions/requestApproval", (payload) =>
+    yield* client.handleServerRequest("item/permissions/requestApproval", (payload, context) =>
       Effect.gen(function* () {
         const requestId = ApprovalRequestId.make(yield* randomUUIDv4);
         const turnId = TurnId.make(payload.turnId);
         const itemId = ProviderItemId.make(payload.itemId);
         const decision = yield* Deferred.make<ProviderApprovalDecision>();
+        const jsonRpcId = String(context.requestId);
 
         yield* Ref.update(pendingApprovalsRef, (current) => {
           const next = new Map(current);
           next.set(requestId, {
             requestId,
-            jsonRpcId: payload.itemId,
+            jsonRpcId,
             requestKind: "permissions",
             turnId,
             itemId,
@@ -1165,15 +1186,11 @@ export const makeCodexSessionRuntime = (
           });
           return next;
         });
-        yield* Ref.update(approvalCorrelationsRef, (current) => {
-          const next = new Map(current);
-          next.set(payload.itemId, {
-            requestId,
-            requestKind: "permissions",
-            turnId,
-            itemId,
-          });
-          return next;
+        yield* rememberApprovalCorrelation([jsonRpcId, payload.itemId], {
+          requestId,
+          requestKind: "permissions",
+          turnId,
+          itemId,
         });
 
         yield* emitEvent({
@@ -1250,7 +1267,7 @@ export const makeCodexSessionRuntime = (
       }),
     );
 
-    yield* client.handleServerRequest("item/tool/call", (payload) =>
+    yield* client.handleServerRequest("item/tool/call", (payload, context) =>
       Effect.gen(function* () {
         const args = isRecord(payload.arguments) ? payload.arguments : {};
         const computerUse = options.computerUse;
@@ -1285,11 +1302,12 @@ export const makeCodexSessionRuntime = (
         if (approval.required && !approvalCache.has(cacheKey)) {
           const requestId = ApprovalRequestId.make(yield* randomUUIDv4);
           const decision = yield* Deferred.make<ProviderApprovalDecision>();
+          const jsonRpcId = String(context.requestId);
           yield* Ref.update(pendingApprovalsRef, (current) => {
             const next = new Map(current);
             next.set(requestId, {
               requestId,
-              jsonRpcId: payload.callId,
+              jsonRpcId,
               requestKind: "dynamic-tool",
               turnId,
               itemId: undefined,
@@ -1297,15 +1315,11 @@ export const makeCodexSessionRuntime = (
             });
             return next;
           });
-          yield* Ref.update(approvalCorrelationsRef, (current) => {
-            const next = new Map(current);
-            next.set(payload.callId, {
-              requestId,
-              requestKind: "dynamic-tool",
-              turnId,
-              itemId: undefined,
-            });
-            return next;
+          yield* rememberApprovalCorrelation([jsonRpcId, payload.callId], {
+            requestId,
+            requestKind: "dynamic-tool",
+            turnId,
+            itemId: undefined,
           });
 
           yield* emitEvent({

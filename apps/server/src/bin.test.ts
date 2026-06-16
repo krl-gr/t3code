@@ -8,6 +8,7 @@ import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as NetService from "@t3tools/shared/Net";
 import { assert, it } from "@effect/vitest";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
@@ -264,8 +265,20 @@ it.layer(NodeServices.layer)("bin cli parsing", (it) => {
     Effect.gen(function* () {
       const baseDir = mkdtempSync(join(tmpdir(), "t3-cli-projects-offline-test-"));
       const workspaceRoot = mkdtempSync(join(tmpdir(), "t3-cli-projects-workspace-"));
+      const runProjectCliWithDevUrlEnv = (args: ReadonlyArray<string>) =>
+        runCliWithRuntime(args).pipe(
+          Effect.provide(
+            ConfigProvider.layer(
+              ConfigProvider.fromEnv({
+                env: {
+                  VITE_DEV_SERVER_URL: "http://127.0.0.1:5733",
+                },
+              }),
+            ),
+          ),
+        );
 
-      yield* runCliWithRuntime([
+      yield* runProjectCliWithDevUrlEnv([
         "project",
         "add",
         workspaceRoot,
@@ -281,7 +294,14 @@ it.layer(NodeServices.layer)("bin cli parsing", (it) => {
       assert.isTrue(addedProject !== undefined);
       assert.equal(addedProject?.title, "Alpha");
 
-      yield* runCliWithRuntime(["project", "rename", workspaceRoot, "Beta", "--base-dir", baseDir]);
+      yield* runProjectCliWithDevUrlEnv([
+        "project",
+        "rename",
+        workspaceRoot,
+        "Beta",
+        "--base-dir",
+        baseDir,
+      ]);
       const afterRename = yield* readPersistedSnapshot(baseDir);
       const renamedProject = afterRename.projects.find(
         (project) => project.id === addedProject?.id,
@@ -289,7 +309,7 @@ it.layer(NodeServices.layer)("bin cli parsing", (it) => {
       assert.equal(renamedProject?.title, "Beta");
       assert.equal(renamedProject?.deletedAt, null);
 
-      yield* runCliWithRuntime([
+      yield* runProjectCliWithDevUrlEnv([
         "project",
         "remove",
         addedProject?.id ?? "",

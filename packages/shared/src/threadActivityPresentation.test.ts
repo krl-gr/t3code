@@ -19,7 +19,7 @@ describe("threadActivityPresentation", () => {
     });
   });
 
-  it("uses runtime warning payload message when summary is generic", () => {
+  it("uses runtime warning payload message as detail when summary is generic", () => {
     expect(
       deriveThreadActivityPresentation({
         kind: "runtime.warning",
