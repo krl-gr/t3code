@@ -250,7 +250,12 @@ body {
 
 html.electron.wco-windows,
 html.electron.wco-windows body {
-  background: #eef0f3 !important;
+  background: #F4F4F4 !important;
+}
+
+html.electron.wco-windows.dark,
+html.electron.wco-windows.dark body {
+  background: #272727 !important;
 }
 
 #root {
