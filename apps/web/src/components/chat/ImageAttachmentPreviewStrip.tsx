@@ -76,7 +76,7 @@ export function ImageAttachmentPreviewStrip<
           variant={variant}
           showPersistenceWarning={nonPersistedImageIds?.has(image.id) ?? false}
           onExpandImage={onExpandImage}
-          onRemoveImage={onRemoveImage}
+          {...(onRemoveImage === undefined ? {} : { onRemoveImage })}
         />
       ))}
     </div>

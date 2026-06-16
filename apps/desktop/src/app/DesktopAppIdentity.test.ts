@@ -133,7 +133,12 @@ const withIdentity = <A, E, R>(
           }),
         ),
         Layer.provideMerge(makeAssetsLayer(input.pngIconPath ?? Option.none())),
-        Layer.provideMerge(makeElectronAppLayer(calls, { failDockIcon: input.failDockIcon })),
+        Layer.provideMerge(
+          makeElectronAppLayer(
+            calls,
+            input.failDockIcon === undefined ? {} : { failDockIcon: input.failDockIcon },
+          ),
+        ),
         Layer.provideMerge(makeEnvironmentLayer(input.environment)),
       ),
     ),

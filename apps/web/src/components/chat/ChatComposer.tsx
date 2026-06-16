@@ -2346,7 +2346,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                         >
                           <span className="truncate">{binding.sourceThreadTitle}</span>
                           <AttachmentRemoveButton
-                            aria-label={`Remove ${binding.sourceThreadTitle} context`}
+                            ariaLabel={`Remove ${binding.sourceThreadTitle} context`}
                             onClick={(event) => {
                               event.preventDefault();
                               event.stopPropagation();

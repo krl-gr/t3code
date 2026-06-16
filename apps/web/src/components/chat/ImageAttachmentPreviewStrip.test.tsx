@@ -10,8 +10,11 @@ describe("ImageAttachmentPreviewStrip", () => {
         variant="composer"
         images={[
           {
+            type: "image",
             id: "image-1",
             name: "screenshot.png",
+            mimeType: "image/png",
+            sizeBytes: 1024,
             previewUrl: "blob:screenshot",
           },
         ]}
@@ -32,8 +35,11 @@ describe("ImageAttachmentPreviewStrip", () => {
       <ImageAttachmentPreviewStrip
         images={[
           {
+            type: "image",
             id: "image-1",
             name: "screenshot.png",
+            mimeType: "image/png",
+            sizeBytes: 1024,
           },
         ]}
         onExpandImage={vi.fn()}

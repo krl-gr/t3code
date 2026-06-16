@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import path from "node:path";
 
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
@@ -93,12 +92,13 @@ function permissionsResultFromEvents(events: ReadonlyArray<ProviderEvent>): {
 function makePermissionsPeerSpawner(
   realSpawner: ChildProcessSpawner.ChildProcessSpawner["Service"],
   peerPath: string,
+  peerCwd: string,
   resolvedRequestIdMode?: "item-id",
 ) {
   return ChildProcessSpawner.make(() =>
     realSpawner.spawn(
       ChildProcess.make("bun", ["run", peerPath], {
-        cwd: path.dirname(peerPath),
+        cwd: peerCwd,
         env: {
           ...process.env,
           ...(resolvedRequestIdMode
@@ -111,16 +111,18 @@ function makePermissionsPeerSpawner(
   );
 }
 
-const runWithPermissionsPeer = <A>(
-  test: (runtime: CodexSessionRuntimeShape) => Effect.Effect<A, unknown>,
+const runWithPermissionsPeer = <A, E, R>(
+  test: (runtime: CodexSessionRuntimeShape) => Effect.Effect<A, E, R>,
   options: { readonly resolvedRequestIdMode?: "item-id" } = {},
 ) =>
   Effect.gen(function* () {
     const realSpawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    const path = yield* Path.Path;
     const peerPath = yield* permissionsPeerPath;
     const peerSpawner = makePermissionsPeerSpawner(
       realSpawner,
       peerPath,
+      path.dirname(peerPath),
       options.resolvedRequestIdMode,
     );
 
@@ -153,16 +155,20 @@ const exercisePermissionsApproval = (
     const requestOption = yield* Fiber.join(requestFiber);
     assert.equal(requestOption._tag, "Some");
     if (requestOption._tag !== "Some") {
-      return undefined;
+      assert.fail("Expected permissions request event");
     }
     const request = requestOption.value;
+    const requestId = request.requestId;
+    if (requestId === undefined) {
+      assert.fail("Expected permissions request id");
+    }
 
     const notificationsFiber = yield* Stream.filter(
       runtime.events,
       isRelevantPermissionsNotification,
     ).pipe(Stream.take(3), Stream.runCollect, Effect.forkChild);
 
-    yield* runtime.respondToRequest(request.requestId, decision);
+    yield* runtime.respondToRequest(requestId, decision);
 
     const notifications = Array.from(yield* Fiber.join(notificationsFiber));
     const decisionEvent = notifications.find(
@@ -173,15 +179,15 @@ const exercisePermissionsApproval = (
     );
 
     assert.equal(decisionEvent?.kind, "notification");
-    assert.equal(decisionEvent?.requestId, request.requestId);
+    assert.equal(decisionEvent?.requestId, requestId);
     assert.equal(decisionEvent?.requestKind, "permissions");
     assert.deepStrictEqual(decisionEvent?.payload, {
-      requestId: request.requestId,
+      requestId,
       requestKind: "permissions",
       decision,
     });
     assert.equal(resolvedEvent?.kind, "notification");
-    assert.equal(resolvedEvent?.requestId, request.requestId);
+    assert.equal(resolvedEvent?.requestId, requestId);
     assert.equal(resolvedEvent?.requestKind, "permissions");
 
     return permissionsResultFromEvents(notifications);
