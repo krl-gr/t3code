@@ -248,6 +248,11 @@ body {
   background: transparent !important;
 }
 
+html.electron.wco-windows,
+html.electron.wco-windows body {
+  background: #eef0f3 !important;
+}
+
 #root {
   height: 100%;
   width: 100%;
