@@ -134,8 +134,7 @@ export function selectVisibleThreadAlert(input: {
   return (
     input.alerts.find(
       (alert) =>
-        !input.dismissedKeys.has(alert.dismissalKey) &&
-        !suppressedKeys.has(alert.dismissalKey),
+        !input.dismissedKeys.has(alert.dismissalKey) && !suppressedKeys.has(alert.dismissalKey),
     ) ?? null
   );
 }

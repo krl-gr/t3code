@@ -185,9 +185,7 @@ function formatCompactList(values: ReadonlyArray<string>, limit: number): string
   }
   const shown = values.slice(0, limit);
   const hiddenCount = values.length - shown.length;
-  return hiddenCount > 0
-    ? `${shown.join("; ")}; +${hiddenCount} more`
-    : shown.join("; ");
+  return hiddenCount > 0 ? `${shown.join("; ")}; +${hiddenCount} more` : shown.join("; ");
 }
 
 function appendSubpath(base: string, subpath: string | undefined | null): string {
@@ -225,9 +223,7 @@ function formatPermissionFileSystemPath(path: CodexPermissionFileSystemPath): st
 
 function formatPermissionFileSystemEntry(entry: CodexPermissionFileSystemEntry): string {
   const path = formatPermissionFileSystemPath(entry.path);
-  return entry.access === "none"
-    ? `deny access to ${path}`
-    : `${entry.access} access to ${path}`;
+  return entry.access === "none" ? `deny access to ${path}` : `${entry.access} access to ${path}`;
 }
 
 function formatPermissionProfile(profile: CodexPermissionProfile): string | undefined {

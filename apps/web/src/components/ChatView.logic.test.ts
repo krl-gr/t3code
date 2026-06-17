@@ -265,13 +265,15 @@ describe("reconcileMountedTerminalThreadIds", () => {
 
 const makeThread = (input?: {
   id?: ThreadId;
-  latestTurn?: ({
-    turnId: TurnId;
-    state: NonNullable<Thread["latestTurn"]>["state"];
-    requestedAt: string;
-    startedAt: string | null;
-    completedAt: string | null;
-  } & Partial<Pick<NonNullable<Thread["latestTurn"]>, "assistantMessageId">>) | null;
+  latestTurn?:
+    | ({
+        turnId: TurnId;
+        state: NonNullable<Thread["latestTurn"]>["state"];
+        requestedAt: string;
+        startedAt: string | null;
+        completedAt: string | null;
+      } & Partial<Pick<NonNullable<Thread["latestTurn"]>, "assistantMessageId">>)
+    | null;
   session?: Thread["session"];
   error?: string | null;
   updatedAt?: string;

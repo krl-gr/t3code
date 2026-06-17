@@ -1962,13 +1962,10 @@ export default function ChatView(props: ChatViewProps) {
     const defaultInstanceId = defaultInstanceIdForDriver(selectedProvider);
     return providerStatuses.find((status) => status.instanceId === defaultInstanceId) ?? null;
   }, [activeProviderInstanceId, providerStatuses, selectedProvider]);
-  const [dismissedProviderStatusKey, setDismissedProviderStatusKey] = useState<string | null>(
-    null,
-  );
+  const [dismissedProviderStatusKey, setDismissedProviderStatusKey] = useState<string | null>(null);
   const activeProviderStatusDismissalKey = buildProviderStatusDismissalKey(activeProviderStatus);
   const visibleProviderStatus =
-    activeProviderStatus &&
-    activeProviderStatusDismissalKey !== dismissedProviderStatusKey
+    activeProviderStatus && activeProviderStatusDismissalKey !== dismissedProviderStatusKey
       ? activeProviderStatus
       : null;
   const dismissActiveProviderStatus = useCallback(() => {
@@ -2655,10 +2652,7 @@ export default function ChatView(props: ChatViewProps) {
   const closePlanSidebar = useCallback(() => {
     setPlanSidebarOpen(false);
     if (activeThreadKey) {
-      planSidebarDismissedTurnByThreadRef.current.set(
-        activeThreadKey,
-        planSidebarDismissalTurnKey,
-      );
+      planSidebarDismissedTurnByThreadRef.current.set(activeThreadKey, planSidebarDismissalTurnKey);
     }
   }, [activeThreadKey, planSidebarDismissalTurnKey]);
 
@@ -3397,6 +3391,8 @@ export default function ChatView(props: ChatViewProps) {
       resetLocalDispatch();
     }
   };
+  const onSendRef = useRef(onSend);
+  onSendRef.current = onSend;
 
   const sendPromptDraft = useCallback(
     (prompt: string) => {
@@ -3411,7 +3407,7 @@ export default function ChatView(props: ChatViewProps) {
         detectTrigger: true,
       });
       window.requestAnimationFrame(() => {
-        void onSend();
+        void onSendRef.current();
       });
     },
     [
@@ -3420,7 +3416,6 @@ export default function ChatView(props: ChatViewProps) {
       composerImagesRef,
       composerRef,
       composerTerminalContextsRef,
-      onSend,
       promptRef,
       setComposerDraftPrompt,
     ],
@@ -4305,7 +4300,6 @@ export default function ChatView(props: ChatViewProps) {
           ) : null}
         </div>
         {/* end chat column */}
-
       </div>
       {/* end horizontal flex container */}
 
@@ -4354,7 +4348,9 @@ export default function ChatView(props: ChatViewProps) {
                 visible={mountedThreadKey === activeThreadKey && terminalUiState.terminalOpen}
                 presentation="floating"
                 launchContext={
-                  mountedThreadKey === activeThreadKey ? (activeTerminalLaunchContext ?? null) : null
+                  mountedThreadKey === activeThreadKey
+                    ? (activeTerminalLaunchContext ?? null)
+                    : null
                 }
                 focusRequestId={mountedThreadKey === activeThreadKey ? terminalFocusRequestId : 0}
                 splitShortcutLabel={splitTerminalShortcutLabel ?? undefined}

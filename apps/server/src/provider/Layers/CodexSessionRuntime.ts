@@ -1085,62 +1085,57 @@ export const makeCodexSessionRuntime = (
       ),
     );
 
-    yield* client.handleServerRequest(
-      "item/commandExecution/requestApproval",
-      (payload, context) =>
-        Effect.gen(function* () {
-          const requestId = ApprovalRequestId.make(yield* randomUUIDv4);
-          const turnId = TurnId.make(payload.turnId);
-          const itemId = ProviderItemId.make(payload.itemId);
-          const decision = yield* Deferred.make<ProviderApprovalDecision>();
-          const jsonRpcId = String(context.requestId);
+    yield* client.handleServerRequest("item/commandExecution/requestApproval", (payload, context) =>
+      Effect.gen(function* () {
+        const requestId = ApprovalRequestId.make(yield* randomUUIDv4);
+        const turnId = TurnId.make(payload.turnId);
+        const itemId = ProviderItemId.make(payload.itemId);
+        const decision = yield* Deferred.make<ProviderApprovalDecision>();
+        const jsonRpcId = String(context.requestId);
 
-          yield* Ref.update(pendingApprovalsRef, (current) => {
-            const next = new Map(current);
-            next.set(requestId, {
-              requestId,
-              jsonRpcId,
-              requestKind: "command",
-              turnId,
-              itemId,
-              decision,
-            });
-            return next;
-          });
-          yield* rememberApprovalCorrelation(
-            [jsonRpcId, payload.approvalId ?? payload.itemId],
-            {
-              requestId,
-              requestKind: "command",
-              turnId,
-              itemId,
-            },
-          );
-
-          yield* emitEvent({
-            kind: "request",
-            threadId: options.threadId,
-            method: "item/commandExecution/requestApproval",
+        yield* Ref.update(pendingApprovalsRef, (current) => {
+          const next = new Map(current);
+          next.set(requestId, {
             requestId,
+            jsonRpcId,
             requestKind: "command",
-            ...(turnId ? { turnId } : {}),
-            ...(itemId ? { itemId } : {}),
-            payload,
+            turnId,
+            itemId,
+            decision,
           });
+          return next;
+        });
+        yield* rememberApprovalCorrelation([jsonRpcId, payload.approvalId ?? payload.itemId], {
+          requestId,
+          requestKind: "command",
+          turnId,
+          itemId,
+        });
 
-          const resolved = yield* Deferred.await(decision).pipe(
-            Effect.ensuring(
-              Ref.update(pendingApprovalsRef, (current) => {
-                const next = new Map(current);
-                next.delete(requestId);
-                return next;
-              }),
-            ),
-          );
-          return {
-            decision: resolved,
-          } satisfies EffectCodexSchema.CommandExecutionRequestApprovalResponse;
-        }),
+        yield* emitEvent({
+          kind: "request",
+          threadId: options.threadId,
+          method: "item/commandExecution/requestApproval",
+          requestId,
+          requestKind: "command",
+          ...(turnId ? { turnId } : {}),
+          ...(itemId ? { itemId } : {}),
+          payload,
+        });
+
+        const resolved = yield* Deferred.await(decision).pipe(
+          Effect.ensuring(
+            Ref.update(pendingApprovalsRef, (current) => {
+              const next = new Map(current);
+              next.delete(requestId);
+              return next;
+            }),
+          ),
+        );
+        return {
+          decision: resolved,
+        } satisfies EffectCodexSchema.CommandExecutionRequestApprovalResponse;
+      }),
     );
 
     yield* client.handleServerRequest("item/fileChange/requestApproval", (payload, context) =>
@@ -1493,14 +1488,10 @@ export const makeCodexSessionRuntime = (
               },
             ).pipe(
               Effect.andThen(
-                emitSessionEvent(
-                  "session/exited",
-                  exitMessage,
-                  {
-                    exitKind,
-                    ...(exitKind === "error" ? { recoverable: false } : {}),
-                  },
-                ),
+                emitSessionEvent("session/exited", exitMessage, {
+                  exitKind,
+                  ...(exitKind === "error" ? { recoverable: false } : {}),
+                }),
               ),
             );
           }),
