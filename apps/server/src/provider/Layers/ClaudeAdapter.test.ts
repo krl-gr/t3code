@@ -1329,10 +1329,85 @@ describe("ClaudeAdapterLive", () => {
 
       const sessionExited = runtimeEvents[5];
       assert.equal(sessionExited?.type, "session.exited");
+      if (sessionExited?.type === "session.exited") {
+        assert.equal(sessionExited.payload.exitKind, "graceful");
+      }
 
       assert.equal(yield* adapter.hasSession(THREAD_ID), false);
       const sessions = yield* adapter.listSessions();
       assert.equal(sessions.length, 0);
+      assert.equal(harness.query.closeCalls, 1);
+    }).pipe(
+      Effect.provideService(Random.Random, makeDeterministicRandomService()),
+      Effect.provide(harness.layer),
+    );
+  });
+
+  it.effect("classifies Claude runtime stream failures as error session exits", () => {
+    const harness = makeHarness();
+    return Effect.gen(function* () {
+      const adapter = yield* ClaudeAdapter;
+
+      const runtimeEventsFiber = yield* Stream.take(adapter.streamEvents, 7).pipe(
+        Stream.runCollect,
+        Effect.forkChild,
+      );
+
+      yield* adapter.startSession({
+        threadId: THREAD_ID,
+        provider: ProviderDriverKind.make("claudeAgent"),
+        runtimeMode: "full-access",
+      });
+
+      const turn = yield* adapter.sendTurn({
+        threadId: THREAD_ID,
+        input: "hello",
+        attachments: [],
+      });
+
+      harness.query.fail(new Error("Claude runtime stream exploded"));
+
+      const runtimeEvents = Array.from(yield* Fiber.join(runtimeEventsFiber));
+      assert.deepEqual(
+        runtimeEvents.map((event) => event.type),
+        [
+          "session.started",
+          "session.configured",
+          "session.state.changed",
+          "turn.started",
+          "runtime.error",
+          "turn.completed",
+          "session.exited",
+        ],
+      );
+
+      const runtimeError = runtimeEvents[4];
+      assert.equal(runtimeError?.type, "runtime.error");
+      if (runtimeError?.type === "runtime.error") {
+        assert.equal(runtimeError.payload.message.includes("Claude runtime stream exploded"), true);
+      }
+
+      const turnCompleted = runtimeEvents[5];
+      assert.equal(turnCompleted?.type, "turn.completed");
+      if (turnCompleted?.type !== "turn.completed") {
+        return;
+      }
+      assert.equal(String(turnCompleted.turnId), String(turn.turnId));
+      assert.equal(turnCompleted.payload.state, "failed");
+      assert.equal(
+        turnCompleted.payload.errorMessage?.includes("Claude runtime stream exploded"),
+        true,
+      );
+
+      const sessionExited = runtimeEvents[6];
+      assert.equal(sessionExited?.type, "session.exited");
+      if (sessionExited?.type !== "session.exited") {
+        return;
+      }
+      assert.equal(sessionExited.payload.exitKind, "error");
+      assert.equal(sessionExited.payload.recoverable, false);
+      assert.equal(sessionExited.payload.reason, turnCompleted.payload.errorMessage);
+      assert.equal(yield* adapter.hasSession(THREAD_ID), false);
       assert.equal(harness.query.closeCalls, 1);
     }).pipe(
       Effect.provideService(Random.Random, makeDeterministicRandomService()),

@@ -1313,15 +1313,33 @@ const make = Effect.gen(function* () {
               return activeTurnId !== null ? "running" : "ready";
           }
         })();
-        const lastError =
-          event.type === "session.state.changed" && event.payload.state === "error"
-            ? (event.payload.reason ?? thread.session?.lastError ?? "Provider session error")
-            : event.type === "turn.completed" &&
-                normalizeRuntimeTurnState(event.payload.state) === "failed"
-              ? (event.payload.errorMessage ?? thread.session?.lastError ?? "Turn failed")
-              : status === "ready"
-                ? null
-                : (thread.session?.lastError ?? null);
+        const lastError = (() => {
+          if (event.type === "session.state.changed" && event.payload.state === "error") {
+            return event.payload.reason ?? thread.session?.lastError ?? "Provider session error";
+          }
+          if (
+            event.type === "turn.completed" &&
+            normalizeRuntimeTurnState(event.payload.state) === "failed"
+          ) {
+            return event.payload.errorMessage ?? thread.session?.lastError ?? "Turn failed";
+          }
+          if (event.type === "session.exited") {
+            if (event.payload.exitKind === "error") {
+              return (
+                event.payload.reason ??
+                thread.session?.lastError ??
+                "Provider session exited with an error"
+              );
+            }
+            if (event.payload.exitKind === "graceful") {
+              return null;
+            }
+          }
+          if (event.type === "turn.started" || status === "ready") {
+            return null;
+          }
+          return thread.session?.lastError ?? null;
+        })();
 
         if (shouldApplyThreadLifecycle) {
           if (event.type === "turn.started" && acceptedTurnStartedSourcePlan !== null) {

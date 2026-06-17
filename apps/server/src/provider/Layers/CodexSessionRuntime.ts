@@ -726,14 +726,28 @@ function currentProviderThreadId(session: ProviderSession): string | undefined {
 function updateSession(
   sessionRef: Ref.Ref<ProviderSession>,
   updates: Partial<ProviderSession>,
+  options?: {
+    readonly clearActiveTurnId?: boolean;
+    readonly clearLastError?: boolean;
+  },
 ): Effect.Effect<void> {
   return Effect.gen(function* () {
     const updatedAt = DateTime.formatIso(yield* DateTime.now);
-    yield* Ref.update(sessionRef, (session) => ({
-      ...session,
-      ...updates,
-      updatedAt,
-    }));
+    yield* Ref.update(sessionRef, (session) => {
+      const nextSession = {
+        ...session,
+        ...updates,
+        updatedAt,
+      } as ProviderSession & Record<string, unknown>;
+      const mutableSession = nextSession as Record<string, unknown>;
+      if (options?.clearActiveTurnId) {
+        delete mutableSession.activeTurnId;
+      }
+      if (options?.clearLastError) {
+        delete mutableSession.lastError;
+      }
+      return nextSession;
+    });
   });
 }
 
@@ -843,12 +857,17 @@ export const makeCodexSessionRuntime = (
           ...event,
         });
       });
-    const emitSessionEvent = (method: string, message: string) =>
+    const emitSessionEvent = (
+      method: string,
+      message: string,
+      payload?: ProviderEvent["payload"],
+    ) =>
       emitEvent({
         kind: "session",
         threadId: options.threadId,
         method,
         message,
+        ...(payload !== undefined ? { payload } : {}),
       });
     const rememberApprovalCorrelation = (
       keys: ReadonlyArray<string | number | undefined | null>,
@@ -1011,10 +1030,14 @@ export const makeCodexSessionRuntime = (
           if (providerThreadId && payload.threadId !== providerThreadId) {
             return Effect.void;
           }
-          return updateSession(sessionRef, {
-            status: "running",
-            activeTurnId: TurnId.make(payload.turn.id),
-          });
+          return updateSession(
+            sessionRef,
+            {
+              status: "running",
+              activeTurnId: TurnId.make(payload.turn.id),
+            },
+            { clearLastError: true },
+          );
         }),
       ),
     );
@@ -1029,11 +1052,18 @@ export const makeCodexSessionRuntime = (
             payload.turn.status === "failed" && "error" in payload.turn && payload.turn.error
               ? payload.turn.error.message
               : undefined;
-          return updateSession(sessionRef, {
-            status: payload.turn.status === "failed" ? "error" : "ready",
-            activeTurnId: undefined,
-            ...(lastError ? { lastError } : {}),
-          });
+          return updateSession(
+            sessionRef,
+            {
+              status: payload.turn.status === "failed" ? "error" : "ready",
+              activeTurnId: undefined,
+              ...(lastError ? { lastError } : {}),
+            },
+            {
+              clearActiveTurnId: true,
+              clearLastError: payload.turn.status !== "failed",
+            },
+          );
         }),
       ),
     );
@@ -1445,16 +1475,31 @@ export const makeCodexSessionRuntime = (
               return Effect.void;
             }
             const nextStatus = exitCode === 0 ? "closed" : "error";
-            return updateSession(sessionRef, {
-              status: nextStatus,
-              activeTurnId: undefined,
-            }).pipe(
+            const exitKind = exitCode === 0 ? "graceful" : "error";
+            const exitMessage =
+              exitCode === 0
+                ? "Codex App Server exited."
+                : `Codex App Server exited with code ${exitCode}.`;
+            return updateSession(
+              sessionRef,
+              {
+                status: nextStatus,
+                activeTurnId: undefined,
+                ...(exitKind === "error" ? { lastError: exitMessage } : {}),
+              },
+              {
+                clearActiveTurnId: true,
+                clearLastError: exitKind === "graceful",
+              },
+            ).pipe(
               Effect.andThen(
                 emitSessionEvent(
                   "session/exited",
-                  exitCode === 0
-                    ? "Codex App Server exited."
-                    : `Codex App Server exited with code ${exitCode}.`,
+                  exitMessage,
+                  {
+                    exitKind,
+                    ...(exitKind === "error" ? { recoverable: false } : {}),
+                  },
                 ),
               ),
             );
@@ -1517,11 +1562,17 @@ export const makeCodexSessionRuntime = (
       }
       yield* settlePendingApprovals("cancel");
       yield* settlePendingUserInputs({});
-      yield* updateSession(sessionRef, {
-        status: "closed",
-        activeTurnId: undefined,
-      });
-      yield* emitSessionEvent("session/closed", "Session stopped").pipe(
+      yield* updateSession(
+        sessionRef,
+        {
+          status: "closed",
+          activeTurnId: undefined,
+        },
+        { clearActiveTurnId: true, clearLastError: true },
+      );
+      yield* emitSessionEvent("session/closed", "Session stopped", {
+        exitKind: "graceful",
+      }).pipe(
         Effect.catch((cause) =>
           Effect.logError("Failed to emit Codex session closed event.", { cause }),
         ),
@@ -1562,11 +1613,15 @@ export const makeCodexSessionRuntime = (
             next.set(response.turn.id, input.interactionMode ?? "default");
             return next;
           });
-          yield* updateSession(sessionRef, {
-            status: "running",
-            activeTurnId: turnId,
-            ...(normalizedModel ? { model: normalizedModel } : {}),
-          });
+          yield* updateSession(
+            sessionRef,
+            {
+              status: "running",
+              activeTurnId: turnId,
+              ...(normalizedModel ? { model: normalizedModel } : {}),
+            },
+            { clearLastError: true },
+          );
           const resumedProviderThreadId = currentProviderThreadId(yield* Ref.get(sessionRef));
           return {
             threadId: options.threadId,
@@ -1601,10 +1656,14 @@ export const makeCodexSessionRuntime = (
             threadId: providerThreadId,
             numTurns,
           });
-          yield* updateSession(sessionRef, {
-            status: "ready",
-            activeTurnId: undefined,
-          });
+          yield* updateSession(
+            sessionRef,
+            {
+              status: "ready",
+              activeTurnId: undefined,
+            },
+            { clearActiveTurnId: true, clearLastError: true },
+          );
           return parseThreadSnapshot(response);
         }),
       respondToRequest: (requestId, decision) =>

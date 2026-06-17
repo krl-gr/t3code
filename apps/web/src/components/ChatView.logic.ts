@@ -1,9 +1,10 @@
+import { scopedThreadKey, scopeThreadRef } from "@t3tools/client-runtime";
 import {
-  type EnvironmentId,
   isProviderDriverKind,
   ProjectId,
   type ModelSelection,
   type ProviderDriverKind,
+  type ServerProvider,
   type ScopedThreadRef,
   type ThreadId,
   type TurnId,
@@ -19,11 +20,171 @@ import {
 } from "../lib/terminalContext";
 import type { DraftThreadEnvMode } from "../composerDraftStore";
 import { closedDiffRouteSearch, type DiffRouteSearch } from "../diffRouteSearch";
+import { sanitizeThreadErrorMessage } from "~/rpc/transportError";
 
 export const LAST_INVOKED_SCRIPT_BY_PROJECT_KEY = "t3code:last-invoked-script-by-project";
 export const MAX_HIDDEN_MOUNTED_TERMINAL_THREADS = 10;
 
 export const LastInvokedScriptByProjectSchema = Schema.Record(ProjectId, Schema.String);
+
+export type ThreadAlertSource = "local" | "session";
+
+export type ThreadAlert = {
+  readonly source: ThreadAlertSource;
+  readonly message: string;
+  readonly dismissalKey: string;
+};
+
+const THREAD_ALERT_KEY_SEPARATOR = "\u001f";
+
+function buildThreadAlertKey(
+  threadKey: string,
+  source: ThreadAlertSource,
+  occurrence: string,
+  message: string,
+): string {
+  return [threadKey, source, occurrence, message].join(THREAD_ALERT_KEY_SEPARATOR);
+}
+
+function readThreadKeyFromThreadAlertDismissalKey(key: string): string | null {
+  const separatorIndex = key.indexOf(THREAD_ALERT_KEY_SEPARATOR);
+  return separatorIndex === -1 ? null : key.slice(0, separatorIndex);
+}
+
+function buildSessionErrorOccurrence(thread: Thread): string {
+  if (thread.session?.activeTurnId) {
+    return `turn:${thread.session.activeTurnId}`;
+  }
+  if (thread.latestTurn?.state === "error") {
+    return `turn:${thread.latestTurn.turnId}`;
+  }
+  return "session";
+}
+
+export function buildThreadAlerts(
+  thread: Thread | null | undefined,
+  localError: string | null | undefined,
+): ThreadAlert[] {
+  if (!thread) {
+    return [];
+  }
+
+  const threadKey = scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id));
+  const alerts: ThreadAlert[] = [];
+  const sanitizedLocalError = sanitizeThreadErrorMessage(localError);
+  if (sanitizedLocalError) {
+    alerts.push({
+      source: "local",
+      message: sanitizedLocalError,
+      dismissalKey: buildThreadAlertKey(threadKey, "local", "current", sanitizedLocalError),
+    });
+  }
+
+  const sessionError = sanitizeThreadErrorMessage(
+    thread.session?.lastError ?? (thread.session ? thread.error : null),
+  );
+  if (sessionError) {
+    alerts.push({
+      source: "session",
+      message: sessionError,
+      dismissalKey: buildThreadAlertKey(
+        threadKey,
+        "session",
+        buildSessionErrorOccurrence(thread),
+        sessionError,
+      ),
+    });
+  }
+
+  return alerts;
+}
+
+export function isThreadAlertDismissalKeyForThread(key: string, threadKey: string): boolean {
+  return key.startsWith(`${threadKey}${THREAD_ALERT_KEY_SEPARATOR}`);
+}
+
+export function pruneDismissedThreadAlertKeys(input: {
+  readonly dismissedKeys: ReadonlySet<string>;
+  readonly currentThreadKeys: ReadonlySet<string>;
+  readonly currentAlertKeys: ReadonlySet<string>;
+}): ReadonlySet<string> {
+  let changed = false;
+  const next = new Set<string>();
+  for (const key of input.dismissedKeys) {
+    const threadKey = readThreadKeyFromThreadAlertDismissalKey(key);
+    if (
+      threadKey !== null &&
+      input.currentThreadKeys.has(threadKey) &&
+      !input.currentAlertKeys.has(key)
+    ) {
+      changed = true;
+      continue;
+    }
+    next.add(key);
+  }
+  return changed ? next : input.dismissedKeys;
+}
+
+export function selectVisibleThreadAlert(input: {
+  readonly alerts: ReadonlyArray<ThreadAlert>;
+  readonly dismissedKeys: ReadonlySet<string>;
+  readonly suppressedKeys?: ReadonlySet<string>;
+}): ThreadAlert | null {
+  const suppressedKeys = input.suppressedKeys ?? new Set<string>();
+  return (
+    input.alerts.find(
+      (alert) =>
+        !input.dismissedKeys.has(alert.dismissalKey) &&
+        !suppressedKeys.has(alert.dismissalKey),
+    ) ?? null
+  );
+}
+
+function findSessionThreadAlert(alerts: ReadonlyArray<ThreadAlert>): ThreadAlert | undefined {
+  return alerts.find((alert) => alert.source === "session");
+}
+
+export function rearmDismissedSessionThreadAlertForRetry(input: {
+  readonly alerts: ReadonlyArray<ThreadAlert>;
+  readonly dismissedKeys: ReadonlySet<string>;
+}): ReadonlySet<string> {
+  const sessionAlert = findSessionThreadAlert(input.alerts);
+  if (!sessionAlert || !input.dismissedKeys.has(sessionAlert.dismissalKey)) {
+    return input.dismissedKeys;
+  }
+  const next = new Set(input.dismissedKeys);
+  next.delete(sessionAlert.dismissalKey);
+  return next;
+}
+
+export function suppressSessionThreadAlertForRetry(input: {
+  readonly alerts: ReadonlyArray<ThreadAlert>;
+  readonly suppressedKeys: ReadonlySet<string>;
+}): ReadonlySet<string> {
+  const sessionAlert = findSessionThreadAlert(input.alerts);
+  if (!sessionAlert || input.suppressedKeys.has(sessionAlert.dismissalKey)) {
+    return input.suppressedKeys;
+  }
+  const next = new Set(input.suppressedKeys);
+  next.add(sessionAlert.dismissalKey);
+  return next;
+}
+
+export function buildProviderStatusDismissalKey(
+  status: ServerProvider | null | undefined,
+): string | null {
+  if (!status || status.status === "ready" || status.status === "disabled") {
+    return null;
+  }
+  return [
+    status.instanceId,
+    status.driver,
+    status.status,
+    status.auth.status,
+    status.installed ? "installed" : "not-installed",
+    status.message ?? "",
+  ].join(":");
+}
 
 export function buildLocalDraftThread(
   threadId: ThreadId,
@@ -54,25 +215,6 @@ export function buildLocalDraftThread(
     activities: [],
     proposedPlans: [],
   };
-}
-
-export function shouldWriteThreadErrorToCurrentServerThread(input: {
-  serverThread:
-    | {
-        environmentId: EnvironmentId;
-        id: ThreadId;
-      }
-    | null
-    | undefined;
-  routeThreadRef: ScopedThreadRef;
-  targetThreadId: ThreadId;
-}): boolean {
-  return Boolean(
-    input.serverThread &&
-    input.targetThreadId === input.routeThreadRef.threadId &&
-    input.serverThread.environmentId === input.routeThreadRef.environmentId &&
-    input.serverThread.id === input.targetThreadId,
-  );
 }
 
 export function resolveTurnDiffSearchToggle(input: {

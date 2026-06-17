@@ -601,6 +601,44 @@ lifecycleLayer("CodexAdapterLive lifecycle", (it) => {
       }
       assert.equal(firstEvent.value.threadId, "thread-1");
       assert.equal(firstEvent.value.payload.reason, "Session stopped");
+      assert.equal(firstEvent.value.payload.exitKind, "graceful");
+    }),
+  );
+
+  it.effect("maps session/exited crash payloads to error session.exited runtime events", () =>
+    Effect.gen(function* () {
+      const { adapter, runtime } = yield* startLifecycleRuntime();
+      const firstEventFiber = yield* Stream.runHead(adapter.streamEvents).pipe(Effect.forkChild);
+
+      const event: ProviderEvent = {
+        id: asEventId("evt-session-exited-error"),
+        kind: "session",
+        provider: ProviderDriverKind.make("codex"),
+        threadId: asThreadId("thread-1"),
+        createdAt: "2026-01-01T00:00:00.000Z",
+        method: "session/exited",
+        message: "Codex App Server exited with code 1.",
+        payload: {
+          exitKind: "error",
+          recoverable: false,
+        },
+      };
+
+      yield* runtime.emit(event);
+      const firstEvent = yield* Fiber.join(firstEventFiber);
+
+      assert.equal(firstEvent._tag, "Some");
+      if (firstEvent._tag !== "Some") {
+        return;
+      }
+      assert.equal(firstEvent.value.type, "session.exited");
+      if (firstEvent.value.type !== "session.exited") {
+        return;
+      }
+      assert.equal(firstEvent.value.threadId, "thread-1");
+      assert.equal(firstEvent.value.payload.reason, "Codex App Server exited with code 1.");
+      assert.equal(firstEvent.value.payload.exitKind, "error");
+      assert.equal(firstEvent.value.payload.recoverable, false);
     }),
   );
 

@@ -515,6 +515,191 @@ describe("ProviderRuntimeIngestion", () => {
     expect(thread.session?.lastError).toBeNull();
   });
 
+  it("clears previous session errors on graceful session exit", async () => {
+    const harness = await createHarness();
+
+    harness.emit({
+      type: "session.state.changed",
+      eventId: asEventId("evt-session-error-before-graceful-exit"),
+      provider: ProviderDriverKind.make("codex"),
+      threadId: asThreadId("thread-1"),
+      createdAt: "2026-01-01T00:00:00.000Z",
+      payload: {
+        state: "error",
+        reason: "provider crashed",
+      },
+    });
+
+    await waitForThread(
+      harness.readModel,
+      (entry) =>
+        entry.session?.status === "error" && entry.session?.lastError === "provider crashed",
+    );
+
+    harness.emit({
+      type: "session.exited",
+      eventId: asEventId("evt-session-graceful-exit"),
+      provider: ProviderDriverKind.make("codex"),
+      threadId: asThreadId("thread-1"),
+      createdAt: "2026-01-01T00:00:01.000Z",
+      payload: {
+        reason: "Session stopped",
+        exitKind: "graceful",
+      },
+    });
+
+    const thread = await waitForThread(
+      harness.readModel,
+      (entry) => entry.session?.status === "stopped" && entry.session?.lastError === null,
+    );
+    expect(thread.session?.status).toBe("stopped");
+    expect(thread.session?.lastError).toBeNull();
+  });
+
+  it("surfaces error session exit reasons instead of clearing them", async () => {
+    const harness = await createHarness();
+
+    harness.emit({
+      type: "session.state.changed",
+      eventId: asEventId("evt-session-error-before-error-exit"),
+      provider: ProviderDriverKind.make("codex"),
+      threadId: asThreadId("thread-1"),
+      createdAt: "2026-01-01T00:00:00.000Z",
+      payload: {
+        state: "error",
+        reason: "previous provider error",
+      },
+    });
+
+    await waitForThread(
+      harness.readModel,
+      (entry) =>
+        entry.session?.status === "error" && entry.session?.lastError === "previous provider error",
+    );
+
+    harness.emit({
+      type: "session.exited",
+      eventId: asEventId("evt-session-error-exit"),
+      provider: ProviderDriverKind.make("codex"),
+      threadId: asThreadId("thread-1"),
+      createdAt: "2026-01-01T00:00:01.000Z",
+      payload: {
+        reason: "runtime exited unexpectedly",
+        exitKind: "error",
+      },
+    });
+
+    const thread = await waitForThread(
+      harness.readModel,
+      (entry) =>
+        entry.session?.status === "stopped" &&
+        entry.session?.lastError === "runtime exited unexpectedly",
+    );
+    expect(thread.session?.status).toBe("stopped");
+    expect(thread.session?.lastError).toBe("runtime exited unexpectedly");
+  });
+
+  it("does not promote unclassified session exit reasons to lastError", async () => {
+    const harness = await createHarness();
+
+    harness.emit({
+      type: "session.exited",
+      eventId: asEventId("evt-session-unclassified-exit"),
+      provider: ProviderDriverKind.make("codex"),
+      threadId: asThreadId("thread-1"),
+      createdAt: "2026-01-01T00:00:00.000Z",
+      payload: {
+        reason: "Runtime stopped without a classified exit kind.",
+      },
+    });
+
+    const thread = await waitForThread(
+      harness.readModel,
+      (entry) => entry.session?.status === "stopped" && entry.session?.lastError === null,
+    );
+    expect(thread.session?.status).toBe("stopped");
+    expect(thread.session?.lastError).toBeNull();
+  });
+
+  it("preserves provider stream failures when an error session exit follows", async () => {
+    const harness = await createHarness();
+    const failure = "Claude runtime stream exploded";
+
+    harness.emit({
+      type: "turn.started",
+      eventId: asEventId("evt-claude-stream-failure-turn-started"),
+      provider: ProviderDriverKind.make("claudeAgent"),
+      threadId: asThreadId("thread-1"),
+      createdAt: "2026-01-01T00:00:00.000Z",
+      turnId: asTurnId("turn-claude-stream-failure"),
+    });
+
+    await waitForThread(
+      harness.readModel,
+      (entry) =>
+        entry.session?.status === "running" &&
+        entry.session?.activeTurnId === "turn-claude-stream-failure",
+    );
+
+    harness.emit({
+      type: "runtime.error",
+      eventId: asEventId("evt-claude-stream-failure-runtime-error"),
+      provider: ProviderDriverKind.make("claudeAgent"),
+      threadId: asThreadId("thread-1"),
+      turnId: asTurnId("turn-claude-stream-failure"),
+      createdAt: "2026-01-01T00:00:01.000Z",
+      payload: {
+        message: failure,
+      },
+    });
+
+    await waitForThread(
+      harness.readModel,
+      (entry) => entry.session?.status === "error" && entry.session?.lastError === failure,
+    );
+
+    harness.emit({
+      type: "turn.completed",
+      eventId: asEventId("evt-claude-stream-failure-turn-completed"),
+      provider: ProviderDriverKind.make("claudeAgent"),
+      threadId: asThreadId("thread-1"),
+      turnId: asTurnId("turn-claude-stream-failure"),
+      createdAt: "2026-01-01T00:00:02.000Z",
+      payload: {
+        state: "failed",
+        errorMessage: failure,
+      },
+    });
+
+    await waitForThread(
+      harness.readModel,
+      (entry) =>
+        entry.session?.status === "error" &&
+        entry.session?.activeTurnId === null &&
+        entry.session?.lastError === failure,
+    );
+
+    harness.emit({
+      type: "session.exited",
+      eventId: asEventId("evt-claude-stream-failure-session-exited"),
+      provider: ProviderDriverKind.make("claudeAgent"),
+      threadId: asThreadId("thread-1"),
+      createdAt: "2026-01-01T00:00:03.000Z",
+      payload: {
+        reason: failure,
+        exitKind: "error",
+        recoverable: false,
+      },
+    });
+
+    const thread = await waitForThread(
+      harness.readModel,
+      (entry) => entry.session?.status === "stopped" && entry.session?.lastError === failure,
+    );
+    expect(thread.session?.status).toBe("stopped");
+    expect(thread.session?.lastError).toBe(failure);
+  });
+
   it("does not clear active turn when session/thread started arrives mid-turn", async () => {
     const harness = await createHarness();
     const now = "2026-01-01T00:00:00.000Z";

@@ -171,6 +171,8 @@ import {
   MAX_HIDDEN_MOUNTED_TERMINAL_THREADS,
   buildExpiredTerminalContextToastCopy,
   buildLocalDraftThread,
+  buildProviderStatusDismissalKey,
+  buildThreadAlerts,
   collectUserMessageBlobPreviewUrls,
   createLocalDispatchSnapshot,
   deriveComposerSendState,
@@ -181,14 +183,17 @@ import {
   PullRequestDialogState,
   cloneComposerImageForRetry,
   deriveLockedProvider,
+  pruneDismissedThreadAlertKeys,
   readFileAsDataUrl,
+  rearmDismissedSessionThreadAlertForRetry,
   reconcileMountedTerminalThreadIds,
   resolveDiffPanelSearchToggle,
   resolveSendEnvMode,
   resolveTurnDiffSearchToggle,
   revokeBlobPreviewUrl,
   revokeUserMessagePreviewUrls,
-  shouldWriteThreadErrorToCurrentServerThread,
+  selectVisibleThreadAlert,
+  suppressSessionThreadAlertForRetry,
   waitForStartedServerThread,
 } from "./ChatView.logic";
 import { useLocalStorage } from "~/hooks/useLocalStorage";
@@ -447,6 +452,7 @@ function useLocalDispatchState(input: {
     beginLocalDispatch,
     resetLocalDispatch,
     localDispatchStartedAt: localDispatch?.startedAt ?? null,
+    localDispatchActive: localDispatch !== null,
     isPreparingWorktree: localDispatch?.preparingWorktree ?? false,
     isSendBusy: localDispatch !== null && !serverAcknowledgedLocalDispatch,
   };
@@ -818,7 +824,6 @@ export default function ChatView(props: ChatViewProps) {
       [routeKind, routeThreadRef],
     ),
   );
-  const setStoreThreadError = useStore((store) => store.setError);
   const markThreadVisited = useUiStateStore((store) => store.markThreadVisited);
   const activeThreadLastVisitedAt = useUiStateStore((store) =>
     routeKind === "server" ? store.threadLastVisitedAtById[routeThreadKey] : undefined,
@@ -886,7 +891,7 @@ export default function ChatView(props: ChatViewProps) {
   const [optimisticUserMessages, setOptimisticUserMessages] = useState<ChatMessage[]>([]);
   const optimisticUserMessagesRef = useRef(optimisticUserMessages);
   optimisticUserMessagesRef.current = optimisticUserMessages;
-  const [localDraftErrorsByDraftId, setLocalDraftErrorsByDraftId] = useState<
+  const [localThreadErrorsByKey, setLocalThreadErrorsByKey] = useState<
     Record<string, string | null>
   >({});
   const [isConnecting, _setIsConnecting] = useState(false);
@@ -954,6 +959,19 @@ export default function ChatView(props: ChatViewProps) {
       ),
     ),
   );
+  const serverThreadSessionAlertCleanupEntries = useStore(
+    useShallow((state) =>
+      selectThreadsAcrossEnvironments(state).map((thread) => {
+        const threadKey = scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id));
+        return JSON.stringify([
+          threadKey,
+          ...buildThreadAlerts(thread, null)
+            .filter((alert) => alert.source === "session")
+            .map((alert) => alert.dismissalKey),
+        ]);
+      }),
+    ),
+  );
   const draftThreadsByThreadKey = useComposerDraftStore((store) => store.draftThreadsByThreadKey);
   const draftThreadKeys = useMemo(
     () =>
@@ -978,10 +996,10 @@ export default function ChatView(props: ChatViewProps) {
   const fallbackDraftProject = useStore(
     useMemo(() => createProjectSelectorByRef(fallbackDraftProjectRef), [fallbackDraftProjectRef]),
   );
-  const localDraftError =
-    routeKind === "server" && serverThread
-      ? null
-      : ((draftId ? localDraftErrorsByDraftId[draftId] : null) ?? null);
+  const localThreadErrorKey = routeKind === "server" ? routeThreadKey : draftId;
+  const localThreadError = localThreadErrorKey
+    ? (localThreadErrorsByKey[localThreadErrorKey] ?? null)
+    : null;
   const localDraftThread = useMemo(
     () =>
       draftThread
@@ -992,13 +1010,17 @@ export default function ChatView(props: ChatViewProps) {
               instanceId: ProviderInstanceId.make("codex"),
               model: DEFAULT_MODEL,
             },
-            localDraftError,
+            localThreadError,
           )
         : undefined,
-    [draftThread, fallbackDraftProject?.defaultModelSelection, localDraftError, threadId],
+    [draftThread, fallbackDraftProject?.defaultModelSelection, localThreadError, threadId],
   );
   const isServerThread = routeKind === "server" && serverThread !== undefined;
   const activeThread = isServerThread ? serverThread : localDraftThread;
+  const activeThreadAlerts = useMemo(
+    () => buildThreadAlerts(activeThread, localThreadError),
+    [activeThread, localThreadError],
+  );
   const runtimeMode = composerRuntimeMode ?? activeThread?.runtimeMode ?? DEFAULT_RUNTIME_MODE;
   const interactionMode =
     composerInteractionMode ?? activeThread?.interactionMode ?? DEFAULT_INTERACTION_MODE;
@@ -1628,6 +1650,7 @@ export default function ChatView(props: ChatViewProps) {
     beginLocalDispatch,
     resetLocalDispatch,
     localDispatchStartedAt,
+    localDispatchActive,
     isPreparingWorktree,
     isSendBusy,
   } = useLocalDispatchState({
@@ -1636,7 +1659,7 @@ export default function ChatView(props: ChatViewProps) {
     phase,
     activePendingApproval: activePendingApproval?.requestId ?? null,
     activePendingUserInput: activePendingUserInput?.requestId ?? null,
-    threadError: activeThread?.error,
+    threadError: localThreadError,
   });
   const isWorking = phase === "running" || isSendBusy || isConnecting || isRevertingCheckpoint;
   const activeWorkStartedAt = deriveActiveWorkStartedAt(
@@ -1939,6 +1962,25 @@ export default function ChatView(props: ChatViewProps) {
     const defaultInstanceId = defaultInstanceIdForDriver(selectedProvider);
     return providerStatuses.find((status) => status.instanceId === defaultInstanceId) ?? null;
   }, [activeProviderInstanceId, providerStatuses, selectedProvider]);
+  const [dismissedProviderStatusKey, setDismissedProviderStatusKey] = useState<string | null>(
+    null,
+  );
+  const activeProviderStatusDismissalKey = buildProviderStatusDismissalKey(activeProviderStatus);
+  const visibleProviderStatus =
+    activeProviderStatus &&
+    activeProviderStatusDismissalKey !== dismissedProviderStatusKey
+      ? activeProviderStatus
+      : null;
+  const dismissActiveProviderStatus = useCallback(() => {
+    if (activeProviderStatusDismissalKey) {
+      setDismissedProviderStatusKey(activeProviderStatusDismissalKey);
+    }
+  }, [activeProviderStatusDismissalKey]);
+  useEffect(() => {
+    if (!activeProviderStatusDismissalKey && dismissedProviderStatusKey) {
+      setDismissedProviderStatusKey(null);
+    }
+  }, [activeProviderStatusDismissalKey, dismissedProviderStatusKey]);
   const activeProjectCwd = activeProject?.cwd ?? null;
   const activeThreadWorktreePath = activeThread?.worktreePath ?? null;
   const activeWorkspaceRoot = activeThreadWorktreePath ?? activeProjectCwd ?? undefined;
@@ -2057,28 +2099,115 @@ export default function ChatView(props: ChatViewProps) {
     (targetThreadId: ThreadId | null, error: string | null) => {
       if (!targetThreadId) return;
       const nextError = sanitizeThreadErrorMessage(error);
-      const isCurrentServerThread = shouldWriteThreadErrorToCurrentServerThread({
-        serverThread,
-        routeThreadRef,
-        targetThreadId,
-      });
-      if (isCurrentServerThread) {
-        setStoreThreadError(targetThreadId, nextError);
-        return;
-      }
-      const localDraftErrorKey = draftId ?? targetThreadId;
-      setLocalDraftErrorsByDraftId((existing) => {
-        if ((existing[localDraftErrorKey] ?? null) === nextError) {
+      const nextErrorKey =
+        routeKind === "server" && targetThreadId === routeThreadRef.threadId
+          ? routeThreadKey
+          : (draftId ?? targetThreadId);
+      setLocalThreadErrorsByKey((existing) => {
+        if ((existing[nextErrorKey] ?? null) === nextError) {
           return existing;
         }
         return {
           ...existing,
-          [localDraftErrorKey]: nextError,
+          [nextErrorKey]: nextError,
         };
       });
     },
-    [draftId, routeThreadRef, serverThread, setStoreThreadError],
+    [draftId, routeKind, routeThreadKey, routeThreadRef.threadId],
   );
+  const [dismissedThreadAlertKeys, setDismissedThreadAlertKeys] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const [suppressedThreadAlertKeys, setSuppressedThreadAlertKeys] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const threadAlertCleanupScope = useMemo(() => {
+    const currentThreadKeys = new Set<string>();
+    const currentAlertKeys = new Set<string>();
+
+    for (const entry of serverThreadSessionAlertCleanupEntries) {
+      const [threadKey, ...alertKeys] = JSON.parse(entry) as string[];
+      if (!threadKey) {
+        continue;
+      }
+      currentThreadKeys.add(threadKey);
+      for (const alertKey of alertKeys) {
+        if (alertKey.length > 0) {
+          currentAlertKeys.add(alertKey);
+        }
+      }
+    }
+
+    if (activeThreadKey) {
+      currentThreadKeys.add(activeThreadKey);
+      for (const alert of activeThreadAlerts) {
+        currentAlertKeys.add(alert.dismissalKey);
+      }
+    }
+
+    return { currentThreadKeys, currentAlertKeys };
+  }, [activeThreadAlerts, activeThreadKey, serverThreadSessionAlertCleanupEntries]);
+  const visibleThreadAlert = selectVisibleThreadAlert({
+    alerts: activeThreadAlerts,
+    dismissedKeys: dismissedThreadAlertKeys,
+    suppressedKeys: suppressedThreadAlertKeys,
+  });
+  const visibleThreadError = visibleThreadAlert?.message ?? null;
+  const prepareActiveSessionThreadAlertForRetry = useCallback(() => {
+    setDismissedThreadAlertKeys((existing) =>
+      rearmDismissedSessionThreadAlertForRetry({
+        alerts: activeThreadAlerts,
+        dismissedKeys: existing,
+      }),
+    );
+    setSuppressedThreadAlertKeys((existing) =>
+      suppressSessionThreadAlertForRetry({
+        alerts: activeThreadAlerts,
+        suppressedKeys: existing,
+      }),
+    );
+  }, [activeThreadAlerts]);
+  const dismissActiveThreadError = useCallback(() => {
+    if (visibleThreadAlert) {
+      setDismissedThreadAlertKeys((existing) => {
+        if (existing.has(visibleThreadAlert.dismissalKey)) {
+          return existing;
+        }
+        const next = new Set(existing);
+        next.add(visibleThreadAlert.dismissalKey);
+        return next;
+      });
+      if (visibleThreadAlert.source === "local") {
+        setThreadError(activeThread?.id ?? null, null);
+      }
+    }
+  }, [activeThread?.id, setThreadError, visibleThreadAlert]);
+  useEffect(() => {
+    setDismissedThreadAlertKeys((existing) =>
+      pruneDismissedThreadAlertKeys({
+        dismissedKeys: existing,
+        currentThreadKeys: threadAlertCleanupScope.currentThreadKeys,
+        currentAlertKeys: threadAlertCleanupScope.currentAlertKeys,
+      }),
+    );
+  }, [threadAlertCleanupScope]);
+  useEffect(() => {
+    setSuppressedThreadAlertKeys((existing) =>
+      pruneDismissedThreadAlertKeys({
+        dismissedKeys: existing,
+        currentThreadKeys: threadAlertCleanupScope.currentThreadKeys,
+        currentAlertKeys: threadAlertCleanupScope.currentAlertKeys,
+      }),
+    );
+  }, [threadAlertCleanupScope]);
+  useEffect(() => {
+    if (localDispatchActive) {
+      return;
+    }
+    setSuppressedThreadAlertKeys((existing) =>
+      existing.size === 0 ? existing : new Set<string>(),
+    );
+  }, [localDispatchActive]);
 
   const focusComposer = useCallback(() => {
     if (!workspaceCanOwnInput) {
@@ -3110,6 +3239,7 @@ export default function ChatView(props: ChatViewProps) {
         streaming: false,
       },
     ]);
+    prepareActiveSessionThreadAlertForRetry();
     setThreadError(threadIdForSend, null);
     promptRef.current = "";
     clearComposerDraftContent(composerDraftTarget);
@@ -3535,6 +3665,7 @@ export default function ChatView(props: ChatViewProps) {
           streaming: false,
         },
       ]);
+      prepareActiveSessionThreadAlertForRetry();
       setThreadError(threadIdForSend, null);
       beginLocalDispatch({ preparingWorktree: false });
       window.requestAnimationFrame(() => {
@@ -3607,6 +3738,7 @@ export default function ChatView(props: ChatViewProps) {
       runtimeMode,
       setComposerDraftInteractionMode,
       setThreadError,
+      prepareActiveSessionThreadAlertForRetry,
       composerRef,
       environmentId,
     ],
@@ -3979,11 +4111,11 @@ export default function ChatView(props: ChatViewProps) {
       ) : null}
 
       {/* Error banner */}
-      <ProviderStatusBanner status={activeProviderStatus} />
-      <ThreadErrorBanner
-        error={activeThread.error}
-        onDismiss={() => setThreadError(activeThread.id, null)}
+      <ProviderStatusBanner
+        status={visibleProviderStatus}
+        onDismiss={dismissActiveProviderStatus}
       />
+      <ThreadErrorBanner error={visibleThreadError} onDismiss={dismissActiveThreadError} />
       {/* Main content area with optional plan sidebar */}
       <div className="flex min-h-0 min-w-0 flex-1">
         {/* Chat column */}

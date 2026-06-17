@@ -147,6 +147,23 @@ function readPayload<A>(
   return isPayload(payload) ? payload : undefined;
 }
 
+function readSessionExitPayload(payload: ProviderEvent["payload"]): {
+  readonly exitKind?: "graceful" | "error";
+  readonly recoverable?: boolean;
+} {
+  if (payload === null || typeof payload !== "object") {
+    return {};
+  }
+  const record = payload as Record<string, unknown>;
+  const exitKind =
+    record.exitKind === "graceful" || record.exitKind === "error" ? record.exitKind : undefined;
+  const recoverable = typeof record.recoverable === "boolean" ? record.recoverable : undefined;
+  return {
+    ...(exitKind !== undefined ? { exitKind } : {}),
+    ...(recoverable !== undefined ? { recoverable } : {}),
+  };
+}
+
 function trimText(value: string | undefined | null): string | undefined {
   const trimmed = value?.trim();
   return trimmed && trimmed.length > 0 ? trimmed : undefined;
@@ -761,13 +778,21 @@ function mapToRuntimeEvents(
   }
 
   if (event.method === "session/exited" || event.method === "session/closed") {
+    const exitPayload = readSessionExitPayload(event.payload);
     return [
       {
         ...runtimeEventBase(event, canonicalThreadId),
         type: "session.exited",
         payload: {
           ...(event.message ? { reason: event.message } : {}),
-          ...(event.method === "session/closed" ? { exitKind: "graceful" } : {}),
+          ...(exitPayload.recoverable !== undefined
+            ? { recoverable: exitPayload.recoverable }
+            : {}),
+          ...(exitPayload.exitKind !== undefined
+            ? { exitKind: exitPayload.exitKind }
+            : event.method === "session/closed"
+              ? { exitKind: "graceful" }
+              : {}),
         },
       },
     ];
