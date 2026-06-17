@@ -2492,16 +2492,6 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
                   )}
                 />
               )}
-              {project.groupedProjectCount > 1 ? (
-                <span
-                  className={cn(
-                    "shrink-0 text-[10px] leading-5",
-                    SIDEBAR_MUTED_TEXT_CLASS,
-                  )}
-                >
-                  {project.groupedProjectCount} projects
-                </span>
-              ) : null}
             </span>
           </SidebarMenuButton>
           {/* Environment badge – visible by default, crossfades with the
@@ -2892,16 +2882,6 @@ function FocusedProjectCard({
           >
             {project.displayName}
           </span>
-          {project.groupedProjectCount > 1 ? (
-            <span
-              className={cn(
-                "shrink-0 text-[10px] leading-5",
-                SIDEBAR_MUTED_TEXT_CLASS,
-              )}
-            >
-              {project.groupedProjectCount} projects
-            </span>
-          ) : null}
         </span>
       </SidebarMenuButton>
     </SidebarMenuItem>
