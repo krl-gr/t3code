@@ -10,17 +10,20 @@ export function NoActiveThreadContent() {
         className={cn(
           "border-b border-border px-3 sm:px-5",
           isElectron
-            ? "drag-region flex h-[52px] items-center wco:h-[env(titlebar-area-height)]"
+            ? "drag-region t3-titlebar-left-inset-when-sidebar-overlay flex h-[52px] items-center wco:h-[env(titlebar-area-height)]"
             : "py-2 sm:py-3",
         )}
       >
         {isElectron ? (
-          <span className="text-xs text-muted-foreground/50 wco:pr-[calc(100vw-env(titlebar-area-width)-env(titlebar-area-x)+1em)]">
-            No active thread
-          </span>
+          <>
+            <SidebarTrigger className="mr-2 size-7 shrink-0 sm:hidden" />
+            <span className="text-xs text-muted-foreground/50 wco:pr-[calc(100vw-env(titlebar-area-width)-env(titlebar-area-x)+1em)]">
+              No active thread
+            </span>
+          </>
         ) : (
           <div className="flex items-center gap-2">
-            <SidebarTrigger className="size-7 shrink-0 md:hidden" />
+            <SidebarTrigger className="size-7 shrink-0 sm:hidden" />
             <span className="text-sm font-medium text-foreground md:text-muted-foreground/60">
               No active thread
             </span>

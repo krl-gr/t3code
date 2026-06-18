@@ -55,6 +55,10 @@
       "types": "./src/toolActivity.ts",
       "import": "./src/toolActivity.ts"
     },
+    "./threadActivityPresentation": {
+      "types": "./src/threadActivityPresentation.ts",
+      "import": "./src/threadActivityPresentation.ts"
+    },
     "./Struct": {
       "types": "./src/Struct.ts",
       "import": "./src/Struct.ts"

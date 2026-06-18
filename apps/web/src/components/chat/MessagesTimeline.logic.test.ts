@@ -7,6 +7,30 @@ import {
   resolveAssistantMessageCopyState,
 } from "./MessagesTimeline.logic";
 
+type DerivedTimelineRow = ReturnType<typeof deriveMessagesTimelineRows>[number];
+type DerivedMessageRow = Extract<DerivedTimelineRow, { kind: "message" }>;
+
+function collectAssistantMessageRows(rows: ReturnType<typeof deriveMessagesTimelineRows>) {
+  const result: DerivedMessageRow[] = [];
+
+  for (const row of rows) {
+    if (row.kind === "message" && row.message.role === "assistant") {
+      result.push(row);
+      continue;
+    }
+
+    if (row.kind === "process") {
+      for (const child of row.children) {
+        if (child.kind === "message" && child.message.role === "assistant") {
+          result.push(child);
+        }
+      }
+    }
+  }
+
+  return result;
+}
+
 describe("computeMessageDurationStart", () => {
   it("returns message createdAt when there is no preceding user message", () => {
     const result = computeMessageDurationStart([
@@ -257,15 +281,27 @@ describe("deriveMessagesTimelineRows", () => {
       revertTurnCountByUserMessageId: new Map(),
     });
 
+    expect(rows.map((row) => row.kind)).toEqual(["message", "process", "message"]);
+
+    const processRow = rows.find(
+      (row): row is Extract<(typeof rows)[number], { kind: "process" }> =>
+        row.kind === "process",
+    );
     const assistantRows = rows.filter(
       (row): row is Extract<(typeof rows)[number], { kind: "message" }> =>
         row.kind === "message" && row.message.role === "assistant",
     );
 
-    expect(assistantRows).toHaveLength(2);
-    expect(assistantRows[0]?.showAssistantCopyButton).toBe(false);
-    expect(assistantRows[1]?.showAssistantCopyButton).toBe(true);
-    expect(assistantRows[1]?.showCompletionDivider).toBe(true);
+    expect(processRow?.children).toHaveLength(1);
+    expect(processRow?.children[0]?.kind).toBe("message");
+    expect(
+      processRow?.children[0]?.kind === "message"
+        ? processRow.children[0].showAssistantCopyButton
+        : null,
+    ).toBe(false);
+    expect(assistantRows).toHaveLength(1);
+    expect(assistantRows[0]?.showAssistantCopyButton).toBe(true);
+    expect(assistantRows[0]?.showCompletionDivider).toBe(false);
   });
 
   it("marks only the active assistant turn as streaming for copy controls", () => {
@@ -310,15 +346,14 @@ describe("deriveMessagesTimelineRows", () => {
       revertTurnCountByUserMessageId: new Map(),
     });
 
-    const assistantRows = rows.filter(
-      (row): row is Extract<(typeof rows)[number], { kind: "message" }> =>
-        row.kind === "message" && row.message.role === "assistant",
-    );
+    const assistantRows = collectAssistantMessageRows(rows);
 
     expect(assistantRows[0]?.assistantCopyStreaming).toBe(false);
     expect(assistantRows[0]?.completionSummary).toBeNull();
     expect(assistantRows[1]?.assistantCopyStreaming).toBe(true);
-    expect(assistantRows[1]?.completionSummary).toBe("done");
+    expect(assistantRows[1]?.completionSummary).toBeNull();
+    expect(rows.map((row) => row.kind)).toEqual(["message", "process"]);
+    expect(rows[1]?.kind === "process" ? rows[1].isActive : null).toBe(true);
   });
 
   it("projects assistant diff summaries and user revert counts onto the affected rows", () => {
@@ -381,6 +416,304 @@ describe("deriveMessagesTimelineRows", () => {
     expect(userRow?.revertTurnCount).toBe(1);
     expect(assistantRow?.assistantTurnDiffSummary).toBe(assistantTurnDiffSummary);
   });
+
+  it("groups non-terminal assistant messages and work rows into a process row", () => {
+    const rows = deriveMessagesTimelineRows({
+      timelineEntries: [
+        {
+          id: "user-entry",
+          kind: "message",
+          createdAt: "2026-01-01T00:00:00Z",
+          message: {
+            id: "user-1" as never,
+            role: "user",
+            text: "Do the thing",
+            turnId: null,
+            createdAt: "2026-01-01T00:00:00Z",
+            streaming: false,
+          },
+        },
+        {
+          id: "assistant-interim-entry",
+          kind: "message",
+          createdAt: "2026-01-01T00:00:10Z",
+          message: {
+            id: "assistant-interim" as never,
+            role: "assistant",
+            text: "Checking first.",
+            turnId: "turn-1" as never,
+            createdAt: "2026-01-01T00:00:10Z",
+            completedAt: "2026-01-01T00:00:11Z",
+            streaming: false,
+          },
+        },
+        {
+          id: "work-entry",
+          kind: "work",
+          createdAt: "2026-01-01T00:00:12Z",
+          entry: {
+            id: "work-1",
+            createdAt: "2026-01-01T00:00:12Z",
+            label: "Ran command",
+            tone: "tool",
+            command: "rg -n thing",
+          },
+        },
+        {
+          id: "assistant-final-entry",
+          kind: "message",
+          createdAt: "2026-01-01T00:00:20Z",
+          message: {
+            id: "assistant-final" as never,
+            role: "assistant",
+            text: "Done.",
+            turnId: "turn-1" as never,
+            createdAt: "2026-01-01T00:00:20Z",
+            completedAt: "2026-01-01T00:00:30Z",
+            streaming: false,
+          },
+        },
+      ],
+      completionDividerBeforeEntryId: null,
+      isWorking: false,
+      activeTurnStartedAt: null,
+      turnDiffSummaryByAssistantMessageId: new Map(),
+      revertTurnCountByUserMessageId: new Map(),
+    });
+
+    expect(rows.map((row) => row.kind)).toEqual(["message", "process", "message"]);
+    const processRow = rows[1];
+
+    expect(processRow?.kind).toBe("process");
+    if (processRow?.kind !== "process") return;
+    expect(processRow.turnId).toBe("turn-1");
+    expect(processRow.startedAt).toBe("2026-01-01T00:00:00Z");
+    expect(processRow.completedAt).toBe("2026-01-01T00:00:30Z");
+    expect(processRow.children.map((child) => child.kind)).toEqual(["message", "work"]);
+  });
+
+  it("keeps proposed plans outside process rows", () => {
+    const rows = deriveMessagesTimelineRows({
+      timelineEntries: [
+        {
+          id: "user-entry",
+          kind: "message",
+          createdAt: "2026-01-01T00:00:00Z",
+          message: {
+            id: "user-1" as never,
+            role: "user",
+            text: "Plan it",
+            turnId: null,
+            createdAt: "2026-01-01T00:00:00Z",
+            streaming: false,
+          },
+        },
+        {
+          id: "work-entry",
+          kind: "work",
+          createdAt: "2026-01-01T00:00:10Z",
+          entry: {
+            id: "work-1",
+            createdAt: "2026-01-01T00:00:10Z",
+            label: "Ran command",
+            tone: "tool",
+            command: "rg -n plan",
+          },
+        },
+        {
+          id: "plan-entry",
+          kind: "proposed-plan",
+          createdAt: "2026-01-01T00:00:20Z",
+          proposedPlan: {
+            id: "plan-1" as never,
+            turnId: "turn-plan" as never,
+            planMarkdown: "# Plan",
+            implementedAt: null,
+            implementationThreadId: null,
+            createdAt: "2026-01-01T00:00:20Z",
+            updatedAt: "2026-01-01T00:00:21Z",
+          },
+        },
+      ],
+      completionDividerBeforeEntryId: null,
+      completionSummary: "Worked for 21s",
+      isWorking: false,
+      activeTurnId: "turn-plan" as never,
+      activeTurnStartedAt: null,
+      turnDiffSummaryByAssistantMessageId: new Map(),
+      revertTurnCountByUserMessageId: new Map(),
+    });
+
+    expect(rows.map((row) => row.kind)).toEqual(["message", "process", "proposed-plan"]);
+    const processRow = rows[1];
+
+    expect(processRow?.kind).toBe("process");
+    if (processRow?.kind !== "process") return;
+    expect(processRow.completionSummary).toBe("Worked for 21s");
+    expect(processRow.children.map((child) => child.kind)).toEqual(["work"]);
+  });
+
+  it("marks active process rows and moves the working indicator inside them", () => {
+    const rows = deriveMessagesTimelineRows({
+      timelineEntries: [
+        {
+          id: "user-entry",
+          kind: "message",
+          createdAt: "2026-01-01T00:00:00Z",
+          message: {
+            id: "user-1" as never,
+            role: "user",
+            text: "Do it",
+            turnId: null,
+            createdAt: "2026-01-01T00:00:00Z",
+            streaming: false,
+          },
+        },
+        {
+          id: "work-entry",
+          kind: "work",
+          createdAt: "2026-01-01T00:00:10Z",
+          entry: {
+            id: "work-1",
+            createdAt: "2026-01-01T00:00:10Z",
+            label: "Ran command",
+            tone: "tool",
+            command: "rg -n active",
+          },
+        },
+      ],
+      completionDividerBeforeEntryId: null,
+      isWorking: true,
+      activeTurnInProgress: true,
+      activeTurnId: "turn-active" as never,
+      activeTurnStartedAt: "2026-01-01T00:00:05Z",
+      turnDiffSummaryByAssistantMessageId: new Map(),
+      revertTurnCountByUserMessageId: new Map(),
+    });
+
+    expect(rows.map((row) => row.kind)).toEqual(["message", "process"]);
+    const processRow = rows[1];
+
+    expect(processRow?.kind).toBe("process");
+    if (processRow?.kind !== "process") return;
+    expect(processRow.isActive).toBe(true);
+    expect(processRow.startedAt).toBe("2026-01-01T00:00:05Z");
+    expect(processRow.children.map((child) => child.kind)).toEqual(["work", "working"]);
+  });
+
+  it("keeps active assistant output inside the process row until the turn completes", () => {
+    const rows = deriveMessagesTimelineRows({
+      timelineEntries: [
+        {
+          id: "user-entry",
+          kind: "message",
+          createdAt: "2026-01-01T00:00:00Z",
+          message: {
+            id: "user-1" as never,
+            role: "user",
+            text: "Explain the issue",
+            turnId: null,
+            createdAt: "2026-01-01T00:00:00Z",
+            streaming: false,
+          },
+        },
+        {
+          id: "assistant-progress-entry",
+          kind: "message",
+          createdAt: "2026-01-01T00:00:08Z",
+          message: {
+            id: "assistant-progress" as never,
+            role: "assistant",
+            text: "I am checking the code path.",
+            turnId: null,
+            createdAt: "2026-01-01T00:00:08Z",
+            completedAt: "2026-01-01T00:00:09Z",
+            streaming: false,
+          },
+        },
+        {
+          id: "work-entry",
+          kind: "work",
+          createdAt: "2026-01-01T00:00:10Z",
+          entry: {
+            id: "work-1",
+            createdAt: "2026-01-01T00:00:10Z",
+            label: "Ran command",
+            tone: "tool",
+            command: "rg -n process",
+          },
+        },
+      ],
+      completionDividerBeforeEntryId: "assistant-progress-entry",
+      completionSummary: "Worked for 10s",
+      isWorking: true,
+      activeTurnInProgress: true,
+      activeTurnId: "turn-active" as never,
+      activeTurnStartedAt: "2026-01-01T00:00:05Z",
+      turnDiffSummaryByAssistantMessageId: new Map(),
+      revertTurnCountByUserMessageId: new Map(),
+    });
+
+    expect(rows.map((row) => row.kind)).toEqual(["message", "process"]);
+
+    const processRow = rows[1];
+    expect(processRow?.kind).toBe("process");
+    if (processRow?.kind !== "process") return;
+
+    expect(processRow.turnId).toBe("turn-active");
+    expect(processRow.isActive).toBe(true);
+    expect(processRow.startedAt).toBe("2026-01-01T00:00:05Z");
+    expect(processRow.children.map((child) => child.kind)).toEqual(["message", "work", "working"]);
+    const progressMessage = processRow.children[0];
+
+    expect(progressMessage?.kind === "message" ? progressMessage.message.text : null).toBe(
+      "I am checking the code path.",
+    );
+    expect(
+      progressMessage?.kind === "message" ? progressMessage.completionSummary : null,
+    ).toBeNull();
+  });
+
+  it("does not create a process row for a plain final answer", () => {
+    const rows = deriveMessagesTimelineRows({
+      timelineEntries: [
+        {
+          id: "user-entry",
+          kind: "message",
+          createdAt: "2026-01-01T00:00:00Z",
+          message: {
+            id: "user-1" as never,
+            role: "user",
+            text: "Answer",
+            turnId: null,
+            createdAt: "2026-01-01T00:00:00Z",
+            streaming: false,
+          },
+        },
+        {
+          id: "assistant-final-entry",
+          kind: "message",
+          createdAt: "2026-01-01T00:00:20Z",
+          message: {
+            id: "assistant-final" as never,
+            role: "assistant",
+            text: "Done.",
+            turnId: "turn-1" as never,
+            createdAt: "2026-01-01T00:00:20Z",
+            completedAt: "2026-01-01T00:00:30Z",
+            streaming: false,
+          },
+        },
+      ],
+      completionDividerBeforeEntryId: null,
+      isWorking: false,
+      activeTurnStartedAt: null,
+      turnDiffSummaryByAssistantMessageId: new Map(),
+      revertTurnCountByUserMessageId: new Map(),
+    });
+
+    expect(rows.map((row) => row.kind)).toEqual(["message", "message"]);
+  });
 });
 
 describe("computeStableMessagesTimelineRows", () => {
@@ -435,7 +768,116 @@ describe("computeStableMessagesTimelineRows", () => {
     expect(repeated.result).toBe(initial.result);
   });
 
-  it("reuses work rows when equivalent timeline derivations create new grouped arrays", () => {
+  it("reuses user message rows when a server ack only adds non-visual metadata", () => {
+    const optimisticUserMessage = {
+      id: "user-1" as never,
+      role: "user" as const,
+      text: "Ship it",
+      turnId: null,
+      createdAt: "2026-01-01T00:00:00Z",
+      streaming: false,
+      attachments: [
+        {
+          type: "image" as const,
+          id: "image-1",
+          name: "screen.png",
+          mimeType: "image/png",
+          sizeBytes: 123,
+          previewUrl: "blob:optimistic-preview",
+        },
+      ],
+    };
+    const serverUserMessage = {
+      ...optimisticUserMessage,
+      turnId: "turn-1" as never,
+      completedAt: optimisticUserMessage.createdAt,
+      attachments: optimisticUserMessage.attachments.map((attachment) => ({ ...attachment })),
+    };
+    const createRows = (message: typeof optimisticUserMessage) =>
+      deriveMessagesTimelineRows({
+        timelineEntries: [
+          {
+            id: message.id,
+            kind: "message",
+            createdAt: message.createdAt,
+            message,
+          },
+        ],
+        completionDividerBeforeEntryId: null,
+        isWorking: false,
+        activeTurnStartedAt: null,
+        turnDiffSummaryByAssistantMessageId: new Map(),
+        revertTurnCountByUserMessageId: new Map(),
+      });
+
+    const initial = computeStableMessagesTimelineRows(createRows(optimisticUserMessage), {
+      byId: new Map(),
+      result: [],
+    });
+    const repeated = computeStableMessagesTimelineRows(createRows(serverUserMessage), initial);
+
+    expect(repeated).toBe(initial);
+    expect(repeated.result[0]).toBe(initial.result[0]);
+  });
+
+  it("does not reuse message rows when render-relevant message fields change", () => {
+    const baseUserMessage = {
+      id: "user-1" as never,
+      role: "user" as const,
+      text: "Ship it",
+      turnId: null,
+      createdAt: "2026-01-01T00:00:00Z",
+      streaming: false,
+      attachments: [
+        {
+          type: "image" as const,
+          id: "image-1",
+          name: "screen.png",
+          mimeType: "image/png",
+          sizeBytes: 123,
+          previewUrl: "blob:optimistic-preview",
+        },
+      ],
+    };
+    const createRows = (message: typeof baseUserMessage) =>
+      deriveMessagesTimelineRows({
+        timelineEntries: [
+          {
+            id: message.id,
+            kind: "message",
+            createdAt: message.createdAt,
+            message,
+          },
+        ],
+        completionDividerBeforeEntryId: null,
+        isWorking: false,
+        activeTurnStartedAt: null,
+        turnDiffSummaryByAssistantMessageId: new Map(),
+        revertTurnCountByUserMessageId: new Map(),
+      });
+
+    const initial = computeStableMessagesTimelineRows(createRows(baseUserMessage), {
+      byId: new Map(),
+      result: [],
+    });
+    const changed = computeStableMessagesTimelineRows(
+      createRows({
+        ...baseUserMessage,
+        attachments: [
+          {
+            ...baseUserMessage.attachments[0]!,
+            previewUrl: "/attachments/server-preview",
+          },
+        ],
+      }),
+      initial,
+    );
+
+    expect(changed).not.toBe(initial);
+    expect(changed.result[0]).not.toBe(initial.result[0]);
+  });
+
+  it("reuses process rows when equivalent timeline derivations create new grouped work arrays", () => {
     const firstWorkEntry = {
       id: "work-1",
       createdAt: "2026-01-01T00:00:00Z",
@@ -481,6 +923,7 @@ describe("computeStableMessagesTimelineRows", () => {
     });
     const secondRows = createRows();
 
+    expect(firstRows[0]?.kind).toBe("process");
     expect(secondRows[0]).not.toBe(firstRows[0]);
 
     const repeated = computeStableMessagesTimelineRows(secondRows, initial);

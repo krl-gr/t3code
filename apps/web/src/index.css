@@ -4,6 +4,7 @@
 @custom-variant dark (&:is(.dark, .dark *));
 /* Window Controls Overlay: active when Electron exposes native titlebar control geometry. */
 @custom-variant wco (&:is(.wco, .wco *));
+@custom-variant wco-windows (&:is(.wco-windows, .wco-windows *));
 
 @theme inline {
   --animate-skeleton: skeleton 2s -1s infinite linear;
@@ -81,6 +82,16 @@
   padding-right: max(env(safe-area-inset-right), 0px);
 }
 
+@media (max-width: 639px) {
+  .electron .t3-titlebar-left-inset-when-sidebar-overlay {
+    padding-left: 90px;
+  }
+
+  .wco .t3-titlebar-left-inset-when-sidebar-overlay {
+    padding-left: calc(env(titlebar-area-x) + 1em);
+  }
+}
+
 /* Suppress all transitions during theme changes */
 .no-transitions,
 .no-transitions *,
@@ -90,12 +101,33 @@
   animation-duration: 0s !important;
 }
 
+/* Chat timeline status animation.
+   `.no-transitions` (theme switches) zeroes this via animation-duration. */
+@keyframes chat-working-dot {
+  0%,
+  60%,
+  100% {
+    opacity: 0.4;
+    transform: scale(1);
+  }
+  30% {
+    opacity: 1;
+    transform: scale(1.25);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .chat-working-dot {
+    animation: chat-working-dot 1.2s ease-in-out infinite;
+  }
+}
+
 :root {
   color-scheme: light;
   --radius: 0.625rem;
   --background: var(--color-white);
   --app-chrome-background: var(--background);
-  --app-content-background: --alpha(var(--color-white) / 50%);
+  --app-content-background: --alpha(var(--color-white) / 80%);
   --foreground: var(--color-neutral-800);
   --card: var(--color-white);
   --card-foreground: var(--color-neutral-800);
@@ -216,6 +248,16 @@ body {
   background: transparent !important;
 }
 
+html.electron.wco-windows,
+html.electron.wco-windows body {
+  background: #F4F4F4 !important;
+}
+
+html.electron.wco-windows.dark,
+html.electron.wco-windows.dark body {
+  background: #272727 !important;
+}
+
 #root {
   height: 100%;
   width: 100%;
@@ -296,6 +338,10 @@ body::after {
   border-bottom: 0;
 }
 
+.wco-windows .t3code-dockview-theme {
+  --dv-tabs-and-actions-container-height: env(titlebar-area-height);
+}
+
 .electron .t3code-dockview-theme .dv-tabs-and-actions-container {
   -webkit-app-region: drag;
 }
@@ -325,6 +371,7 @@ body::after {
 
 .t3code-dockview-theme .dv-tabs-container {
   align-items: flex-start;
+  gap: 2px;
   overflow: hidden;
   scrollbar-width: none;
 }
@@ -335,13 +382,23 @@ body::after {
 
 .t3code-dockview-theme .dv-tab {
   box-sizing: border-box;
-  flex: 1 1 160px;
+  flex: 0 0 auto;
   height: 48px;
   letter-spacing: 0;
-  max-width: 200px;
+  max-width: none;
   min-width: 96px;
   overflow: visible;
   padding: 8px 0;
+  width: max-content;
+}
+
+.wco-windows .t3code-dockview-theme .dv-tab {
+  height: env(titlebar-area-height);
+  padding: 4px 0;
+}
+
+.t3code-dockview-theme .dv-tabs-container[data-tab-sizing="fill"] .dv-tab {
+  flex: 1 1 0;
   width: auto;
 }
 
@@ -354,6 +411,12 @@ body::after {
   border-color: transparent;
   border-radius: 0;
   box-shadow: none;
+}
+
+.t3code-dockview-theme .dv-tabs-and-actions-container.dv-single-tab .dv-tab {
+  flex: 1 1 auto;
+  max-width: none;
+  width: auto;
 }
 
 .t3code-dockview-theme .dv-tabs-and-actions-container.dv-single-tab .dv-tab:focus::after,
@@ -534,6 +597,10 @@ label:has(> select#reasoning-effort) select {
   margin-top: 0.25rem;
 }
 
+.chat-markdown strong {
+  font-weight: 550;
+}
+
 .chat-markdown a {
   color: var(--info-foreground);
   text-decoration: underline;
@@ -553,10 +620,14 @@ label:has(> select#reasoning-effort) select {
 .chat-markdown :not(pre) > code {
   border: 1px solid var(--border);
   border-radius: 0.375rem;
-  background: var(--muted);
+  background: rgb(239 239 239 / 95%);
   padding: 0.1rem 0.35rem;
   color: var(--foreground);
   font-size: 0.75rem;
+}
+
+.dark .chat-markdown :not(pre) > code {
+  background: var(--muted);
 }
 
 .chat-markdown-file-link {
@@ -603,10 +674,38 @@ label:has(> select#reasoning-effort) select {
 .chat-markdown pre {
   max-width: 100%;
   overflow-x: auto;
+  overflow-y: hidden;
   border: 1px solid var(--border);
   border-radius: 0.75rem;
+  background: rgb(239 239 239 / 95%);
+  padding: 0.8rem 0.9rem 1rem;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--foreground) 18%, transparent) transparent;
+}
+
+.chat-markdown pre::-webkit-scrollbar:horizontal {
+  height: 5px;
+}
+
+.chat-markdown pre::-webkit-scrollbar-track {
+  background: transparent;
+  margin-inline: 0.75rem;
+}
+
+.chat-markdown pre::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--foreground) 20%, transparent);
+  background-clip: content-box;
+}
+
+.chat-markdown pre::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--foreground) 32%, transparent);
+  background-clip: content-box;
+}
+
+.dark .chat-markdown pre {
   background: var(--muted);
-  padding: 0.8rem 0.9rem;
 }
 
 .chat-markdown pre code {
@@ -637,6 +736,8 @@ label:has(> select#reasoning-effort) select {
 .chat-markdown .chat-markdown-codeblock {
   --chat-markdown-codeblock-copy-button-space: 1.5rem;
   position: relative;
+  overflow: hidden;
+  border-radius: 0.75rem;
   margin: 0.65rem 0;
 }
 
@@ -680,7 +781,11 @@ label:has(> select#reasoning-effort) select {
 }
 
 .chat-markdown .chat-markdown-shiki .shiki {
-  background: color-mix(in srgb, var(--muted) 78%, var(--background)) !important;
+  background: rgb(239 239 239 / 95%) !important;
+}
+
+.dark .chat-markdown .chat-markdown-shiki .shiki {
+  background: var(--muted) !important;
 }
 
 .chat-markdown table {

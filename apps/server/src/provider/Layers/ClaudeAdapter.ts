@@ -192,6 +192,13 @@ interface ClaudeQueryRuntime extends AsyncIterable<SDKMessage> {
   readonly close: () => void;
 }
 
+interface ClaudeSessionStopOptions {
+  readonly emitExitEvent?: boolean;
+  readonly exitKind?: "graceful" | "error";
+  readonly reason?: string;
+  readonly recoverable?: boolean;
+}
+
 export interface ClaudeAdapterLiveOptions {
   readonly instanceId?: ProviderInstanceId;
   readonly environment?: NodeJS.ProcessEnv;
@@ -1606,13 +1613,17 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
 
     const updatedAt = yield* nowIso;
     context.turnState = undefined;
-    context.session = {
+    const nextSession = {
       ...context.session,
       status: "ready",
       activeTurnId: undefined,
       updatedAt,
       ...(status === "failed" && errorMessage ? { lastError: errorMessage } : {}),
-    };
+    } as ProviderSession & Record<string, unknown>;
+    if (status !== "failed") {
+      delete (nextSession as Record<string, unknown>).lastError;
+    }
+    context.session = nextSession;
     yield* updateResumeCursor(context);
   });
 
@@ -2421,6 +2432,10 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
       return;
     }
 
+    let exitKind: "graceful" | "error" = "graceful";
+    let exitReason = "Session stopped";
+    let recoverable: boolean | undefined;
+
     if (Exit.isFailure(exit)) {
       if (isClaudeInterruptedCause(exit.cause)) {
         if (context.turnState) {
@@ -2434,6 +2449,9 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         const message = messageFromClaudeStreamCause(exit.cause, "Claude runtime stream failed.");
         yield* emitRuntimeError(context, message, Cause.pretty(exit.cause));
         yield* completeTurn(context, "failed", message);
+        exitKind = "error";
+        exitReason = message;
+        recoverable = false;
       }
     } else if (context.turnState) {
       yield* completeTurn(context, "interrupted", "Claude runtime stream ended.");
@@ -2441,16 +2459,21 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
 
     yield* stopSessionInternal(context, {
       emitExitEvent: true,
+      exitKind,
+      reason: exitReason,
+      ...(recoverable !== undefined ? { recoverable } : {}),
     });
   });
 
   const stopSessionInternal = Effect.fn("stopSessionInternal")(function* (
     context: ClaudeSessionContext,
-    options?: { readonly emitExitEvent?: boolean },
+    options?: ClaudeSessionStopOptions,
   ) {
     if (context.stopped) return;
 
     context.stopped = true;
+    const exitKind = options?.exitKind ?? "graceful";
+    const exitReason = options?.reason ?? "Session stopped";
 
     for (const [requestId, pending] of context.pendingApprovals) {
       yield* Deferred.succeed(pending.decision, "cancel");
@@ -2502,8 +2525,9 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     const updatedAt = yield* nowIso;
     context.session = {
       ...context.session,
-      status: "closed",
+      status: exitKind === "error" ? "error" : "closed",
       activeTurnId: undefined,
+      ...(exitKind === "error" ? { lastError: exitReason } : {}),
       updatedAt,
     };
 
@@ -2516,8 +2540,9 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         createdAt: stamp.createdAt,
         threadId: context.session.threadId,
         payload: {
-          reason: "Session stopped",
-          exitKind: "graceful",
+          reason: exitReason,
+          exitKind,
+          ...(options?.recoverable !== undefined ? { recoverable: options.recoverable } : {}),
         },
         providerRefs: {},
       });

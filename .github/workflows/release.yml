@@ -587,7 +587,11 @@ jobs:
   deploy_web:
     name: Deploy hosted web app
     needs: [preflight, release]
-    if: ${{ !failure() && !cancelled() && needs.preflight.result == 'success' && needs.release.result == 'success' }}
+    if: |
+      !failure() && !cancelled() &&
+      needs.preflight.result == 'success' &&
+      needs.release.result == 'success' &&
+      vars.T3CODE_WEB_DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:
@@ -760,7 +764,7 @@ jobs:
       always() && !cancelled() &&
       needs.preflight.result == 'success' &&
       needs.release.result == 'success' &&
-      needs.deploy_web.result == 'success' &&
+      (needs.deploy_web.result == 'success' || needs.deploy_web.result == 'skipped') &&
       (needs.finalize.result == 'success' || needs.finalize.result == 'skipped')
     needs: [preflight, release, deploy_web, finalize]
     runs-on: ubuntu-24.04

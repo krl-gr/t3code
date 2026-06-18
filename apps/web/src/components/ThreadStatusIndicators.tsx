@@ -13,6 +13,7 @@ import { useThreadRunningTerminalIds } from "../terminalSessionState";
 import { useUiStateStore } from "../uiStateStore";
 import { resolveChangeRequestPresentation } from "../sourceControlPresentation";
 import { resolveThreadStatusPill, type ThreadStatusPill } from "./Sidebar.logic";
+import { SIDEBAR_LABEL_TEXT_CLASS } from "./sidebar/sidebarTextStyles";
 import type { SidebarThreadSummary } from "../types";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 
@@ -119,7 +120,7 @@ export function ThreadStatusLabel({
   return (
     <span
       title={status.label}
-      className={`inline-flex items-center gap-1 text-[10px] ${status.colorClass}`}
+      className={`inline-flex items-center gap-1 ${SIDEBAR_LABEL_TEXT_CLASS} ${status.colorClass}`}
     >
       <span
         className={`h-1.5 w-1.5 rounded-full ${status.dotClass} ${

@@ -1,9 +1,15 @@
 import assert from "node:assert/strict";
 
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 import { describe, it } from "vitest";
-import { ThreadId } from "@t3tools/contracts";
+import { it as effectIt } from "@effect/vitest";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
+import { ThreadId, type ProviderApprovalDecision, type ProviderEvent } from "@t3tools/contracts";
 import * as CodexErrors from "effect-codex-app-server/errors";
 import * as CodexRpc from "effect-codex-app-server/rpc";
 
@@ -15,9 +21,15 @@ import {
 import {
   buildTurnStartParams,
   isRecoverableThreadResumeError,
+  makeCodexSessionRuntime,
   openCodexThread,
+  type CodexSessionRuntimeShape,
 } from "./CodexSessionRuntime.ts";
 const isCodexAppServerRequestError = Schema.is(CodexErrors.CodexAppServerRequestError);
+
+const permissionsPeerPath = Effect.map(Effect.service(Path.Path), (path) =>
+  path.join(import.meta.dirname, "../../../test/fixtures/codex-runtime-permissions-peer.ts"),
+);
 
 function makeThreadOpenResponse(
   threadId: string,
@@ -41,6 +53,145 @@ function makeThreadOpenResponse(
     },
   } as unknown as CodexRpc.ClientRequestResponsesByMethod["thread/start"];
 }
+
+function isPermissionsRequestEvent(
+  event: ProviderEvent,
+): event is ProviderEvent & { kind: "request"; requestKind: "permissions" } {
+  return event.kind === "request" && event.requestKind === "permissions";
+}
+
+function isRelevantPermissionsNotification(event: ProviderEvent): boolean {
+  return (
+    event.kind === "notification" &&
+    (event.method === "item/requestApproval/decision" ||
+      event.method === "serverRequest/resolved" ||
+      event.method === "item/agentMessage/delta")
+  );
+}
+
+function permissionsResultFromEvents(events: ReadonlyArray<ProviderEvent>): {
+  readonly interrupted: boolean;
+  readonly result: unknown;
+} {
+  const resultEvent = events.find(
+    (event) => event.kind === "notification" && event.method === "item/agentMessage/delta",
+  );
+  if (
+    !resultEvent ||
+    resultEvent.kind !== "notification" ||
+    resultEvent.method !== "item/agentMessage/delta"
+  ) {
+    assert.fail("Expected permissions result notification");
+  }
+  return JSON.parse(resultEvent.textDelta ?? "{}") as {
+    readonly interrupted: boolean;
+    readonly result: unknown;
+  };
+}
+
+function makePermissionsPeerSpawner(
+  realSpawner: ChildProcessSpawner.ChildProcessSpawner["Service"],
+  peerPath: string,
+  peerCwd: string,
+  resolvedRequestIdMode?: "item-id",
+) {
+  return ChildProcessSpawner.make(() =>
+    realSpawner.spawn(
+      ChildProcess.make("bun", ["run", peerPath], {
+        cwd: peerCwd,
+        env: {
+          ...process.env,
+          ...(resolvedRequestIdMode
+            ? { T3_CODEX_TEST_RESOLVED_REQUEST_ID_MODE: resolvedRequestIdMode }
+            : {}),
+        },
+        shell: process.platform === "win32",
+      }),
+    ),
+  );
+}
+
+const runWithPermissionsPeer = <A, E, R>(
+  test: (runtime: CodexSessionRuntimeShape) => Effect.Effect<A, E, R>,
+  options: { readonly resolvedRequestIdMode?: "item-id" } = {},
+) =>
+  Effect.gen(function* () {
+    const realSpawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    const path = yield* Path.Path;
+    const peerPath = yield* permissionsPeerPath;
+    const peerSpawner = makePermissionsPeerSpawner(
+      realSpawner,
+      peerPath,
+      path.dirname(peerPath),
+      options.resolvedRequestIdMode,
+    );
+
+    return yield* Effect.scoped(
+      Effect.gen(function* () {
+        const runtime = yield* makeCodexSessionRuntime({
+          threadId: ThreadId.make("thread-permissions"),
+          binaryPath: "codex",
+          cwd: "/tmp/project",
+          runtimeMode: "full-access",
+        });
+        yield* runtime.start();
+        return yield* test(runtime);
+      }).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, peerSpawner)),
+    );
+  });
+
+const exercisePermissionsApproval = (
+  runtime: CodexSessionRuntimeShape,
+  decision: ProviderApprovalDecision,
+) =>
+  Effect.gen(function* () {
+    const requestFiber = yield* Stream.filter(
+      runtime.events,
+      isPermissionsRequestEvent,
+    ).pipe(Stream.runHead, Effect.forkChild);
+
+    yield* runtime.sendTurn({ input: "Need more permissions" });
+
+    const requestOption = yield* Fiber.join(requestFiber);
+    assert.equal(requestOption._tag, "Some");
+    if (requestOption._tag !== "Some") {
+      assert.fail("Expected permissions request event");
+    }
+    const request = requestOption.value;
+    const requestId = request.requestId;
+    if (requestId === undefined) {
+      assert.fail("Expected permissions request id");
+    }
+
+    const notificationsFiber = yield* Stream.filter(
+      runtime.events,
+      isRelevantPermissionsNotification,
+    ).pipe(Stream.take(3), Stream.runCollect, Effect.forkChild);
+
+    yield* runtime.respondToRequest(requestId, decision);
+
+    const notifications = Array.from(yield* Fiber.join(notificationsFiber));
+    const decisionEvent = notifications.find(
+      (event) => event.kind === "notification" && event.method === "item/requestApproval/decision",
+    );
+    const resolvedEvent = notifications.find(
+      (event) => event.kind === "notification" && event.method === "serverRequest/resolved",
+    );
+
+    assert.equal(decisionEvent?.kind, "notification");
+    assert.equal(decisionEvent?.requestId, requestId);
+    assert.equal(decisionEvent?.requestKind, "permissions");
+    assert.deepStrictEqual(decisionEvent?.payload, {
+      requestId,
+      requestKind: "permissions",
+      decision,
+    });
+    assert.equal(resolvedEvent?.kind, "notification");
+    assert.equal(resolvedEvent?.requestId, requestId);
+    assert.equal(resolvedEvent?.requestKind, "permissions");
+
+    return permissionsResultFromEvents(notifications);
+  });
 
 describe("buildTurnStartParams", () => {
   it("includes plan collaboration mode when requested", () => {
@@ -297,4 +448,112 @@ describe("openCodexThread", () => {
         error.errorMessage === "timed out waiting for server",
     );
   });
+});
+
+effectIt.layer(NodeServices.layer)("CodexSessionRuntime permissions approvals", (it) => {
+  it.effect("grants requested permissions for one turn when accepted", () =>
+    runWithPermissionsPeer((runtime) =>
+      Effect.gen(function* () {
+        const result = yield* exercisePermissionsApproval(runtime, "accept");
+
+        assert.deepStrictEqual(result, {
+          interrupted: false,
+          result: {
+            permissions: {
+              fileSystem: {
+                read: ["/tmp/project"],
+                write: ["/tmp/project/src"],
+              },
+              network: {
+                enabled: true,
+              },
+            },
+            scope: "turn",
+          },
+        });
+      }),
+    ),
+  );
+
+  it.effect("grants requested permissions for the session when accepted for session", () =>
+    runWithPermissionsPeer((runtime) =>
+      Effect.gen(function* () {
+        const result = yield* exercisePermissionsApproval(runtime, "acceptForSession");
+
+        assert.deepStrictEqual(result, {
+          interrupted: false,
+          result: {
+            permissions: {
+              fileSystem: {
+                read: ["/tmp/project"],
+                write: ["/tmp/project/src"],
+              },
+              network: {
+                enabled: true,
+              },
+            },
+            scope: "session",
+          },
+        });
+      }),
+    ),
+  );
+
+  it.effect("returns an empty turn-scoped grant when declined", () =>
+    runWithPermissionsPeer((runtime) =>
+      Effect.gen(function* () {
+        const result = yield* exercisePermissionsApproval(runtime, "decline");
+
+        assert.deepStrictEqual(result, {
+          interrupted: false,
+          result: {
+            permissions: {},
+            scope: "turn",
+          },
+        });
+      }),
+    ),
+  );
+
+  it.effect("interrupts the active turn before resolving a cancelled permissions approval", () =>
+    runWithPermissionsPeer((runtime) =>
+      Effect.gen(function* () {
+        const result = yield* exercisePermissionsApproval(runtime, "cancel");
+
+        assert.deepStrictEqual(result, {
+          interrupted: true,
+          result: {
+            permissions: {},
+            scope: "turn",
+          },
+        });
+      }),
+    ),
+  );
+
+  it.effect("keeps item-id resolved notifications correlated for legacy app-server builds", () =>
+    runWithPermissionsPeer(
+      (runtime) =>
+        Effect.gen(function* () {
+          const result = yield* exercisePermissionsApproval(runtime, "accept");
+
+          assert.deepStrictEqual(result, {
+            interrupted: false,
+            result: {
+              permissions: {
+                fileSystem: {
+                  read: ["/tmp/project"],
+                  write: ["/tmp/project/src"],
+                },
+                network: {
+                  enabled: true,
+                },
+              },
+              scope: "turn",
+            },
+          });
+        }),
+      { resolvedRequestIdMode: "item-id" },
+    ),
+  );
 });

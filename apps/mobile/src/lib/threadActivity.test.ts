@@ -100,6 +100,188 @@ describe("buildThreadFeed", () => {
         id: "activity-latest",
         createdAt: "2026-04-01T00:00:03.000Z",
         summary: "Runtime warning",
+        detail: "Latest warning",
+        status: null,
+        severity: "warning",
+      },
+    ]);
+  });
+
+  it("labels accepted approval resolutions", () => {
+    const thread = makeThread({
+      id: ThreadId.make("thread-approval"),
+      projectId: ProjectId.make("project-1"),
+      title: "Approval thread",
+      latestTurn: {
+        turnId: TurnId.make("turn-approval"),
+        state: "running",
+        requestedAt: "2026-04-01T00:00:00.000Z",
+        startedAt: "2026-04-01T00:00:01.000Z",
+        completedAt: null,
+        assistantMessageId: null,
+      },
+      activities: [
+        makeActivity({
+          id: EventId.make("approval-accepted"),
+          kind: "approval.resolved",
+          summary: "Approval resolved",
+          tone: "approval",
+          createdAt: "2026-04-01T00:00:02.000Z",
+          turnId: TurnId.make("turn-approval"),
+          payload: {
+            requestKind: "command",
+            decision: "accept",
+          },
+        }),
+      ],
+    });
+
+    const feed = buildThreadFeed(thread, [], null);
+    const group = feed[0];
+
+    expect(group).toMatchObject({
+      type: "activity-group",
+    });
+    if (!group || group.type !== "activity-group") {
+      return;
+    }
+
+    expect(group.activities).toEqual([
+      {
+        id: "approval-accepted",
+        createdAt: "2026-04-01T00:00:02.000Z",
+        summary: "Approval accepted",
+        detail: "command",
+        status: null,
+      },
+    ]);
+  });
+
+  it("keeps task completion rows hidden on the compact mobile feed", () => {
+    const thread = makeThread({
+      id: ThreadId.make("thread-task"),
+      projectId: ProjectId.make("project-1"),
+      title: "Task thread",
+      latestTurn: {
+        turnId: TurnId.make("turn-task"),
+        state: "completed",
+        requestedAt: "2026-04-01T00:00:00.000Z",
+        startedAt: "2026-04-01T00:00:01.000Z",
+        completedAt: "2026-04-01T00:00:03.000Z",
+        assistantMessageId: null,
+      },
+      activities: [
+        makeActivity({
+          id: EventId.make("task-progress"),
+          kind: "task.progress",
+          summary: "Reviewing tests",
+          createdAt: "2026-04-01T00:00:02.000Z",
+          turnId: TurnId.make("turn-task"),
+          payload: {},
+        }),
+        makeActivity({
+          id: EventId.make("task-completed"),
+          kind: "task.completed",
+          summary: "Review complete",
+          createdAt: "2026-04-01T00:00:03.000Z",
+          turnId: TurnId.make("turn-task"),
+          payload: {},
+        }),
+      ],
+    });
+
+    const feed = buildThreadFeed(thread, [], null);
+    const group = feed[0];
+
+    expect(group).toMatchObject({
+      type: "activity-group",
+    });
+    if (!group || group.type !== "activity-group") {
+      return;
+    }
+
+    expect(group.activities).toEqual([
+      {
+        id: "task-progress",
+        createdAt: "2026-04-01T00:00:02.000Z",
+        summary: "Reviewing tests",
+        detail: null,
+        status: null,
+      },
+    ]);
+  });
+
+  it("uses semantic labels for generic tool titles", () => {
+    const thread = makeThread({
+      id: ThreadId.make("thread-generic-tool"),
+      projectId: ProjectId.make("project-1"),
+      title: "Generic tool thread",
+      latestTurn: {
+        turnId: TurnId.make("turn-tool"),
+        state: "running",
+        requestedAt: "2026-04-01T00:00:00.000Z",
+        startedAt: "2026-04-01T00:00:01.000Z",
+        completedAt: null,
+        assistantMessageId: null,
+      },
+      activities: [
+        makeActivity({
+          id: EventId.make("generic-read-tool"),
+          kind: "tool.completed",
+          tone: "tool",
+          summary: "Tool call completed",
+          createdAt: "2026-04-01T00:00:02.000Z",
+          turnId: TurnId.make("turn-tool"),
+          payload: {
+            itemType: "dynamic_tool_call",
+            title: "Tool call",
+            detail: "Tool call",
+            data: {
+              kind: "read",
+              rawInput: {},
+            },
+          },
+        }),
+        makeActivity({
+          id: EventId.make("generic-web-search-tool"),
+          kind: "tool.completed",
+          tone: "tool",
+          summary: "Tool call completed",
+          createdAt: "2026-04-01T00:00:03.000Z",
+          turnId: TurnId.make("turn-tool"),
+          payload: {
+            itemType: "web_search",
+            title: "Tool",
+            data: {
+              query: "latest release notes",
+            },
+          },
+        }),
+      ],
+    });
+
+    const feed = buildThreadFeed(thread, [], null);
+    const group = feed[0];
+
+    expect(group).toMatchObject({
+      type: "activity-group",
+    });
+    if (!group || group.type !== "activity-group") {
+      return;
+    }
+
+    expect(group.activities).toEqual([
+      {
+        id: "generic-read-tool",
+        createdAt: "2026-04-01T00:00:02.000Z",
+        summary: "Read file",
+        detail: null,
+        status: null,
+      },
+      {
+        id: "generic-web-search-tool",
+        createdAt: "2026-04-01T00:00:03.000Z",
+        summary: "Web search",
         detail: null,
         status: null,
       },

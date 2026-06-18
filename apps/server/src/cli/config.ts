@@ -210,6 +210,7 @@ export const resolveServerConfig = (
   options?: {
     readonly startupPresentation?: StartupPresentation;
     readonly forceAutoBootstrapProjectFromCwd?: boolean;
+    readonly ignoreEnvDevUrl?: boolean;
   },
 ) =>
   Effect.gen(function* () {
@@ -263,8 +264,9 @@ export const resolveServerConfig = (
         },
       },
     );
+    const envDevUrl = options?.ignoreEnvDevUrl === true ? undefined : env.devUrl;
     const devUrl = Option.getOrElse(
-      resolveOptionPrecedence(normalizedFlags.devUrl, Option.fromUndefinedOr(env.devUrl)),
+      resolveOptionPrecedence(normalizedFlags.devUrl, Option.fromUndefinedOr(envDevUrl)),
       () => undefined,
     );
     const baseDir = yield* resolveBaseDir(
@@ -399,6 +401,31 @@ export const resolveCliAuthConfig = (
       tailscaleServePort: Option.none(),
     },
     cliLogLevel,
+  );
+
+export const resolveProjectCliConfig = (
+  flags: CliAuthLocationFlags,
+  cliLogLevel: Option.Option<LogLevel.LogLevel>,
+) =>
+  resolveServerConfig(
+    {
+      mode: Option.none(),
+      port: Option.none(),
+      host: Option.none(),
+      baseDir: flags.baseDir,
+      cwd: Option.none(),
+      devUrl: Option.none(),
+      noBrowser: Option.none(),
+      bootstrapFd: Option.none(),
+      autoBootstrapProjectFromCwd: Option.none(),
+      logWebSocketEvents: Option.none(),
+      tailscaleServeEnabled: Option.none(),
+      tailscaleServePort: Option.none(),
+    },
+    cliLogLevel,
+    {
+      ignoreEnvDevUrl: true,
+    },
   );
 
 const DurationShorthandPattern = /^(?<value>\d+)(?<unit>ms|s|m|h|d|w)$/i;

@@ -31,6 +31,10 @@ import { useComposerDraftStore, DraftId } from "../../composerDraftStore";
 import { getProviderModelCapabilities } from "../../providerModels";
 import { cn } from "~/lib/utils";
 import { COMPOSER_CONTROL_TEXT_TRIGGER_CLASS } from "./composerControlStyles";
+import {
+  SIDEBAR_LABEL_TEXT_CLASS,
+  SIDEBAR_MUTED_TEXT_CLASS,
+} from "../sidebar/sidebarTextStyles";
 
 type ProviderOptions = ReadonlyArray<ProviderOptionSelection>;
 
@@ -290,11 +294,19 @@ export const TraitsMenuContent = memo(function TraitsMenuContentImpl({
         <div key={descriptor.id}>
           {index > 0 ? <MenuDivider /> : null}
           <MenuGroup>
-            <div className="px-2 pt-1.5 pb-1 font-medium text-muted-foreground text-xs">
+            <div
+              className={cn(
+                "px-2 pt-1.5 pb-1",
+                SIDEBAR_MUTED_TEXT_CLASS,
+                SIDEBAR_LABEL_TEXT_CLASS,
+              )}
+            >
               {descriptor.label}
             </div>
             {ultrathinkInBodyText && descriptor.id === primarySelectDescriptor?.id ? (
-              <div className="px-2 pb-1.5 text-muted-foreground/80 text-xs">
+              <div
+                className={cn("px-2 pb-1.5", SIDEBAR_MUTED_TEXT_CLASS, SIDEBAR_LABEL_TEXT_CLASS)}
+              >
                 Your prompt contains &quot;ultrathink&quot; in the text. Remove it to change this
                 option.
               </div>
@@ -325,7 +337,7 @@ export const TraitsMenuContent = memo(function TraitsMenuContentImpl({
         <div key={descriptor.id}>
           {index > 0 || selectDescriptors.length > 0 ? <MenuDivider /> : null}
           <MenuGroup>
-            <div className="px-2 py-1.5 font-medium text-muted-foreground text-xs">
+            <div className={cn("px-2 py-1.5", SIDEBAR_MUTED_TEXT_CLASS, SIDEBAR_LABEL_TEXT_CLASS)}>
               {descriptor.label}
             </div>
             <MenuRadioGroup

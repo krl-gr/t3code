@@ -30,7 +30,7 @@ This document covers the unified release workflow for stable and nightly desktop
 - Publishes the CLI package (`apps/server`, npm package `@updotcomputer/cli`) with OIDC trusted publishing from the same workflow file:
   - stable releases publish npm dist-tag `latest`
   - nightly releases publish npm dist-tag `nightly`
-- Deploys the hosted web app to Vercel only after a release is published:
+- Optionally deploys the hosted web app to Vercel after a release is published when `T3CODE_WEB_DEPLOY_ENABLED` is set to `true`:
   - stable releases are aliased to the `latest` hosted app channel
   - nightly releases are aliased to the `nightly` hosted app channel
 - Signing is optional and auto-detected per platform from secrets.
@@ -39,10 +39,15 @@ This document covers the unified release workflow for stable and nightly desktop
 
 The hosted app is intentionally not deployed by Vercel's Git integration. The
 web project disables automatic Git deployments in `apps/web/vercel.ts` via
-`git.deploymentEnabled: false`, and `.github/workflows/release.yml` deploys the
-web app with Vercel CLI after the GitHub Release succeeds.
+`git.deploymentEnabled: false`, and `.github/workflows/release.yml` can deploy
+the web app with Vercel CLI after the GitHub Release succeeds.
 
-Required GitHub Actions secrets:
+Hosted web deployment is disabled by default. Set this GitHub Actions variable
+to enable it:
+
+- `T3CODE_WEB_DEPLOY_ENABLED`: set to `true`
+
+Required GitHub Actions secrets when hosted web deployment is enabled:
 
 - `VERCEL_TOKEN`
 - `VERCEL_ORG_ID`

@@ -2,6 +2,7 @@ import { type ProviderInteractionMode, type RuntimeMode } from "@t3tools/contrac
 import { memo, type ReactNode } from "react";
 import { EllipsisIcon, ListTodoIcon } from "lucide-react";
 import { INTERACTION_MODE_ORDER, interactionModeConfig } from "../../interactionModes";
+import { cn } from "~/lib/utils";
 import { Button } from "../ui/button";
 import {
   Menu,
@@ -13,6 +14,10 @@ import {
   MenuTrigger,
 } from "../ui/menu";
 import { COMPOSER_CONTROL_ICON_TRIGGER_CLASS } from "./composerControlStyles";
+import {
+  SIDEBAR_LABEL_TEXT_CLASS,
+  SIDEBAR_MUTED_TEXT_CLASS,
+} from "../sidebar/sidebarTextStyles";
 
 export const CompactComposerControlsMenu = memo(function CompactComposerControlsMenu(props: {
   activePlan: boolean;
@@ -21,11 +26,23 @@ export const CompactComposerControlsMenu = memo(function CompactComposerControls
   planSidebarOpen: boolean;
   runtimeMode: RuntimeMode;
   showInteractionModeToggle: boolean;
+  showRuntimeModeToggle?: boolean;
+  showPlanToggle?: boolean;
   traitsMenuContent?: ReactNode;
   onInteractionModeChange: (mode: ProviderInteractionMode) => void;
   onTogglePlanSidebar: () => void;
   onRuntimeModeChange: (mode: RuntimeMode) => void;
 }) {
+  const showRuntimeModeToggle = props.showRuntimeModeToggle ?? true;
+  const showPlanToggle = props.showPlanToggle ?? props.activePlan;
+  const showInteractionModeToggle = props.showInteractionModeToggle;
+  const hasMenuContent =
+    props.traitsMenuContent ||
+    showInteractionModeToggle ||
+    showRuntimeModeToggle ||
+    showPlanToggle;
+  if (!hasMenuContent) return null;
+
   return (
     <Menu>
       <MenuTrigger
@@ -44,12 +61,16 @@ export const CompactComposerControlsMenu = memo(function CompactComposerControls
         {props.traitsMenuContent ? (
           <>
             {props.traitsMenuContent}
-            <MenuDivider />
+            {showInteractionModeToggle || showRuntimeModeToggle || showPlanToggle ? (
+              <MenuDivider />
+            ) : null}
           </>
         ) : null}
-        {props.showInteractionModeToggle ? (
+        {showInteractionModeToggle ? (
           <>
-            <div className="px-2 py-1.5 font-medium text-muted-foreground text-xs">Mode</div>
+            <div className={cn("px-2 py-1.5", SIDEBAR_MUTED_TEXT_CLASS, SIDEBAR_LABEL_TEXT_CLASS)}>
+              Mode
+            </div>
             <MenuRadioGroup
               value={props.interactionMode}
               onValueChange={(value) => {
@@ -63,22 +84,28 @@ export const CompactComposerControlsMenu = memo(function CompactComposerControls
                 </MenuRadioItem>
               ))}
             </MenuRadioGroup>
-            <MenuDivider />
+            {showRuntimeModeToggle || showPlanToggle ? <MenuDivider /> : null}
           </>
         ) : null}
-        <div className="px-2 py-1.5 font-medium text-muted-foreground text-xs">Access</div>
-        <MenuRadioGroup
-          value={props.runtimeMode}
-          onValueChange={(value) => {
-            if (!value || value === props.runtimeMode) return;
-            props.onRuntimeModeChange(value as RuntimeMode);
-          }}
-        >
-          <MenuRadioItem value="approval-required">Supervised</MenuRadioItem>
-          <MenuRadioItem value="auto-accept-edits">Auto-accept edits</MenuRadioItem>
-          <MenuRadioItem value="full-access">Full access</MenuRadioItem>
-        </MenuRadioGroup>
-        {props.activePlan ? (
+        {showRuntimeModeToggle ? (
+          <>
+            <div className={cn("px-2 py-1.5", SIDEBAR_MUTED_TEXT_CLASS, SIDEBAR_LABEL_TEXT_CLASS)}>
+              Access
+            </div>
+            <MenuRadioGroup
+              value={props.runtimeMode}
+              onValueChange={(value) => {
+                if (!value || value === props.runtimeMode) return;
+                props.onRuntimeModeChange(value as RuntimeMode);
+              }}
+            >
+              <MenuRadioItem value="approval-required">Supervised</MenuRadioItem>
+              <MenuRadioItem value="auto-accept-edits">Auto-accept edits</MenuRadioItem>
+              <MenuRadioItem value="full-access">Full access</MenuRadioItem>
+            </MenuRadioGroup>
+          </>
+        ) : null}
+        {showPlanToggle ? (
           <>
             <MenuDivider />
             <MenuItem onClick={props.onTogglePlanSidebar}>

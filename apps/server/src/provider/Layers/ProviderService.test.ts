@@ -1221,6 +1221,60 @@ routing.layer("ProviderServiceLive routing", (it) => {
     }),
   );
 
+  it.effect("clears stale persisted runtime lastError when sending a new turn", () =>
+    Effect.gen(function* () {
+      const provider = yield* ProviderService;
+      const runtimeRepository = yield* ProviderSessionRuntimeRepository;
+
+      const threadId = asThreadId("thread-runtime-stale-error");
+      const session = yield* provider.startSession(threadId, {
+        provider: ProviderDriverKind.make("codex"),
+        providerInstanceId: codexInstanceId,
+        threadId,
+        runtimeMode: "full-access",
+      });
+      yield* runtimeRepository.upsert({
+        threadId: session.threadId,
+        providerName: "codex",
+        providerInstanceId: codexInstanceId,
+        adapterKey: "codex",
+        runtimeMode: "full-access",
+        status: "error",
+        lastSeenAt: "2026-01-01T00:00:00.000Z",
+        resumeCursor: session.resumeCursor ?? null,
+        runtimePayload: {
+          cwd: session.cwd ?? null,
+          model: null,
+          activeTurnId: null,
+          lastError: "old provider failure",
+        },
+      });
+
+      yield* provider.sendTurn({
+        threadId: session.threadId,
+        input: "retry",
+        attachments: [],
+      });
+
+      const runningRuntime = yield* runtimeRepository.getByThreadId({
+        threadId: session.threadId,
+      });
+      assert.equal(Option.isSome(runningRuntime), true);
+      if (Option.isSome(runningRuntime)) {
+        const payload = runningRuntime.value.runtimePayload;
+        assert.equal(payload !== null && typeof payload === "object", true);
+        if (payload !== null && typeof payload === "object" && !Array.isArray(payload)) {
+          const runtimePayload = payload as {
+            activeTurnId: string | null;
+            lastError: string | null;
+          };
+          assert.equal(runtimePayload.activeTurnId, `turn-${String(session.threadId)}`);
+          assert.equal(runtimePayload.lastError, null);
+        }
+      }
+    }),
+  );
+
   it.effect("reuses persisted resume cursor when startSession is called after a restart", () =>
     Effect.gen(function* () {
       const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "t3-provider-service-start-"));

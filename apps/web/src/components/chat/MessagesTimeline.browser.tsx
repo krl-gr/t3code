@@ -127,7 +127,88 @@ describe("MessagesTimeline", () => {
       await expect
         .element(page.getByText("Send a message to start the conversation."))
         .not.toBeInTheDocument();
-      await expect.element(page.getByText("Thinking - Inspecting repository state")).toBeVisible();
+      await expect.element(page.getByRole("button", { name: /Work details/ })).toBeVisible();
+    } finally {
+      await screen.unmount();
+    }
+  });
+
+  it("hides active process triggers while keeping completed process accordions", async () => {
+    const firstAction = "Ran command - sed -n 1,5p apps/web/src/store.ts";
+    const latestAction = /Ran command - rg -n latest apps\/web\/src/;
+    const props = buildProps();
+    const timelineEntries = [
+      {
+        id: "work-entry-1",
+        kind: "work" as const,
+        createdAt: "2026-04-13T12:00:00.000Z",
+        entry: {
+          id: "work-1",
+          createdAt: "2026-04-13T12:00:00.000Z",
+          label: "Ran command",
+          tone: "tool" as const,
+          command: "sed -n 1,5p apps/web/src/store.ts",
+        },
+      },
+      {
+        id: "work-entry-2",
+        kind: "work" as const,
+        createdAt: "2026-04-13T12:00:01.000Z",
+        entry: {
+          id: "work-2",
+          createdAt: "2026-04-13T12:00:01.000Z",
+          label: "Ran command",
+          tone: "tool" as const,
+          command: "rg -n latest apps/web/src",
+        },
+      },
+    ];
+    const screen = await render(
+      <MessagesTimeline
+        {...props}
+        isWorking
+        activeTurnInProgress
+        activeTurnStartedAt="2026-04-13T12:00:00.000Z"
+        timelineEntries={timelineEntries}
+      />,
+    );
+
+    try {
+      await expect
+        .element(page.getByRole("button", { name: /Working for/ }))
+        .not.toBeInTheDocument();
+      await expect.element(page.getByRole("button", { name: /2 actions/ })).not.toBeInTheDocument();
+      await expect.element(page.getByText(firstAction)).toBeVisible();
+      await expect.element(page.getByText(latestAction)).toBeVisible();
+      await expect.element(page.getByText(/Working for/)).toBeVisible();
+
+      await screen.rerender(<MessagesTimeline {...props} timelineEntries={timelineEntries} />);
+
+      const completedProcessToggle = page.getByRole("button", { name: /Work details/ });
+      await expect.element(completedProcessToggle).toHaveAttribute("aria-expanded", "false");
+      await expect.element(page.getByRole("button", { name: /2 actions/ })).not.toBeInTheDocument();
+      await expect.element(page.getByText(firstAction)).not.toBeInTheDocument();
+      await expect.element(page.getByText(latestAction)).not.toBeInTheDocument();
+
+      await completedProcessToggle.click();
+
+      const collapsedActionToggle = page.getByRole("button", { name: /2 actions/ });
+      await expect.element(completedProcessToggle).toHaveAttribute("aria-expanded", "true");
+      await expect.element(collapsedActionToggle).toHaveAttribute("aria-expanded", "false");
+      await expect.element(page.getByText(firstAction)).not.toBeInTheDocument();
+      await expect.element(page.getByText(latestAction)).not.toBeInTheDocument();
+
+      await collapsedActionToggle.click();
+
+      await expect.element(collapsedActionToggle).toHaveAttribute("aria-expanded", "true");
+      await expect.element(page.getByText(firstAction)).toBeVisible();
+      await expect.element(page.getByText(latestAction)).toBeVisible();
+
+      await completedProcessToggle.click();
+
+      await expect.element(completedProcessToggle).toHaveAttribute("aria-expanded", "false");
+      await expect.element(page.getByText(firstAction)).not.toBeInTheDocument();
+      await expect.element(page.getByText(latestAction)).not.toBeInTheDocument();
     } finally {
       await screen.unmount();
     }
@@ -170,7 +251,9 @@ describe("MessagesTimeline", () => {
         />,
       );
 
-      await expect.element(page.getByText("Thinking - Inspecting repository state")).toBeVisible();
+      await expect
+        .element(page.getByRole("button", { name: /Work details/ }))
+        .toBeVisible();
       expect(props.onIsAtEndChange).toHaveBeenCalledWith(true);
       expect(scrollToEndSpy).toHaveBeenCalledWith({ animated: false });
       expect(requestAnimationFrameSpy).toHaveBeenCalled();

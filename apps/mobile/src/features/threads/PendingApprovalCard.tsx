@@ -13,6 +13,23 @@ export interface PendingApprovalCardProps {
   ) => Promise<void>;
 }
 
+function approvalKindLabel(requestKind: PendingApproval["requestKind"]): string {
+  switch (requestKind) {
+    case "command":
+      return "Command approval";
+    case "file-read":
+      return "File-read approval";
+    case "file-change":
+      return "File-change approval";
+    case "dynamic-tool":
+      return "Computer action approval";
+    case "permissions":
+      return "Permission approval";
+    case "unknown":
+      return "Approval request";
+  }
+}
+
 export function PendingApprovalCard(props: PendingApprovalCardProps) {
   return (
     <View className="gap-2.5 rounded-[20px] border border-neutral-200 bg-neutral-100/80 p-4 dark:border-white/6 dark:bg-neutral-900/80">
@@ -20,7 +37,7 @@ export function PendingApprovalCard(props: PendingApprovalCardProps) {
         Approval needed
       </Text>
       <Text className="font-t3-bold text-lg text-neutral-950 dark:text-neutral-50">
-        {props.approval.requestKind}
+        {approvalKindLabel(props.approval.requestKind)}
       </Text>
       {props.approval.detail ? (
         <Text className="font-sans text-sm leading-5 text-neutral-600 dark:text-neutral-400">

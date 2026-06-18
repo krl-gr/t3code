@@ -41,7 +41,11 @@ import {
 } from "../serverRuntimeState.ts";
 import { WorkspacePathsLive } from "../workspace/Layers/WorkspacePaths.ts";
 import { WorkspacePaths } from "../workspace/Services/WorkspacePaths.ts";
-import { type CliAuthLocationFlags, projectLocationFlags, resolveCliAuthConfig } from "./config.ts";
+import {
+  type CliAuthLocationFlags,
+  projectLocationFlags,
+  resolveProjectCliConfig,
+} from "./config.ts";
 
 type ProjectMutationTarget = {
   readonly id: ProjectId;
@@ -275,7 +279,7 @@ const runProjectMutation = Effect.fn("runProjectMutation")(function* (
   >,
 ) {
   const logLevel = yield* GlobalFlag.LogLevel;
-  const config = yield* resolveCliAuthConfig(flags, logLevel);
+  const config = yield* resolveProjectCliConfig(flags, logLevel);
   const minimumLogLevel = config.logLevel;
 
   return yield* Effect.gen(function* () {

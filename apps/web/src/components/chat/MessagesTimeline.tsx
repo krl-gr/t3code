@@ -10,6 +10,7 @@ import {
   use,
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -28,29 +29,35 @@ import {
 import ChatMarkdown from "../ChatMarkdown";
 import {
   BotIcon,
+  ChevronRightIcon,
+  ChevronsDownUpIcon,
+  ChevronsUpDownIcon,
   CheckIcon,
   CircleAlertIcon,
+  FileDiffIcon,
   EyeIcon,
-  GitBranchIcon,
   GlobeIcon,
   HammerIcon,
   MousePointer2Icon,
+  ShieldIcon,
   type LucideIcon,
   SquarePenIcon,
   TerminalIcon,
-  Undo2Icon,
+  TriangleAlertIcon,
   WrenchIcon,
   ZapIcon,
 } from "lucide-react";
 import { Button } from "../ui/button";
-import { buildExpandedImagePreview, ExpandedImagePreview } from "./ExpandedImagePreview";
+import { AnimatedHeight } from "../AnimatedHeight";
+import { type ExpandedImagePreview } from "./ExpandedImagePreview";
+import { ImageAttachmentPreviewStrip } from "./ImageAttachmentPreviewStrip";
 import { ProposedPlanCard } from "./ProposedPlanCard";
 import { ChangedFilesTree } from "./ChangedFilesTree";
 import { DiffStatLabel, hasNonZeroStat } from "./DiffStatLabel";
+import { MessageForkIcon, MessageUndoIcon } from "./MessageActionIcons";
 import { MessageCopyButton } from "./MessageCopyButton";
 import {
   computeStableMessagesTimelineRows,
-  MAX_VISIBLE_WORK_LOG_ENTRIES,
   deriveMessagesTimelineRows,
   normalizeCompactToolLabel,
   resolveAssistantMessageCopyState,
@@ -66,7 +73,7 @@ import {
 import { cn } from "~/lib/utils";
 import { useUiStateStore } from "~/uiStateStore";
 import { type TimestampFormat } from "@t3tools/contracts/settings";
-import { formatTimestamp } from "../../timestampFormat";
+import { formatShortTimestamp } from "../../timestampFormat";
 
 import {
   buildInlineTerminalContextText,
@@ -110,7 +117,7 @@ interface TimelineRowActivityState {
 const TimelineRowCtx = createContext<TimelineRowSharedState>(null!);
 const TimelineRowActivityCtx = createContext<TimelineRowActivityState>(null!);
 const TIMELINE_LIST_HEADER = <div className="h-3 sm:h-4" />;
-const TIMELINE_LIST_FOOTER = <div className="h-3 sm:h-4" />;
+const TIMELINE_LIST_FOOTER = <div className="h-12 sm:h-14" />;
 const EMPTY_TIMELINE_SKILLS: ReadonlyArray<Pick<ServerProviderSkill, "name" | "displayName">> = [];
 
 // ---------------------------------------------------------------------------
@@ -280,7 +287,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
 
     return (
       <div className="flex h-full items-center justify-center">
-        <p className="max-w-[min(32rem,calc(100%-2rem))] truncate bg-gradient-to-b from-muted-foreground/45 to-muted-foreground/20 bg-clip-text text-center text-2xl font-medium text-transparent tracking-normal">
+        <p className="max-w-[min(32rem,calc(100%-2rem))] truncate text-center text-sm leading-relaxed text-muted-foreground/60">
           {emptyPrompt}
         </p>
       </div>
@@ -301,7 +308,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
           maintainScrollAtEndThreshold={0.1}
           maintainVisibleContentPosition
           onScroll={handleScroll}
-          className="h-full overflow-x-hidden overscroll-y-contain px-3 sm:px-5"
+          className="h-full overflow-x-hidden overscroll-y-contain px-3 [scrollbar-gutter:stable_both-edges] sm:px-5"
           ListHeaderComponent={TIMELINE_LIST_HEADER}
           ListFooterComponent={TIMELINE_LIST_FOOTER}
         />
@@ -319,9 +326,11 @@ function keyExtractor(item: MessagesTimelineRow) {
 // ---------------------------------------------------------------------------
 
 type TimelineEntry = ReturnType<typeof deriveTimelineEntries>[number];
-type TimelineMessage = Extract<TimelineEntry, { kind: "message" }>["message"];
-type TimelineWorkEntry = Extract<MessagesTimelineRow, { kind: "work" }>["groupedEntries"][number];
+type WorkGroupEntries = Extract<MessagesTimelineRow, { kind: "work" }>["groupedEntries"];
+type TimelineWorkEntry = WorkGroupEntries[number];
 type TimelineRow = MessagesTimelineRow;
+type TimelineProcessChildRow = Extract<TimelineRow, { kind: "process" }>["children"][number];
+type VisibleProcessChildRow = Exclude<TimelineProcessChildRow, { kind: "working" }>;
 
 const TimelineRowContent = memo(function TimelineRowContent({ row }: { row: TimelineRow }) {
   return (
@@ -335,16 +344,36 @@ const TimelineRowContent = memo(function TimelineRowContent({ row }: { row: Time
       data-message-id={row.kind === "message" ? row.message.id : undefined}
       data-message-role={row.kind === "message" ? row.message.role : undefined}
     >
-      {row.kind === "work" ? <WorkGroupSection groupedEntries={row.groupedEntries} /> : null}
+      <TimelineRowBody row={row} />
+    </div>
+  );
+});
+
+function TimelineRowBody({
+  row,
+  forceWorkGroupsExpanded = false,
+}: {
+  row: TimelineRow;
+  forceWorkGroupsExpanded?: boolean;
+}) {
+  return (
+    <>
+      {row.kind === "process" ? <ProcessTimelineRow row={row} /> : null}
+      {row.kind === "work" ? (
+        <WorkGroupSection
+          groupedEntries={row.groupedEntries}
+          forceExpanded={forceWorkGroupsExpanded}
+        />
+      ) : null}
       {row.kind === "message" && row.message.role === "user" ? <UserTimelineRow row={row} /> : null}
       {row.kind === "message" && row.message.role === "assistant" ? (
         <AssistantTimelineRow row={row} />
       ) : null}
       {row.kind === "proposed-plan" ? <ProposedPlanTimelineRow row={row} /> : null}
       {row.kind === "working" ? <WorkingTimelineRow row={row} /> : null}
-    </div>
+    </>
   );
-});
+}
 
 function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" }> }) {
   const ctx = use(TimelineRowCtx);
@@ -355,58 +384,32 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
 
   return (
     <div className="flex justify-end">
-      <div className="group relative max-w-[80%] rounded-2xl rounded-br-sm border border-border bg-secondary px-4 py-3">
-        {userImages.length > 0 && (
-          <div className="mb-2 grid max-w-[420px] grid-cols-2 gap-2">
-            {userImages.map((image: NonNullable<TimelineMessage["attachments"]>[number]) => (
-              <div
-                key={image.id}
-                className="overflow-hidden rounded-lg border border-border/80 bg-background/70"
-              >
-                {image.previewUrl ? (
-                  <button
-                    type="button"
-                    className="h-full w-full cursor-zoom-in"
-                    aria-label={`Preview ${image.name}`}
-                    onClick={() => {
-                      const preview = buildExpandedImagePreview(userImages, image.id);
-                      if (!preview) return;
-                      ctx.onImageExpand(preview);
-                    }}
-                  >
-                    <img
-                      src={image.previewUrl}
-                      alt={image.name}
-                      className="block h-auto max-h-[220px] w-full object-cover"
-                    />
-                  </button>
-                ) : (
-                  <div className="flex min-h-[72px] items-center justify-center px-2 py-3 text-center text-[11px] text-muted-foreground/70">
-                    {image.name}
-                  </div>
-                )}
-              </div>
-            ))}
+      <div className="group flex max-w-[80%] flex-col items-end">
+        <div className="max-w-full rounded-2xl rounded-br-sm border border-border bg-white/90 px-4 py-3 dark:bg-secondary">
+          <ImageAttachmentPreviewStrip images={userImages} onExpandImage={ctx.onImageExpand} />
+          <CollapsibleUserMessageBody
+            text={displayedUserMessage.visibleText}
+            terminalContexts={terminalContexts}
+            skills={ctx.skills}
+          />
+        </div>
+        <div className="mt-1.5 flex min-h-8 w-full items-center justify-end px-1">
+          <div className="relative ml-auto min-h-8 min-w-[7rem]">
+            <p className="absolute inset-y-0 right-0 flex items-center text-right text-sm leading-relaxed text-muted-foreground/50 transition-opacity duration-200 group-focus-within:opacity-0 group-hover:opacity-0">
+              {formatShortTimestamp(row.message.createdAt, ctx.timestampFormat)}
+            </p>
+            <div className="absolute inset-y-0 right-0 flex items-center gap-1.5 opacity-0 transition-opacity duration-200 group-focus-within:opacity-100 group-hover:opacity-100">
+              {displayedUserMessage.copyText && (
+                <MessageCopyButton
+                  text={displayedUserMessage.copyText}
+                  size="icon-sm"
+                  className="shadow-none before:hidden"
+                />
+              )}
+              {canRevertAgentWork && <RevertUserMessageButton messageId={row.message.id} />}
+            </div>
           </div>
-        )}
-        <CollapsibleUserMessageBody
-          text={displayedUserMessage.visibleText}
-          terminalContexts={terminalContexts}
-          skills={ctx.skills}
-          footer={
-            <>
-              <div className="flex items-center gap-1.5 opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover:opacity-100">
-                {displayedUserMessage.copyText && (
-                  <MessageCopyButton text={displayedUserMessage.copyText} />
-                )}
-                {canRevertAgentWork && <RevertUserMessageButton messageId={row.message.id} />}
-              </div>
-              <p className="text-right text-xs text-muted-foreground/50">
-                {formatTimestamp(row.message.createdAt, ctx.timestampFormat)}
-              </p>
-            </>
-          }
-        />
+        </div>
       </div>
     </div>
   );
@@ -419,13 +422,14 @@ function RevertUserMessageButton({ messageId }: { messageId: MessageId }) {
   return (
     <Button
       type="button"
-      size="xs"
+      size="icon-sm"
       variant="outline"
       disabled={activity.isRevertingCheckpoint || activity.isWorking}
+      className="shadow-none before:hidden"
       onClick={() => ctx.onRevertUserMessage(messageId)}
       title="Revert to this message"
     >
-      <Undo2Icon className="size-3" />
+      <MessageUndoIcon className="size-4" />
     </Button>
   );
 }
@@ -433,13 +437,20 @@ function RevertUserMessageButton({ messageId }: { messageId: MessageId }) {
 function AssistantTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" }> }) {
   const ctx = use(TimelineRowCtx);
   const messageText = row.message.text || (row.message.streaming ? "" : "(empty response)");
+  const assistantCopyState = resolveAssistantMessageCopyState({
+    text: row.message.text ?? null,
+    showCopyButton: row.showAssistantCopyButton,
+    streaming: row.assistantCopyStreaming,
+  });
+  const showAssistantFooter = row.showAssistantCopyButton && !row.assistantCopyStreaming;
+  const hasAssistantActions = showAssistantFooter && assistantCopyState.visible;
 
   return (
     <>
       {row.showCompletionDivider && (
         <AssistantCompletionDivider completionSummary={row.completionSummary} />
       )}
-      <div className="min-w-0 px-1 py-0.5">
+      <div className="min-w-0 py-0.5">
         <ChatMarkdown
           text={messageText}
           cwd={ctx.markdownCwd}
@@ -452,27 +463,26 @@ function AssistantTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "mess
           resolvedTheme={ctx.resolvedTheme}
           onOpenTurnDiff={ctx.onOpenTurnDiff}
         />
-        <div className="mt-1.5 flex items-center gap-2">
-          <p className="text-[10px] text-muted-foreground/30">
-            {row.message.streaming ? (
-              <LiveMessageMeta
-                createdAt={row.message.createdAt}
-                durationStart={row.durationStart}
-                timestampFormat={ctx.timestampFormat}
-              />
-            ) : (
-              formatMessageMeta(
-                row.message.createdAt,
-                formatElapsed(row.durationStart, row.message.completedAt),
-                ctx.timestampFormat,
-              )
-            )}
-          </p>
-          {!row.message.streaming ? (
-            <ForkAssistantMessageButton messageId={row.message.id} />
-          ) : null}
-          <AssistantCopyButton row={row} />
-        </div>
+        {showAssistantFooter ? (
+          <div className="group/assistant-actions relative mt-1.5 min-h-8 w-fit min-w-[7rem]">
+            <p
+              className={cn(
+                "absolute inset-y-0 left-0 flex items-center text-sm leading-relaxed text-muted-foreground/50",
+                hasAssistantActions
+                  ? "transition-opacity duration-200 group-focus-within/assistant-actions:opacity-0 group-hover/assistant-actions:opacity-0"
+                  : null,
+              )}
+            >
+              {formatShortTimestamp(row.message.createdAt, ctx.timestampFormat)}
+            </p>
+            {hasAssistantActions ? (
+              <div className="absolute inset-y-0 left-0 flex items-center gap-1.5 opacity-0 transition-opacity duration-200 group-focus-within/assistant-actions:opacity-100 group-hover/assistant-actions:opacity-100">
+                <ForkAssistantMessageButton messageId={row.message.id} />
+                <AssistantCopyButton copyState={assistantCopyState} />
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     </>
   );
@@ -483,19 +493,17 @@ function ForkAssistantMessageButton({ messageId }: { messageId: MessageId }) {
   const activity = use(TimelineRowActivityCtx);
 
   return (
-    <div className="flex items-center opacity-0 transition-opacity duration-200 group-hover/assistant:opacity-100">
-      <Button
-        type="button"
-        size="icon-xs"
-        variant="outline"
-        disabled={activity.isWorking || activity.isRevertingCheckpoint}
-        className="border-border/50 bg-background/35 text-muted-foreground/45 shadow-none hover:border-border/70 hover:bg-background/55 hover:text-muted-foreground/70"
-        onClick={() => ctx.onForkAssistantMessage(messageId)}
-        title="Fork from message"
-      >
-        <GitBranchIcon className="size-3" />
-      </Button>
-    </div>
+    <Button
+      type="button"
+      size="icon-sm"
+      variant="outline"
+      disabled={activity.isWorking || activity.isRevertingCheckpoint}
+      className="shadow-none before:hidden"
+      onClick={() => ctx.onForkAssistantMessage(messageId)}
+      title="Fork from message"
+    >
+      <MessageForkIcon className="size-4" />
+    </Button>
   );
 }
 
@@ -503,7 +511,7 @@ function AssistantCompletionDivider({ completionSummary }: { completionSummary: 
   return (
     <div className="my-3 flex items-center gap-3">
       <span className="h-px flex-1 bg-border" />
-      <span className="rounded-full border border-border bg-background px-2.5 py-1 text-[10px] uppercase tracking-[0.14em] text-muted-foreground/80">
+      <span className="rounded-full border border-border bg-background px-2.5 py-1 text-sm leading-relaxed text-muted-foreground/80">
         {completionSummary ? `Response • ${completionSummary}` : "Response"}
       </span>
       <span className="h-px flex-1 bg-border" />
@@ -511,26 +519,22 @@ function AssistantCompletionDivider({ completionSummary }: { completionSummary: 
   );
 }
 
-function AssistantCopyButton({ row }: { row: Extract<TimelineRow, { kind: "message" }> }) {
-  const assistantCopyState = resolveAssistantMessageCopyState({
-    text: row.message.text ?? null,
-    showCopyButton: row.showAssistantCopyButton,
-    streaming: row.assistantCopyStreaming,
-  });
-
-  if (!assistantCopyState.visible) {
+function AssistantCopyButton({
+  copyState,
+}: {
+  copyState: ReturnType<typeof resolveAssistantMessageCopyState>;
+}) {
+  if (!copyState.visible) {
     return null;
   }
 
   return (
-    <div className="flex items-center opacity-0 transition-opacity duration-200  group-hover/assistant:opacity-100">
-      <MessageCopyButton
-        text={assistantCopyState.text ?? ""}
-        size="icon-xs"
-        variant="outline"
-        className="border-border/50 bg-background/35 text-muted-foreground/45 shadow-none hover:border-border/70 hover:bg-background/55 hover:text-muted-foreground/70"
-      />
-    </div>
+    <MessageCopyButton
+      text={copyState.text ?? ""}
+      size="icon-sm"
+      variant="outline"
+      className="shadow-none before:hidden"
+    />
   );
 }
 
@@ -542,7 +546,7 @@ function ProposedPlanTimelineRow({
   const ctx = use(TimelineRowCtx);
 
   return (
-    <div className="min-w-0 px-1 py-0.5">
+    <div className="min-w-0 py-0.5">
       <ProposedPlanCard
         planMarkdown={row.proposedPlan.planMarkdown}
         environmentId={ctx.activeThreadEnvironmentId}
@@ -556,12 +560,8 @@ function ProposedPlanTimelineRow({
 function WorkingTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "working" }> }) {
   return (
     <div className="py-0.5 pl-1.5">
-      <div className="flex items-center gap-2 pt-1 text-[11px] text-muted-foreground/70">
-        <span className="inline-flex items-center gap-[3px]">
-          <span className="h-1 w-1 rounded-full bg-muted-foreground/30 animate-pulse" />
-          <span className="h-1 w-1 rounded-full bg-muted-foreground/30 animate-pulse [animation-delay:200ms]" />
-          <span className="h-1 w-1 rounded-full bg-muted-foreground/30 animate-pulse [animation-delay:400ms]" />
-        </span>
+      <div className="flex items-center gap-2 pt-1 text-sm leading-relaxed text-muted-foreground/70">
+        <WorkingStatusDots />
         <span>
           {row.createdAt ? (
             <>
@@ -574,6 +574,191 @@ function WorkingTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "workin
       </div>
     </div>
   );
+}
+
+function ProcessTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "process" }> }) {
+  const contentId = useId();
+  const [expanded, setExpanded] = useState(() => row.isActive || row.hasErrorEntries);
+  const titleText = formatProcessAccordionTitle(row);
+  const visibleChildren = row.children.filter(isVisibleProcessChild);
+  const workingChild = row.children.find(isWorkingProcessChild);
+
+  useEffect(() => {
+    if (row.hasErrorEntries) {
+      setExpanded(true);
+      return;
+    }
+
+    if (row.isActive) {
+      setExpanded(true);
+      return;
+    }
+
+    setExpanded(false);
+  }, [row.hasErrorEntries, row.id, row.isActive]);
+
+  // A single AnimatedHeight smooths streaming growth, the active → collapsed
+  // swap at turn end, and accordion expand/collapse — instead of snapping.
+  if (row.isActive) {
+    return (
+      <AnimatedHeight>
+        <div className="space-y-4 pt-0.5">
+          {visibleChildren.map((child) => (
+            <ProcessChildFrame
+              key={`process-child:${child.id}`}
+              row={child}
+              forceWorkGroupsExpanded
+            />
+          ))}
+          {workingChild ? (
+            <div
+              key={`process-child:${workingChild.id}`}
+              className="min-w-0"
+              data-process-child-row-id={workingChild.id}
+              data-process-child-row-kind={workingChild.kind}
+            >
+              <WorkingTimelineRow row={workingChild} />
+            </div>
+          ) : null}
+        </div>
+      </AnimatedHeight>
+    );
+  }
+
+  return (
+    <AnimatedHeight>
+      <div>
+        <button
+          type="button"
+          aria-controls={contentId}
+          aria-expanded={expanded}
+          className="-mx-1 flex w-fit max-w-full min-w-0 items-center gap-1 rounded-md px-1 py-0.5 text-left text-muted-foreground/60 transition-colors duration-150 hover:text-foreground/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          title={titleText}
+          onClick={() => {
+            setExpanded((value) => !value);
+          }}
+        >
+          <span className="min-w-0 truncate text-sm leading-relaxed">
+            <ProcessAccordionLabel row={row} />
+          </span>
+          <span className="flex size-4 shrink-0 items-center justify-center">
+            <ChevronRightIcon
+              className={cn(
+                "size-3.5 transition-transform duration-150",
+                expanded ? "rotate-90" : null,
+              )}
+            />
+          </span>
+        </button>
+        {expanded && visibleChildren.length > 0 ? (
+          <div id={contentId} className="space-y-4 pt-2.5">
+            {visibleChildren.map((child) => (
+              <ProcessChildFrame
+                key={`process-child:${child.id}`}
+                row={child}
+                forceWorkGroupsExpanded={false}
+              />
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </AnimatedHeight>
+  );
+}
+
+function isVisibleProcessChild(row: TimelineProcessChildRow): row is VisibleProcessChildRow {
+  return row.kind !== "working";
+}
+
+function isWorkingProcessChild(
+  row: TimelineProcessChildRow,
+): row is Extract<TimelineProcessChildRow, { kind: "working" }> {
+  return row.kind === "working";
+}
+
+function ProcessChildFrame({
+  row,
+  forceWorkGroupsExpanded,
+}: {
+  row: VisibleProcessChildRow;
+  forceWorkGroupsExpanded: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "min-w-0",
+        row.kind === "message" && row.message.role === "assistant" ? "group/assistant" : null,
+      )}
+      data-process-child-row-id={row.id}
+      data-process-child-row-kind={row.kind}
+    >
+      <TimelineProcessChildBody row={row} forceWorkGroupsExpanded={forceWorkGroupsExpanded} />
+    </div>
+  );
+}
+
+function TimelineProcessChildBody({
+  row,
+  forceWorkGroupsExpanded,
+}: {
+  row: VisibleProcessChildRow;
+  forceWorkGroupsExpanded: boolean;
+}) {
+  return <TimelineRowBody row={row} forceWorkGroupsExpanded={forceWorkGroupsExpanded} />;
+}
+
+function ProcessAccordionLabel({ row }: { row: Extract<TimelineRow, { kind: "process" }> }) {
+  if (row.isActive) {
+    return <WorkingProcessLabel startedAt={row.startedAt} />;
+  }
+
+  return formatCompletedProcessAccordionLabel(row);
+}
+
+function WorkingStatusDots() {
+  return (
+    <span className="inline-flex shrink-0 items-center gap-[3px]">
+      <span className="chat-working-dot h-1 w-1 rounded-full bg-muted-foreground/40" />
+      <span className="chat-working-dot h-1 w-1 rounded-full bg-muted-foreground/40 [animation-delay:160ms]" />
+      <span className="chat-working-dot h-1 w-1 rounded-full bg-muted-foreground/40 [animation-delay:320ms]" />
+    </span>
+  );
+}
+
+function WorkingProcessLabel({ startedAt }: { startedAt: string | null }) {
+  return (
+    <span className="inline-flex min-w-0 items-center gap-2">
+      <WorkingStatusDots />
+      <span className="min-w-0 truncate">
+        {startedAt ? (
+          <>
+            Working for <WorkingTimer createdAt={startedAt} />
+          </>
+        ) : (
+          "Working..."
+        )}
+      </span>
+    </span>
+  );
+}
+
+function formatProcessAccordionTitle(row: Extract<TimelineRow, { kind: "process" }>): string {
+  if (row.isActive) {
+    return row.startedAt ? `Working for ${formatWorkingTimerNow(row.startedAt)}` : "Working...";
+  }
+  return formatCompletedProcessAccordionLabel(row);
+}
+
+function formatCompletedProcessAccordionLabel(
+  row: Extract<TimelineRow, { kind: "process" }>,
+): string {
+  if (row.completionSummary) {
+    return row.completionSummary;
+  }
+
+  const elapsed =
+    row.startedAt && row.completedAt ? formatElapsed(row.startedAt, row.completedAt) : null;
+  return elapsed ? `Worked for ${elapsed}` : "Work details";
 }
 
 // ---------------------------------------------------------------------------
@@ -600,40 +785,6 @@ function WorkingTimer({ createdAt }: { createdAt: string }) {
   return <span ref={textRef}>{initialText}</span>;
 }
 
-/** Live timestamp + elapsed duration for a streaming assistant message. */
-function LiveMessageMeta({
-  createdAt,
-  durationStart,
-  timestampFormat,
-}: {
-  createdAt: string;
-  durationStart: string | null | undefined;
-  timestampFormat: TimestampFormat;
-}) {
-  const textRef = useRef<HTMLSpanElement>(null);
-  const initialText = formatLiveMessageMetaNow(createdAt, durationStart, timestampFormat);
-
-  useEffect(() => {
-    const updateText = () => {
-      if (textRef.current) {
-        textRef.current.textContent = formatLiveMessageMetaNow(
-          createdAt,
-          durationStart,
-          timestampFormat,
-        );
-      }
-    };
-    updateText();
-    if (!durationStart) {
-      return;
-    }
-    const id = setInterval(updateText, 1000);
-    return () => clearInterval(id);
-  }, [createdAt, durationStart, timestampFormat]);
-
-  return <span ref={textRef}>{initialText}</span>;
-}
-
 // ---------------------------------------------------------------------------
 // Extracted row sections — own their state / store subscriptions so changes
 // re-render only the affected row, not the entire list.
@@ -643,41 +794,130 @@ function LiveMessageMeta({
  *  State resets on unmount which is fine — work groups start collapsed. */
 const WorkGroupSection = memo(function WorkGroupSection({
   groupedEntries,
+  forceExpanded = false,
 }: {
-  groupedEntries: Extract<MessagesTimelineRow, { kind: "work" }>["groupedEntries"];
+  groupedEntries: WorkGroupEntries;
+  forceExpanded?: boolean;
 }) {
   const { workspaceRoot } = use(TimelineRowCtx);
-  const [isExpanded, setIsExpanded] = useState(false);
-  const hasOverflow = groupedEntries.length > MAX_VISIBLE_WORK_LOG_ENTRIES;
-  const visibleEntries =
-    hasOverflow && !isExpanded
-      ? groupedEntries.slice(-MAX_VISIBLE_WORK_LOG_ENTRIES)
-      : groupedEntries;
-  const hiddenCount = groupedEntries.length - visibleEntries.length;
+  const hasErrorEntries = groupedEntries.some((entry) => entry.tone === "error");
+  const [agentActionsExpanded, setAgentActionsExpanded] = useState(
+    () => forceExpanded || hasErrorEntries,
+  );
+  const [workLogExpanded, setWorkLogExpanded] = useState(() => forceExpanded || hasErrorEntries);
+  const agentActionsContentId = useId();
   const onlyToolEntries = groupedEntries.every((entry) => entry.tone === "tool");
-  const showHeader = hasOverflow || !onlyToolEntries;
-  const groupLabel = onlyToolEntries ? "Tool calls" : "Work log";
+  const shouldUseAgentActionsAccordion = onlyToolEntries;
+
+  useEffect(() => {
+    if (forceExpanded || hasErrorEntries) {
+      setAgentActionsExpanded(true);
+      setWorkLogExpanded(true);
+      return;
+    }
+
+    setAgentActionsExpanded(false);
+    setWorkLogExpanded(false);
+  }, [forceExpanded, hasErrorEntries]);
+
+  if (forceExpanded) {
+    return <WorkEntriesPanel groupedEntries={groupedEntries} workspaceRoot={workspaceRoot} />;
+  }
+
+  if (shouldUseAgentActionsAccordion) {
+    const summaryText = formatActionCount(groupedEntries.length);
+
+    return (
+      <div>
+        <button
+          type="button"
+          aria-controls={agentActionsContentId}
+          aria-expanded={agentActionsExpanded}
+          className="-mx-1 flex w-fit max-w-full min-w-0 items-center gap-1 rounded-md px-1 py-0.5 text-left text-muted-foreground/60 transition-colors duration-150 hover:text-foreground/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          title={summaryText}
+          onClick={() => {
+            if (forceExpanded) return;
+            setAgentActionsExpanded((value) => !value);
+          }}
+        >
+          <span className="min-w-0 truncate text-sm leading-relaxed">{summaryText}</span>
+          <span className="flex size-4 shrink-0 items-center justify-center">
+            <ChevronRightIcon
+              className={cn(
+                "size-3.5 transition-transform duration-150",
+                agentActionsExpanded ? "rotate-90" : null,
+              )}
+            />
+          </span>
+        </button>
+        <AnimatedHeight>
+          {agentActionsExpanded ? (
+            <div className="pt-1">
+              <WorkEntriesPanel
+                id={agentActionsContentId}
+                groupedEntries={groupedEntries}
+                workspaceRoot={workspaceRoot}
+              />
+            </div>
+          ) : null}
+        </AnimatedHeight>
+      </div>
+    );
+  }
+
+  const summaryText = formatWorkLogEntryCount(groupedEntries.length);
 
   return (
-    <div className="rounded-xl border border-border/45 bg-card/25 px-2 py-1.5">
-      {showHeader && (
-        <div className="mb-1.5 flex items-center justify-between gap-2 px-0.5">
-          <p className="text-[9px] uppercase tracking-[0.16em] text-muted-foreground/55">
-            {groupLabel} ({groupedEntries.length})
-          </p>
-          {hasOverflow && (
-            <button
-              type="button"
-              className="text-[9px] uppercase tracking-[0.12em] text-muted-foreground/55 transition-colors duration-150 hover:text-foreground/75"
-              onClick={() => setIsExpanded((v) => !v)}
-            >
-              {isExpanded ? "Show less" : `Show ${hiddenCount} more`}
-            </button>
-          )}
-        </div>
-      )}
+    <div>
+      <button
+        type="button"
+        aria-controls={agentActionsContentId}
+        aria-expanded={workLogExpanded}
+        className="-mx-1 flex w-fit max-w-full min-w-0 items-center gap-1 rounded-md px-1 py-0.5 text-left text-muted-foreground/60 transition-colors duration-150 hover:text-foreground/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+        title={summaryText}
+        onClick={() => {
+          if (forceExpanded) return;
+          setWorkLogExpanded((value) => !value);
+        }}
+      >
+        <span className="min-w-0 truncate text-sm leading-relaxed">{summaryText}</span>
+        <span className="flex size-4 shrink-0 items-center justify-center">
+          <ChevronRightIcon
+            className={cn(
+              "size-3.5 transition-transform duration-150",
+              workLogExpanded ? "rotate-90" : null,
+            )}
+          />
+        </span>
+      </button>
+      <AnimatedHeight>
+        {workLogExpanded ? (
+          <div className="pt-1">
+            <WorkEntriesPanel
+              id={agentActionsContentId}
+              groupedEntries={groupedEntries}
+              workspaceRoot={workspaceRoot}
+            />
+          </div>
+        ) : null}
+      </AnimatedHeight>
+    </div>
+  );
+});
+
+function WorkEntriesPanel({
+  id,
+  groupedEntries,
+  workspaceRoot,
+}: {
+  id?: string;
+  groupedEntries: WorkGroupEntries;
+  workspaceRoot: string | undefined;
+}) {
+  return (
+    <div id={id} className="min-w-0">
       <div className="space-y-0.5">
-        {visibleEntries.map((workEntry) => (
+        {groupedEntries.map((workEntry) => (
           <SimpleWorkEntryRow
             key={`work-row:${workEntry.id}`}
             workEntry={workEntry}
@@ -687,7 +927,7 @@ const WorkGroupSection = memo(function WorkGroupSection({
       </div>
     </div>
   );
-});
+}
 
 /** Subscribes directly to the UI state store for expand/collapse state,
  *  so toggling re-renders only this component — not the entire list. */
@@ -740,9 +980,9 @@ function AssistantChangedFilesSectionInner({
   const changedFileCountLabel = String(checkpointFiles.length);
 
   return (
-    <div className="mt-2 rounded-lg border border-border/80 bg-card/45 p-2.5">
-      <div className="sticky top-2 z-10 mb-1.5 flex items-center justify-between gap-2 bg-[color-mix(in_srgb,var(--card)_45%,var(--background))] before:absolute before:inset-x-0 before:-top-2 before:h-2 before:bg-[color-mix(in_srgb,var(--card)_45%,var(--background))] before:content-['']">
-        <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground/65">
+    <div className="group/changed-files mt-2 rounded-xl border border-border bg-[#EFEFEF]/95 px-2.5 pt-0 pb-2.5 dark:bg-muted">
+      <div className="-mx-2.5 flex items-center justify-between gap-2 rounded-t-xl py-1.5 pr-1.5 pl-2.5">
+        <p className="text-sm leading-relaxed text-muted-foreground/65">
           <span>Changed files ({changedFileCountLabel})</span>
           {hasNonZeroStat(summaryStat) && (
             <>
@@ -751,23 +991,33 @@ function AssistantChangedFilesSectionInner({
             </>
           )}
         </p>
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 opacity-0 transition-opacity duration-200 group-hover/changed-files:opacity-100 focus-within:opacity-100">
           <Button
             type="button"
-            size="xs"
+            size="icon-sm"
             variant="outline"
+            aria-label={allDirectoriesExpanded ? "Collapse all" : "Expand all"}
+            className="shadow-none before:hidden [box-shadow:none]"
             data-scroll-anchor-ignore
+            title={allDirectoriesExpanded ? "Collapse all" : "Expand all"}
             onClick={() => setExpanded(routeThreadKey, turnSummary.turnId, !allDirectoriesExpanded)}
           >
-            {allDirectoriesExpanded ? "Collapse all" : "Expand all"}
+            {allDirectoriesExpanded ? (
+              <ChevronsDownUpIcon className="size-4" />
+            ) : (
+              <ChevronsUpDownIcon className="size-4" />
+            )}
           </Button>
           <Button
             type="button"
-            size="xs"
+            size="icon-sm"
             variant="outline"
+            aria-label="View diff"
+            className="shadow-none before:hidden [box-shadow:none]"
+            title="View diff"
             onClick={() => onOpenTurnDiff(turnSummary.turnId, checkpointFiles[0]?.path)}
           >
-            View diff
+            <FileDiffIcon className="size-4" />
           </Button>
         </div>
       </div>
@@ -818,7 +1068,6 @@ const CollapsibleUserMessageBody = memo(function CollapsibleUserMessageBody(prop
   text: string;
   terminalContexts: ParsedTerminalContextEntry[];
   skills: ReadonlyArray<Pick<ServerProviderSkill, "name" | "displayName">>;
-  footer?: ReactNode;
 }) {
   const [expanded, setExpanded] = useState(false);
   const hasVisibleBody = props.text.trim().length > 0 || props.terminalContexts.length > 0;
@@ -850,30 +1099,19 @@ const CollapsibleUserMessageBody = memo(function CollapsibleUserMessageBody(prop
           />
         </div>
       ) : null}
-      {canCollapse || props.footer ? (
-        <div
-          className={cn(
-            "mt-1.5 flex items-center gap-2",
-            canCollapse && props.footer ? "justify-between" : "justify-end",
-          )}
-          data-user-message-footer="true"
-        >
-          {canCollapse ? (
-            <Button
-              type="button"
-              size="xs"
-              variant="ghost"
-              aria-expanded={expanded}
-              data-scroll-anchor-ignore
-              onClick={() => setExpanded((value) => !value)}
-              className="-ml-1 h-6 rounded-md px-1.5 text-xs text-muted-foreground/72 hover:bg-muted/55 hover:text-foreground/85"
-            >
-              {expanded ? "Show less" : "Show full message"}
-            </Button>
-          ) : null}
-          {props.footer ? (
-            <div className="ml-auto flex items-center gap-2">{props.footer}</div>
-          ) : null}
+      {canCollapse ? (
+        <div className="mt-1.5 flex items-center gap-2" data-user-message-footer="true">
+          <Button
+            type="button"
+            size="xs"
+            variant="ghost"
+            aria-expanded={expanded}
+            data-scroll-anchor-ignore
+            onClick={() => setExpanded((value) => !value)}
+            className="-ml-1 h-auto min-h-7 rounded-md px-1.5 text-sm leading-relaxed text-muted-foreground/72 hover:bg-muted/55 hover:text-foreground/85 sm:text-sm"
+          >
+            {expanded ? "Show less" : "Show full message"}
+          </Button>
         </div>
       ) : null}
     </div>
@@ -1005,12 +1243,12 @@ function UserMessageReviewCommentCard({ comment }: { comment: ReviewCommentConte
   );
 
   return (
-    <div className="space-y-2 rounded-lg border border-border/70 bg-background/70 p-3">
+    <div className="space-y-2 rounded-lg border border-border/70 bg-[#EFEFEF]/95 p-3 dark:bg-muted">
       <div className="space-y-1">
-        <div className="text-xs font-medium text-foreground">
+        <div className="text-sm leading-relaxed text-foreground">
           {formatWorkspaceRelativePath(comment.filePath, ctx.workspaceRoot)}
         </div>
-        <div className="text-[11px] text-muted-foreground">
+        <div className="text-sm leading-relaxed text-muted-foreground">
           {comment.sectionTitle} · {comment.rangeLabel}
         </div>
       </div>
@@ -1032,7 +1270,7 @@ function UserMessageReviewCommentCard({ comment }: { comment: ReviewCommentConte
           />
         ))}
       {renderablePatch?.kind === "raw" && (
-        <pre className="overflow-x-auto rounded-md bg-muted/40 p-2 text-xs">
+        <pre className="overflow-x-auto rounded-md bg-[#EFEFEF]/95 p-2 text-xs dark:bg-muted">
           {renderablePatch.text}
         </pre>
       )}
@@ -1089,24 +1327,6 @@ function formatWorkingTimer(startIso: string, endIso: string): string | null {
 
 function formatWorkingTimerNow(startIso: string): string {
   return formatWorkingTimer(startIso, new Date().toISOString()) ?? "0s";
-}
-
-function formatLiveMessageMetaNow(
-  createdAt: string,
-  durationStart: string | null | undefined,
-  timestampFormat: TimestampFormat,
-): string {
-  const elapsed = durationStart ? formatElapsed(durationStart, new Date().toISOString()) : null;
-  return formatMessageMeta(createdAt, elapsed, timestampFormat);
-}
-
-function formatMessageMeta(
-  createdAt: string,
-  duration: string | null,
-  timestampFormat: TimestampFormat,
-): string {
-  if (!duration) return formatTimestamp(createdAt, timestampFormat);
-  return `${formatTimestamp(createdAt, timestampFormat)} • ${duration}`;
 }
 
 function workToneIcon(tone: TimelineWorkEntry["tone"]): {
@@ -1170,10 +1390,12 @@ function workEntryRawCommand(
 }
 
 function workEntryIcon(workEntry: TimelineWorkEntry): LucideIcon {
+  if (workEntry.severity === "warning") return TriangleAlertIcon;
   if (workEntry.requestKind === "command") return TerminalIcon;
   if (workEntry.requestKind === "file-read") return EyeIcon;
   if (workEntry.requestKind === "file-change") return SquarePenIcon;
   if (workEntry.requestKind === "dynamic-tool") return MousePointer2Icon;
+  if (workEntry.requestKind === "permissions") return ShieldIcon;
 
   if (workEntry.itemType === "command_execution" || workEntry.command) {
     return TerminalIcon;
@@ -1210,13 +1432,22 @@ function toolWorkEntryHeading(workEntry: TimelineWorkEntry): string {
   return capitalizePhrase(normalizeCompactToolLabel(workEntry.toolTitle));
 }
 
-const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
-  workEntry: TimelineWorkEntry;
-  workspaceRoot: string | undefined;
-}) {
-  const { workEntry, workspaceRoot } = props;
-  const iconConfig = workToneIcon(workEntry.tone);
-  const EntryIcon = workEntryIcon(workEntry);
+function formatActionCount(count: number): string {
+  return count === 1 ? "1 action" : `${count} actions`;
+}
+
+function formatWorkLogEntryCount(count: number): string {
+  return count === 1 ? "1 work log entry" : `${count} work log entries`;
+}
+
+function workEntrySummaryParts(
+  workEntry: TimelineWorkEntry,
+  workspaceRoot: string | undefined,
+): {
+  heading: string;
+  preview: string | null;
+  displayText: string;
+} {
   const heading = toolWorkEntryHeading(workEntry);
   const rawPreview = workEntryPreview(workEntry, workspaceRoot);
   const preview =
@@ -1225,25 +1456,39 @@ const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
       normalizeCompactToolLabel(heading).toLowerCase()
       ? null
       : rawPreview;
+  return {
+    heading,
+    preview,
+    displayText: preview ? `${heading} - ${preview}` : heading,
+  };
+}
+
+const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
+  workEntry: TimelineWorkEntry;
+  workspaceRoot: string | undefined;
+}) {
+  const { workEntry, workspaceRoot } = props;
+  const iconConfig = workToneIcon(workEntry.tone);
+  const EntryIcon = workEntryIcon(workEntry);
+  const { heading, preview, displayText } = workEntrySummaryParts(workEntry, workspaceRoot);
   const rawCommand = workEntryRawCommand(workEntry);
-  const displayText = preview ? `${heading} - ${preview}` : heading;
   const hasChangedFiles = (workEntry.changedFiles?.length ?? 0) > 0;
   const previewIsChangedFiles = hasChangedFiles && !workEntry.command && !workEntry.detail;
 
   return (
-    <div className="rounded-lg px-1 py-1">
+    <div className="rounded-lg py-1">
       <div className="flex items-center gap-2 transition-[opacity,translate] duration-200">
         <span
           className={cn("flex size-5 shrink-0 items-center justify-center", iconConfig.className)}
         >
-          <EntryIcon className="size-3" />
+          <EntryIcon className="size-4" />
         </span>
         <div className="min-w-0 flex-1 overflow-hidden">
           {rawCommand ? (
             <div className="max-w-full">
               <p
                 className={cn(
-                  "truncate text-xs leading-5",
+                  "truncate text-sm leading-relaxed",
                   workToneClass(workEntry.tone),
                   preview ? "text-muted-foreground/70" : "",
                 )}
@@ -1286,7 +1531,7 @@ const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
               >
                 <p
                   className={cn(
-                    "truncate text-[11px] leading-5",
+                    "truncate text-sm leading-relaxed",
                     workToneClass(workEntry.tone),
                     preview ? "text-muted-foreground/70" : "",
                   )}
@@ -1298,7 +1543,7 @@ const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
                 </p>
               </TooltipTrigger>
               <TooltipPopup className="max-w-[min(720px,calc(100vw-2rem))]">
-                <p className="whitespace-pre-wrap wrap-break-word text-xs leading-5">
+                <p className="whitespace-pre-wrap wrap-break-word text-sm leading-relaxed">
                   {displayText}
                 </p>
               </TooltipPopup>
@@ -1321,7 +1566,7 @@ const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
             );
           })}
           {(workEntry.changedFiles?.length ?? 0) > 4 && (
-            <span className="px-1 text-[10px] text-muted-foreground/55">
+            <span className="px-1 text-sm leading-relaxed text-muted-foreground/55">
               +{(workEntry.changedFiles?.length ?? 0) - 4}
             </span>
           )}

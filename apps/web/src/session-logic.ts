@@ -1,5 +1,6 @@
 import * as Option from "effect/Option";
 import * as Arr from "effect/Array";
+import { deriveThreadActivityPresentation } from "@t3tools/shared/threadActivityPresentation";
 import {
   ApprovalRequestId,
   isToolLifecycleItemType,
@@ -65,6 +66,7 @@ export interface WorkLogEntry {
   toolTitle?: string;
   itemType?: ToolLifecycleItemType;
   requestKind?: PendingApproval["requestKind"];
+  severity?: "warning";
 }
 
 interface DerivedWorkLogEntry extends WorkLogEntry {
@@ -75,7 +77,7 @@ interface DerivedWorkLogEntry extends WorkLogEntry {
 
 export interface PendingApproval {
   requestId: ApprovalRequestId;
-  requestKind: "command" | "file-read" | "file-change" | "dynamic-tool";
+  requestKind: "command" | "file-read" | "file-change" | "dynamic-tool" | "permissions" | "unknown";
   createdAt: string;
   detail?: string;
 }
@@ -188,6 +190,8 @@ function requestKindFromRequestType(requestType: unknown): PendingApproval["requ
       return "command";
     case "dynamic_tool_call":
       return "dynamic-tool";
+    case "permissions_approval":
+      return "permissions";
     case "file_read_approval":
       return "file-read";
     case "file_change_approval":
@@ -232,17 +236,18 @@ export function derivePendingApprovals(
       (payload.requestKind === "command" ||
         payload.requestKind === "file-read" ||
         payload.requestKind === "file-change" ||
-        payload.requestKind === "dynamic-tool")
+        payload.requestKind === "dynamic-tool" ||
+        payload.requestKind === "permissions")
         ? payload.requestKind
         : payload
           ? requestKindFromRequestType(payload.requestType)
           : null;
     const detail = payload && typeof payload.detail === "string" ? payload.detail : undefined;
 
-    if (activity.kind === "approval.requested" && requestId && requestKind) {
+    if (activity.kind === "approval.requested" && requestId) {
       openByRequestId.set(requestId, {
         requestId,
-        requestKind,
+        requestKind: requestKind ?? "unknown",
         createdAt: activity.createdAt,
         ...(detail ? { detail } : {}),
       });
@@ -525,6 +530,16 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
   const commandPreview = extractToolCommand(payload);
   const changedFiles = extractChangedFiles(payload);
   const title = extractToolTitle(payload);
+  const itemType = extractWorkLogItemType(payload);
+  const semanticToolTitle = resolveSemanticToolTitle(payload, itemType);
+  const toolTitle = title && !isGenericToolTitle(title) ? title : (semanticToolTitle ?? title);
+  const isToolActivity = activity.kind === "tool.updated" || activity.kind === "tool.completed";
+  const presentation = deriveThreadActivityPresentation({
+    kind: activity.kind,
+    summary: activity.summary,
+    tone: activity.tone,
+    payload: activity.payload,
+  });
   const isTaskActivity = activity.kind === "task.progress" || activity.kind === "task.completed";
   const taskSummary =
     isTaskActivity && typeof payload?.summary === "string" && payload.summary.length > 0
@@ -538,6 +553,13 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
       ? payload.detail
       : null;
   const taskLabel = taskSummary || taskDetailAsLabel;
+  const toolDetail = isToolActivity
+    ? dropDuplicativeGenericToolDetail(
+        extractToolDetail(payload, toolTitle ?? title ?? activity.summary),
+        title,
+        activity.summary,
+      )
+    : null;
   const detail = isTaskActivity
     ? !taskDetailAsLabel &&
       payload &&
@@ -545,12 +567,15 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
       payload.detail.length > 0
       ? stripTrailingExitCode(payload.detail).output
       : null
-    : extractToolDetail(payload, title ?? activity.summary);
+    : isToolActivity
+      ? toolDetail
+      : (presentation.detail ?? null);
   const toolCallId = isTaskActivity ? null : extractToolCallId(payload);
   const entry: DerivedWorkLogEntry = {
     id: activity.id,
     createdAt: activity.createdAt,
-    label: taskLabel || activity.summary,
+    label:
+      taskLabel || (isToolActivity && semanticToolTitle ? semanticToolTitle : presentation.label),
     tone:
       activity.kind === "task.progress"
         ? "thinking"
@@ -559,8 +584,7 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
           : activity.tone,
     activityKind: activity.kind,
   };
-  const itemType = extractWorkLogItemType(payload);
-  const requestKind = extractWorkLogRequestKind(payload);
+  const requestKind = presentation.requestKind ?? extractWorkLogRequestKind(payload);
   if (detail) {
     entry.detail = detail;
   }
@@ -573,8 +597,8 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
   if (changedFiles.length > 0) {
     entry.changedFiles = changedFiles;
   }
-  if (title) {
-    entry.toolTitle = title;
+  if (toolTitle) {
+    entry.toolTitle = toolTitle;
   }
   if (itemType) {
     entry.itemType = itemType;
@@ -584,6 +608,9 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
   }
   if (toolCallId) {
     entry.toolCallId = toolCallId;
+  }
+  if (presentation.severity) {
+    entry.severity = presentation.severity;
   }
   const collapseKey = deriveToolLifecycleCollapseKey(entry);
   if (collapseKey) {
@@ -906,6 +933,77 @@ function extractToolTitle(payload: Record<string, unknown> | null): string | nul
   return asTrimmedString(payload?.title);
 }
 
+function isGenericToolTitle(value: string): boolean {
+  const normalized = normalizeCompactToolLabel(value).toLowerCase();
+  return (
+    normalized === "tool" ||
+    normalized === "tool call" ||
+    normalized === "tool updated" ||
+    normalized === "tool call updated"
+  );
+}
+
+function resolveSemanticToolTitle(
+  payload: Record<string, unknown> | null,
+  itemType: WorkLogEntry["itemType"] | undefined,
+): string | null {
+  switch (itemType) {
+    case "command_execution":
+      return "Ran command";
+    case "file_change":
+      return "Changed files";
+    case "web_search":
+      return "Web search";
+    case "image_view":
+      return "Viewed image";
+    case "mcp_tool_call":
+      return "Ran MCP tool";
+    case "collab_agent_tool_call":
+      return "Ran agent tool";
+    case "dynamic_tool_call": {
+      const data = asRecord(payload?.data);
+      const kind = asTrimmedString(data?.kind)?.toLowerCase();
+      switch (kind) {
+        case "read":
+          return "Read file";
+        case "search":
+          return "Searched files";
+        case "execute":
+          return "Ran command";
+        case "edit":
+        case "write":
+        case "move":
+        case "delete":
+          return "Changed files";
+        default:
+          return "Ran tool";
+      }
+    }
+    default:
+      return null;
+  }
+}
+
+function dropDuplicativeGenericToolDetail(
+  detail: string | null,
+  title: string | null,
+  summary: string,
+): string | null {
+  if (!detail) {
+    return null;
+  }
+  const normalizedDetail = normalizePreviewForComparison(detail);
+  const normalizedTitle = title ? normalizePreviewForComparison(title) : null;
+  const normalizedSummary = normalizePreviewForComparison(summary);
+  if (
+    (title && isGenericToolTitle(title) && normalizedDetail === normalizedTitle) ||
+    normalizedDetail === normalizedSummary
+  ) {
+    return null;
+  }
+  return detail;
+}
+
 function extractToolCallId(payload: Record<string, unknown> | null): string | null {
   const data = asRecord(payload?.data);
   return asTrimmedString(data?.toolCallId);
@@ -1051,7 +1149,8 @@ function extractWorkLogRequestKind(
     payload?.requestKind === "command" ||
     payload?.requestKind === "file-read" ||
     payload?.requestKind === "file-change" ||
-    payload?.requestKind === "dynamic-tool"
+    payload?.requestKind === "dynamic-tool" ||
+    payload?.requestKind === "permissions"
   ) {
     return payload.requestKind;
   }

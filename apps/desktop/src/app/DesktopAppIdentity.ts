@@ -1,3 +1,4 @@
+import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -9,9 +10,13 @@ import * as Schema from "effect/Schema";
 import * as ElectronApp from "../electron/ElectronApp.ts";
 import * as DesktopAssets from "./DesktopAssets.ts";
 import * as DesktopEnvironment from "./DesktopEnvironment.ts";
+import * as DesktopObservability from "./DesktopObservability.ts";
 
 const COMMIT_HASH_PATTERN = /^[0-9a-f]{7,40}$/i;
 const COMMIT_HASH_DISPLAY_LENGTH = 12;
+
+const { logWarning: logAppIdentityWarning } =
+  DesktopObservability.makeComponentLogger("desktop-app-identity");
 
 const AppPackageMetadata = Schema.Struct({
   t3codeCommitHash: Schema.optional(Schema.String),
@@ -114,7 +119,15 @@ const make = Effect.gen(function* () {
       const iconPaths = yield* assets.iconPaths;
       yield* Option.match(iconPaths.png, {
         onNone: () => Effect.void,
-        onSome: electronApp.setDockIcon,
+        onSome: (iconPath) =>
+          electronApp.setDockIcon(iconPath).pipe(
+            Effect.catchCause((cause) =>
+              logAppIdentityWarning("development Dock icon override failed", {
+                iconPath,
+                cause: Cause.pretty(cause),
+              }),
+            ),
+          ),
       });
     }
   }).pipe(Effect.withSpan("desktop.appIdentity.configure"));

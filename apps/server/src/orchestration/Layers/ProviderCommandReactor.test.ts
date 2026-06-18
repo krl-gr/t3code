@@ -1977,12 +1977,12 @@ describe("ProviderCommandReactor", () => {
         threadId: ThreadId.make("thread-1"),
         session: {
           threadId: ThreadId.make("thread-1"),
-          status: "ready",
+          status: "error",
           providerName: "codex",
           providerInstanceId: ProviderInstanceId.make("codex_work"),
           runtimeMode: "approval-required",
           activeTurnId: null,
-          lastError: null,
+          lastError: "provider crashed before stop",
           updatedAt: now,
         },
         createdAt: now,
@@ -2006,5 +2006,6 @@ describe("ProviderCommandReactor", () => {
     expect(thread?.session?.threadId).toBe("thread-1");
     expect(thread?.session?.providerInstanceId).toBe(ProviderInstanceId.make("codex_work"));
     expect(thread?.session?.activeTurnId).toBeNull();
+    expect(thread?.session?.lastError).toBeNull();
   });
 });

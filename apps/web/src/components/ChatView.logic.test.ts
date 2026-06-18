@@ -1,9 +1,10 @@
-import { scopeThreadRef } from "@t3tools/client-runtime";
+import { scopedThreadKey, scopeThreadRef } from "@t3tools/client-runtime";
 import {
   EnvironmentId,
   ProjectId,
   ProviderDriverKind,
   ProviderInstanceId,
+  type ServerProvider,
   ThreadId,
   TurnId,
 } from "@t3tools/contracts";
@@ -13,15 +14,21 @@ import { type Thread } from "../types";
 
 import {
   MAX_HIDDEN_MOUNTED_TERMINAL_THREADS,
+  buildProviderStatusDismissalKey,
   buildExpiredTerminalContextToastCopy,
+  buildThreadAlerts,
   createLocalDispatchSnapshot,
   deriveComposerSendState,
   hasServerAcknowledgedLocalDispatch,
+  isThreadAlertDismissalKeyForThread,
+  pruneDismissedThreadAlertKeys,
+  rearmDismissedSessionThreadAlertForRetry,
   reconcileMountedTerminalThreadIds,
   resolveDiffPanelSearchToggle,
   resolveTurnDiffSearchToggle,
   resolveSendEnvMode,
-  shouldWriteThreadErrorToCurrentServerThread,
+  selectVisibleThreadAlert,
+  suppressSessionThreadAlertForRetry,
   waitForStartedServerThread,
 } from "./ChatView.logic";
 
@@ -256,45 +263,20 @@ describe("reconcileMountedTerminalThreadIds", () => {
   });
 });
 
-describe("shouldWriteThreadErrorToCurrentServerThread", () => {
-  it("routes errors to the active server thread when route and target match", () => {
-    const threadId = ThreadId.make("thread-1");
-    const routeThreadRef = scopeThreadRef(localEnvironmentId, threadId);
-
-    expect(
-      shouldWriteThreadErrorToCurrentServerThread({
-        serverThread: {
-          environmentId: localEnvironmentId,
-          id: threadId,
-        },
-        routeThreadRef,
-        targetThreadId: threadId,
-      }),
-    ).toBe(true);
-  });
-
-  it("does not route draft-thread errors into server-backed state", () => {
-    const threadId = ThreadId.make("thread-1");
-
-    expect(
-      shouldWriteThreadErrorToCurrentServerThread({
-        serverThread: undefined,
-        routeThreadRef: scopeThreadRef(localEnvironmentId, threadId),
-        targetThreadId: threadId,
-      }),
-    ).toBe(false);
-  });
-});
-
 const makeThread = (input?: {
   id?: ThreadId;
-  latestTurn?: {
-    turnId: TurnId;
-    state: "running" | "completed";
-    requestedAt: string;
-    startedAt: string | null;
-    completedAt: string | null;
-  } | null;
+  latestTurn?:
+    | ({
+        turnId: TurnId;
+        state: NonNullable<Thread["latestTurn"]>["state"];
+        requestedAt: string;
+        startedAt: string | null;
+        completedAt: string | null;
+      } & Partial<Pick<NonNullable<Thread["latestTurn"]>, "assistantMessageId">>)
+    | null;
+  session?: Thread["session"];
+  error?: string | null;
+  updatedAt?: string;
 }): Thread => ({
   id: input?.id ?? ThreadId.make("thread-1"),
   environmentId: localEnvironmentId,
@@ -304,13 +286,13 @@ const makeThread = (input?: {
   modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5.4" },
   runtimeMode: "full-access" as const,
   interactionMode: "default" as const,
-  session: null,
+  session: input?.session ?? null,
   messages: [],
   proposedPlans: [],
-  error: null,
+  error: input?.error ?? null,
   createdAt: "2026-03-29T00:00:00.000Z",
   archivedAt: null,
-  updatedAt: "2026-03-29T00:00:00.000Z",
+  updatedAt: input?.updatedAt ?? "2026-03-29T00:00:00.000Z",
   latestTurn: input?.latestTurn
     ? {
         ...input.latestTurn,
@@ -321,6 +303,290 @@ const makeThread = (input?: {
   worktreePath: null,
   turnDiffSummaries: [],
   activities: [],
+});
+
+const makeThreadSession = (
+  overrides?: Partial<NonNullable<Thread["session"]>>,
+): NonNullable<Thread["session"]> => ({
+  provider: ProviderDriverKind.make("codex"),
+  providerInstanceId: ProviderInstanceId.make("codex"),
+  status: "error",
+  createdAt: "2026-03-29T00:00:00.000Z",
+  updatedAt: "2026-03-29T00:00:10.000Z",
+  lastError: "Provider session error",
+  orchestrationStatus: "error",
+  ...overrides,
+});
+
+const makeProviderStatus = (overrides?: Partial<ServerProvider>): ServerProvider => ({
+  instanceId: ProviderInstanceId.make("codex"),
+  driver: ProviderDriverKind.make("codex"),
+  enabled: true,
+  installed: true,
+  version: "1.0.0",
+  status: "error",
+  auth: { status: "authenticated" },
+  checkedAt: "2026-03-29T00:00:00.000Z",
+  message: "Provider unavailable",
+  models: [],
+  slashCommands: [],
+  skills: [],
+  ...overrides,
+});
+
+describe("buildThreadAlerts", () => {
+  it("keeps session-level error dismissal stable across unrelated session updates", () => {
+    const latestTurn = {
+      turnId: TurnId.make("turn-existing"),
+      state: "completed" as const,
+      requestedAt: "2026-03-29T00:00:00.000Z",
+      startedAt: "2026-03-29T00:00:01.000Z",
+      completedAt: "2026-03-29T00:00:10.000Z",
+    };
+    const firstAlert = buildThreadAlerts(
+      makeThread({
+        latestTurn,
+        session: makeThreadSession({
+          updatedAt: "2026-03-29T00:00:10.000Z",
+        }),
+      }),
+      null,
+    ).find((alert) => alert.source === "session");
+    const refreshedAlert = buildThreadAlerts(
+      makeThread({
+        latestTurn,
+        session: makeThreadSession({
+          updatedAt: "2026-03-29T00:00:30.000Z",
+        }),
+      }),
+      null,
+    ).find((alert) => alert.source === "session");
+
+    expect(refreshedAlert?.dismissalKey).toBe(firstAlert?.dismissalKey);
+  });
+
+  it("keys failed turn errors by turn id so same-message retry failures can reappear", () => {
+    const firstAlert = buildThreadAlerts(
+      makeThread({
+        latestTurn: {
+          turnId: TurnId.make("turn-failed-1"),
+          state: "error",
+          requestedAt: "2026-03-29T00:00:00.000Z",
+          startedAt: "2026-03-29T00:00:01.000Z",
+          completedAt: "2026-03-29T00:00:10.000Z",
+        },
+        session: makeThreadSession({
+          lastError: "Selected model is at capacity.",
+        }),
+      }),
+      null,
+    ).find((alert) => alert.source === "session");
+    const retryAlert = buildThreadAlerts(
+      makeThread({
+        latestTurn: {
+          turnId: TurnId.make("turn-failed-2"),
+          state: "error",
+          requestedAt: "2026-03-29T00:01:00.000Z",
+          startedAt: "2026-03-29T00:01:01.000Z",
+          completedAt: "2026-03-29T00:01:10.000Z",
+        },
+        session: makeThreadSession({
+          lastError: "Selected model is at capacity.",
+        }),
+      }),
+      null,
+    ).find((alert) => alert.source === "session");
+
+    expect(retryAlert?.dismissalKey).not.toBe(firstAlert?.dismissalKey);
+  });
+
+  it("keeps local and session alerts separate even when their messages match", () => {
+    const alerts = buildThreadAlerts(
+      makeThread({
+        session: makeThreadSession({ lastError: "Same error" }),
+      }),
+      "Same error",
+    );
+
+    expect(alerts.map((alert) => alert.source)).toEqual(["local", "session"]);
+    expect(alerts[0]?.dismissalKey).not.toBe(alerts[1]?.dismissalKey);
+  });
+
+  it("recognizes dismissal keys that belong to the active thread", () => {
+    const thread = makeThread({
+      session: makeThreadSession(),
+    });
+    const threadKey = scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id));
+    const otherThreadKey = scopedThreadKey(
+      scopeThreadRef(thread.environmentId, ThreadId.make("thread-other")),
+    );
+    const alert = buildThreadAlerts(thread, null)[0];
+
+    expect(alert).toBeDefined();
+    expect(isThreadAlertDismissalKeyForThread(alert!.dismissalKey, threadKey)).toBe(true);
+    expect(isThreadAlertDismissalKeyForThread(alert!.dismissalKey, otherThreadKey)).toBe(false);
+  });
+});
+
+describe("pruneDismissedThreadAlertKeys", () => {
+  it("removes dismissed keys for known threads after their alerts disappear", () => {
+    const thread = makeThread({
+      session: makeThreadSession(),
+    });
+    const threadKey = scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id));
+    const alert = buildThreadAlerts(thread, null)[0];
+
+    expect(alert).toBeDefined();
+    const result = pruneDismissedThreadAlertKeys({
+      dismissedKeys: new Set([alert!.dismissalKey]),
+      currentThreadKeys: new Set([threadKey]),
+      currentAlertKeys: new Set(),
+    });
+
+    expect([...result]).toEqual([]);
+  });
+
+  it("keeps dismissed keys while the same alert is still current", () => {
+    const thread = makeThread({
+      session: makeThreadSession(),
+    });
+    const threadKey = scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id));
+    const alert = buildThreadAlerts(thread, null)[0];
+
+    expect(alert).toBeDefined();
+    const result = pruneDismissedThreadAlertKeys({
+      dismissedKeys: new Set([alert!.dismissalKey]),
+      currentThreadKeys: new Set([threadKey]),
+      currentAlertKeys: new Set([alert!.dismissalKey]),
+    });
+
+    expect([...result]).toEqual([alert!.dismissalKey]);
+  });
+
+  it("leaves unknown thread keys alone", () => {
+    const thread = makeThread({
+      session: makeThreadSession(),
+    });
+    const alert = buildThreadAlerts(thread, null)[0];
+
+    expect(alert).toBeDefined();
+    const result = pruneDismissedThreadAlertKeys({
+      dismissedKeys: new Set([alert!.dismissalKey]),
+      currentThreadKeys: new Set(),
+      currentAlertKeys: new Set(),
+    });
+
+    expect([...result]).toEqual([alert!.dismissalKey]);
+  });
+});
+
+describe("selectVisibleThreadAlert", () => {
+  it("hides retry-suppressed session alerts without treating them as dismissed", () => {
+    const thread = makeThread({
+      session: makeThreadSession({ lastError: "Selected model is at capacity." }),
+    });
+    const sessionAlert = buildThreadAlerts(thread, null).find(
+      (alert) => alert.source === "session",
+    );
+
+    expect(sessionAlert).toBeDefined();
+    const visibleAlert = selectVisibleThreadAlert({
+      alerts: buildThreadAlerts(thread, null),
+      dismissedKeys: new Set(),
+      suppressedKeys: new Set([sessionAlert!.dismissalKey]),
+    });
+
+    expect(visibleAlert).toBeNull();
+  });
+
+  it("keeps local send errors visible when an older session alert is suppressed", () => {
+    const thread = makeThread({
+      session: makeThreadSession({ lastError: "Previous provider failure." }),
+    });
+    const alerts = buildThreadAlerts(thread, "Failed to send message.");
+    const sessionAlert = alerts.find((alert) => alert.source === "session");
+
+    expect(sessionAlert).toBeDefined();
+    const visibleAlert = selectVisibleThreadAlert({
+      alerts,
+      dismissedKeys: new Set(),
+      suppressedKeys: new Set([sessionAlert!.dismissalKey]),
+    });
+
+    expect(visibleAlert?.source).toBe("local");
+    expect(visibleAlert?.message).toBe("Failed to send message.");
+  });
+
+  it("lets a dismissed same-message session alert reappear after retry suppression ends", () => {
+    const thread = makeThread({
+      session: makeThreadSession({ lastError: "Selected model is at capacity." }),
+    });
+    const alerts = buildThreadAlerts(thread, null);
+    const sessionAlert = alerts.find((alert) => alert.source === "session");
+
+    expect(sessionAlert).toBeDefined();
+    const dismissedKeys = new Set([sessionAlert!.dismissalKey]);
+    expect(
+      selectVisibleThreadAlert({
+        alerts,
+        dismissedKeys,
+      }),
+    ).toBeNull();
+
+    const rearmedDismissedKeys = rearmDismissedSessionThreadAlertForRetry({
+      alerts,
+      dismissedKeys,
+    });
+    const retrySuppressedKeys = suppressSessionThreadAlertForRetry({
+      alerts,
+      suppressedKeys: new Set(),
+    });
+
+    expect([...rearmedDismissedKeys]).toEqual([]);
+    expect([...retrySuppressedKeys]).toEqual([sessionAlert!.dismissalKey]);
+    expect(
+      selectVisibleThreadAlert({
+        alerts,
+        dismissedKeys: rearmedDismissedKeys,
+        suppressedKeys: retrySuppressedKeys,
+      }),
+    ).toBeNull();
+    expect(
+      selectVisibleThreadAlert({
+        alerts,
+        dismissedKeys: rearmedDismissedKeys,
+        suppressedKeys: new Set(),
+      })?.dismissalKey,
+    ).toBe(sessionAlert!.dismissalKey);
+  });
+});
+
+describe("buildProviderStatusDismissalKey", () => {
+  it("keeps provider dismissal stable across checkedAt-only refreshes", () => {
+    const firstKey = buildProviderStatusDismissalKey(
+      makeProviderStatus({ checkedAt: "2026-03-29T00:00:00.000Z" }),
+    );
+    const refreshedKey = buildProviderStatusDismissalKey(
+      makeProviderStatus({ checkedAt: "2026-03-29T00:00:30.000Z" }),
+    );
+
+    expect(refreshedKey).toBe(firstKey);
+  });
+
+  it("changes provider dismissal when the visible status meaning changes", () => {
+    const firstKey = buildProviderStatusDismissalKey(
+      makeProviderStatus({ message: "Provider unavailable" }),
+    );
+    const changedKey = buildProviderStatusDismissalKey(
+      makeProviderStatus({ message: "Authentication failed" }),
+    );
+
+    expect(changedKey).not.toBe(firstKey);
+  });
+
+  it("does not build dismissal keys for ready providers", () => {
+    expect(buildProviderStatusDismissalKey(makeProviderStatus({ status: "ready" }))).toBeNull();
+  });
 });
 
 function setStoreThreads(threads: ReadonlyArray<ReturnType<typeof makeThread>>) {

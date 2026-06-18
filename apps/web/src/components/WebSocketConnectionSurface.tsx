@@ -6,7 +6,6 @@ import {
   getWsConnectionUiState,
   setBrowserOnlineStatus,
   type WsConnectionStatus,
-  type WsConnectionUiState,
   useWsConnectionStatus,
   WS_RECONNECT_MAX_ATTEMPTS,
 } from "../rpc/wsConnectionState";
@@ -15,6 +14,7 @@ import { getPrimaryEnvironmentConnection } from "../environments/runtime";
 import { APP_BASE_NAME } from "../branding";
 
 const FORCED_WS_RECONNECT_DEBOUNCE_MS = 5_000;
+const ROUTINE_RECONNECT_TOAST_GRACE_MS = 3_000;
 type WsAutoReconnectTrigger = "focus" | "online";
 
 const connectionTimeFormatter = new Intl.DateTimeFormat(undefined, {
@@ -60,28 +60,6 @@ function getConnectionDisplayName(status: WsConnectionStatus): string {
 
 function buildReconnectTitle(status: WsConnectionStatus): string {
   return `Disconnected from ${getConnectionDisplayName(status)}`;
-}
-
-function buildRecoveredTitle(status: WsConnectionStatus): string {
-  return `Reconnected to ${getConnectionDisplayName(status)}`;
-}
-
-function describeRecoveredToast(
-  previousDisconnectedAt: string | null,
-  connectedAt: string | null,
-): string {
-  const reconnectedAtLabel = formatConnectionMoment(connectedAt);
-  const disconnectedAtLabel = formatConnectionMoment(previousDisconnectedAt);
-
-  if (disconnectedAtLabel && reconnectedAtLabel) {
-    return `Disconnected at ${disconnectedAtLabel} and reconnected at ${reconnectedAtLabel}.`;
-  }
-
-  if (reconnectedAtLabel) {
-    return `Connection restored at ${reconnectedAtLabel}.`;
-  }
-
-  return "Connection restored.";
 }
 
 function describeSlowRpcAckToast(requests: ReadonlyArray<SlowRpcAckRequest>): string {
@@ -151,14 +129,13 @@ export function WebSocketConnectionCoordinator() {
   const [nowMs, setNowMs] = useState(() => Date.now());
   const lastForcedReconnectAtRef = useRef(0);
   const toastIdRef = useRef<ReturnType<typeof toastManager.add> | null>(null);
-  const toastResetTimerRef = useRef<number | null>(null);
-  const previousUiStateRef = useRef<WsConnectionUiState>(getWsConnectionUiState(status));
-  const previousDisconnectedAtRef = useRef<string | null>(status.disconnectedAt);
+  const reconnectToastGraceTimerRef = useRef<number | null>(null);
+  const [reconnectToastGraceElapsed, setReconnectToastGraceElapsed] = useState(false);
 
   const runReconnect = useEffectEvent((showFailureToast: boolean) => {
-    if (toastResetTimerRef.current !== null) {
-      window.clearTimeout(toastResetTimerRef.current);
-      toastResetTimerRef.current = null;
+    if (reconnectToastGraceTimerRef.current !== null) {
+      window.clearTimeout(reconnectToastGraceTimerRef.current);
+      reconnectToastGraceTimerRef.current = null;
     }
     lastForcedReconnectAtRef.current = Date.now();
     void getPrimaryEnvironmentConnection()
@@ -270,21 +247,31 @@ export function WebSocketConnectionCoordinator() {
 
   useEffect(() => {
     const uiState = getWsConnectionUiState(status);
-    const previousUiState = previousUiStateRef.current;
-    const previousDisconnectedAt = previousDisconnectedAtRef.current;
-    const shouldShowReconnectToast = status.hasConnected && uiState === "reconnecting";
+    const shouldShowReconnectToast =
+      status.hasConnected && uiState === "reconnecting" && status.reconnectPhase !== "exhausted";
     const shouldShowOfflineToast = uiState === "offline" && status.disconnectedAt !== null;
     const shouldShowExhaustedToast = status.hasConnected && status.reconnectPhase === "exhausted";
 
-    if (
-      toastResetTimerRef.current !== null &&
-      (shouldShowReconnectToast || shouldShowOfflineToast || shouldShowExhaustedToast)
-    ) {
-      window.clearTimeout(toastResetTimerRef.current);
-      toastResetTimerRef.current = null;
+    if (!shouldShowReconnectToast) {
+      if (reconnectToastGraceTimerRef.current !== null) {
+        window.clearTimeout(reconnectToastGraceTimerRef.current);
+        reconnectToastGraceTimerRef.current = null;
+      }
+      if (reconnectToastGraceElapsed) {
+        setReconnectToastGraceElapsed(false);
+      }
+    } else if (!reconnectToastGraceElapsed && reconnectToastGraceTimerRef.current === null) {
+      reconnectToastGraceTimerRef.current = window.setTimeout(() => {
+        reconnectToastGraceTimerRef.current = null;
+        setReconnectToastGraceElapsed(true);
+      }, ROUTINE_RECONNECT_TOAST_GRACE_MS);
     }
 
-    if (shouldShowReconnectToast || shouldShowOfflineToast || shouldShowExhaustedToast) {
+    if (
+      (shouldShowReconnectToast && reconnectToastGraceElapsed) ||
+      shouldShowOfflineToast ||
+      shouldShowExhaustedToast
+    ) {
       const toastPayload = shouldShowOfflineToast
         ? stackedThreadToast({
             data: {
@@ -336,42 +323,12 @@ export function WebSocketConnectionCoordinator() {
       toastIdRef.current = null;
     }
 
-    if (
-      uiState === "connected" &&
-      (previousUiState === "offline" || previousUiState === "reconnecting") &&
-      previousDisconnectedAt !== null
-    ) {
-      const successToast = {
-        description: describeRecoveredToast(previousDisconnectedAt, status.connectedAt),
-        title: buildRecoveredTitle(status),
-        type: "success" as const,
-        timeout: 0,
-        data: {
-          dismissAfterVisibleMs: 8_000,
-          hideCopyButton: true,
-        },
-      };
-
-      if (toastIdRef.current) {
-        toastManager.update(toastIdRef.current, successToast);
-      } else {
-        toastIdRef.current = toastManager.add(successToast);
-      }
-
-      toastResetTimerRef.current = window.setTimeout(() => {
-        toastIdRef.current = null;
-        toastResetTimerRef.current = null;
-      }, 8_250);
-    }
-
-    previousUiStateRef.current = uiState;
-    previousDisconnectedAtRef.current = status.disconnectedAt;
-  }, [nowMs, status]);
+  }, [nowMs, reconnectToastGraceElapsed, status]);
 
   useEffect(() => {
     return () => {
-      if (toastResetTimerRef.current !== null) {
-        window.clearTimeout(toastResetTimerRef.current);
+      if (reconnectToastGraceTimerRef.current !== null) {
+        window.clearTimeout(reconnectToastGraceTimerRef.current);
       }
     };
   }, []);

@@ -77,6 +77,11 @@ import {
   COMPOSER_CONTROL_SEPARATOR_CLASS,
   COMPOSER_CONTROL_TEXT_TRIGGER_CLASS,
 } from "./composerControlStyles";
+import {
+  SIDEBAR_LABEL_COLOR_CLASS,
+  SIDEBAR_LABEL_TEXT_CLASS,
+  SIDEBAR_MUTED_TEXT_CLASS,
+} from "../sidebar/sidebarTextStyles";
 import { resolveComposerMenuActiveItemId } from "./composerMenuHighlight";
 import { searchSlashCommandItems } from "./composerSlashCommandSearch";
 import {
@@ -85,32 +90,24 @@ import {
   renderProviderTraitsMenuContent,
 } from "./composerProviderState";
 import { ContextWindowMeter } from "./ContextWindowMeter";
-import { buildExpandedImagePreview, type ExpandedImagePreview } from "./ExpandedImagePreview";
+import { type ExpandedImagePreview } from "./ExpandedImagePreview";
+import {
+  AttachmentRemoveButton,
+  ImageAttachmentPreviewStrip,
+} from "./ImageAttachmentPreviewStrip";
 import { basenameOfPath } from "../../vscode-icons";
 import { cn, newCommandId, randomUUID } from "~/lib/utils";
 import { Button } from "../ui/button";
-import {
-  Dialog,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogPanel,
-  DialogPopup,
-  DialogTitle,
-} from "../ui/dialog";
-import { Input } from "../ui/input";
+import { AttachChatContextPicker } from "./AttachChatContextPicker";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { toastManager } from "../ui/toast";
 import {
-  CircleAlertIcon,
-  GitBranchIcon,
   ListTodoIcon,
   type LucideIcon,
   LockIcon,
   LockOpenIcon,
   PenLineIcon,
-  XIcon,
 } from "lucide-react";
 import { proposedPlanTitle } from "../../proposedPlan";
 import { getProviderInteractionModeToggle } from "../../providerModels";
@@ -378,8 +375,10 @@ const ComposerFooterModeControls = memo(function ComposerFooterModeControls(prop
                 return (
                   <SelectItem key={mode} value={mode} className="min-w-56 py-2">
                     <div className="grid min-w-0 gap-0.5">
-                      <span className="font-medium text-foreground">{option.label}</span>
-                      <span className="text-muted-foreground text-xs leading-4">
+                      <span className={cn(SIDEBAR_LABEL_COLOR_CLASS, SIDEBAR_LABEL_TEXT_CLASS)}>
+                        {option.label}
+                      </span>
+                      <span className={cn(SIDEBAR_MUTED_TEXT_CLASS, SIDEBAR_LABEL_TEXT_CLASS)}>
                         {option.description}
                       </span>
                     </div>
@@ -413,11 +412,17 @@ const ComposerFooterModeControls = memo(function ComposerFooterModeControls(prop
             return (
               <SelectItem key={mode} value={mode} className="min-w-64 py-2">
                 <div className="grid min-w-0 gap-0.5">
-                  <span className="inline-flex items-center gap-1.5 font-medium text-foreground">
+                  <span
+                    className={cn(
+                      "inline-flex items-center gap-1.5",
+                      SIDEBAR_LABEL_COLOR_CLASS,
+                      SIDEBAR_LABEL_TEXT_CLASS,
+                    )}
+                  >
                     <OptionIcon className="size-3.5 shrink-0 text-muted-foreground" />
                     {option.label}
                   </span>
-                  <span className="text-muted-foreground text-xs leading-4">
+                  <span className={cn(SIDEBAR_MUTED_TEXT_CLASS, SIDEBAR_LABEL_TEXT_CLASS)}>
                     {option.description}
                   </span>
                 </div>
@@ -482,7 +487,9 @@ const ComposerFooterPrimaryActions = memo(function ComposerFooterPrimaryActions(
     <>
       {props.activeContextWindow ? <ContextWindowMeter usage={props.activeContextWindow} /> : null}
       {props.isPreparingWorktree ? (
-        <span className="text-muted-foreground/70 text-xs">Preparing worktree...</span>
+        <span className={cn(SIDEBAR_MUTED_TEXT_CLASS, SIDEBAR_LABEL_TEXT_CLASS)}>
+          Preparing worktree...
+        </span>
       ) : null}
       <ComposerPrimaryActions
         compact={props.compact}
@@ -787,11 +794,13 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const composerEnvironmentId = activeThreadEnvironmentId ?? environmentId;
   const showComposerWorkspaceContextControl =
     primaryEnvironmentId !== null && composerEnvironmentId === primaryEnvironmentId;
-  const [chatContextDialogOpen, setChatContextDialogOpen] = useState(false);
+  const [chatContextPickerOpen, setChatContextPickerOpen] = useState(false);
   const [chatContextSearch, setChatContextSearch] = useState("");
-  const [selectedChatContextSourceId, setSelectedChatContextSourceId] = useState<ThreadId | null>(
-    null,
-  );
+  const [highlightedChatContextSourceId, setHighlightedChatContextSourceId] =
+    useState<ThreadId | null>(null);
+  const [attachingChatContextSourceId, setAttachingChatContextSourceId] =
+    useState<ThreadId | null>(null);
+  const attachingChatContextSourceIdRef = useRef<ThreadId | null>(null);
   const chatContextThreads = useStore(
     useShallow(
       useCallback(
@@ -839,19 +848,19 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       });
   }, [chatContextPickerState, chatContextSearch]);
   useEffect(() => {
-    if (!chatContextDialogOpen) {
+    if (!chatContextPickerOpen) {
       return;
     }
     if (
-      selectedChatContextSourceId &&
-      chatContextCandidates.some((thread) => thread.id === selectedChatContextSourceId)
+      highlightedChatContextSourceId &&
+      chatContextCandidates.some((thread) => thread.id === highlightedChatContextSourceId)
     ) {
       return;
     }
-    setSelectedChatContextSourceId(chatContextCandidates[0]?.id ?? null);
-  }, [chatContextCandidates, chatContextDialogOpen, selectedChatContextSourceId]);
+    setHighlightedChatContextSourceId(chatContextCandidates[0]?.id ?? null);
+  }, [chatContextCandidates, chatContextPickerOpen, highlightedChatContextSourceId]);
 
-  const openChatContextDialog = useCallback(() => {
+  const openChatContextPicker = useCallback(() => {
     if (!activeThread || !isServerThread) {
       toastManager.add({
         type: "warning",
@@ -861,42 +870,61 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       return;
     }
     setChatContextSearch("");
-    setSelectedChatContextSourceId(chatContextCandidates[0]?.id ?? null);
-    setChatContextDialogOpen(true);
+    setHighlightedChatContextSourceId(chatContextCandidates[0]?.id ?? null);
+    setChatContextPickerOpen(true);
   }, [activeThread, chatContextCandidates, isServerThread]);
 
-  const confirmAttachChatContext = useCallback(async () => {
-    if (!activeThread || !selectedChatContextSourceId) {
-      return;
-    }
-    const api = readEnvironmentApi(activeThread.environmentId);
-    if (!api) {
-      toastManager.add({
-        type: "error",
-        title: "Environment unavailable",
-        description: "Reconnect before attaching chat context.",
-      });
-      return;
-    }
-    try {
-      await api.orchestration.dispatchCommand({
-        type: "thread.context-binding.add",
-        commandId: newCommandId(),
-        threadId: activeThread.id,
-        bindingId: ThreadContextBindingId.make(`ctx-${randomUUID()}`),
-        sourceThreadId: selectedChatContextSourceId,
-        mode: "snapshot",
-        createdAt: new Date().toISOString(),
-      });
-      setChatContextDialogOpen(false);
-    } catch (error) {
-      toastManager.add({
-        type: "error",
-        title: "Failed to attach chat context",
-        description: error instanceof Error ? error.message : "An error occurred.",
-      });
-    }
-  }, [activeThread, selectedChatContextSourceId]);
+  const handleChatContextPickerOpenChange = useCallback(
+    (open: boolean) => {
+      if (!open) {
+        setChatContextPickerOpen(false);
+        return;
+      }
+      openChatContextPicker();
+    },
+    [openChatContextPicker],
+  );
+
+  const attachChatContextSource = useCallback(
+    async (sourceThreadId: ThreadId) => {
+      if (!activeThread || attachingChatContextSourceIdRef.current !== null) {
+        return;
+      }
+      const api = readEnvironmentApi(activeThread.environmentId);
+      if (!api) {
+        toastManager.add({
+          type: "error",
+          title: "Environment unavailable",
+          description: "Reconnect before attaching chat context.",
+        });
+        return;
+      }
+      attachingChatContextSourceIdRef.current = sourceThreadId;
+      setAttachingChatContextSourceId(sourceThreadId);
+      try {
+        await api.orchestration.dispatchCommand({
+          type: "thread.context-binding.add",
+          commandId: newCommandId(),
+          threadId: activeThread.id,
+          bindingId: ThreadContextBindingId.make(`ctx-${randomUUID()}`),
+          sourceThreadId,
+          mode: "snapshot",
+          createdAt: new Date().toISOString(),
+        });
+        setChatContextPickerOpen(false);
+      } catch (error) {
+        toastManager.add({
+          type: "error",
+          title: "Failed to attach chat context",
+          description: error instanceof Error ? error.message : "An error occurred.",
+        });
+      } finally {
+        attachingChatContextSourceIdRef.current = null;
+        setAttachingChatContextSourceId(null);
+      }
+    },
+    [activeThread],
+  );
 
   const removeChatContextBinding = useCallback(
     async (bindingId: ThreadContextBindingId) => {
@@ -1273,6 +1301,10 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     isComposerApprovalState ||
     pendingUserInputs.length > 0 ||
     (showPlanFollowUpPrompt && activeProposedPlan !== null);
+  const showComposerAttachmentRow =
+    !isComposerApprovalState &&
+    pendingUserInputs.length === 0 &&
+    (chatContextBindings.length > 0 || composerImages.length > 0);
 
   const composerFooterHasWideActions = showPlanFollowUpPrompt || activePendingProgress !== null;
   const showPlanSidebarToggle = Boolean(activePlan || sidebarProposedPlan || planSidebarOpen);
@@ -2231,12 +2263,12 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         >
           <div
             className={cn(
-              "flex min-h-32 flex-col rounded-[32px] bg-card shadow-[0_4px_14.4px_rgba(9,9,9,0.08)] transition-colors duration-200 dark:bg-[#1e1e1e] dark:shadow-[inset_-1px_-1px_1px_rgba(255,255,255,0.06),inset_1px_1px_1px_rgba(255,255,255,0.12),0_4px_14.4px_rgba(9,9,9,0.08)]",
+              "flex min-h-24 flex-col rounded-[32px] bg-card shadow-[0_4px_14.4px_rgba(9,9,9,0.035)] transition-colors duration-200 not-dark:border not-dark:border-border dark:bg-[#1e1e1e] dark:shadow-[inset_-1px_-1px_1px_rgba(255,255,255,0.06),inset_1px_1px_1px_rgba(255,255,255,0.12),0_4px_14.4px_rgba(9,9,9,0.08)]",
               environmentUnavailable ? "opacity-75" : null,
             )}
           >
             {activePendingApproval ? (
-              <div className="rounded-t-[19px] border-b border-border/65 bg-muted/20">
+              <div className="rounded-t-[32px] border-b border-border/65">
                 <ComposerPendingApprovalPanel
                   approval={activePendingApproval}
                   pendingCount={pendingApprovals.length}
@@ -2282,19 +2314,17 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                 </div>
               )}
 
-              {!isComposerApprovalState &&
-              pendingUserInputs.length === 0 &&
-              chatContextBindings.length > 0 ? (
-                <div className="mb-3 flex min-w-0 flex-wrap gap-2">
+              {showComposerAttachmentRow ? (
+                <div className="mb-3 flex min-w-0 flex-wrap items-center gap-2">
                   {chatContextBindings.map((binding) => {
                     const sourceProject = binding.sourceProjectId
                       ? chatContextPickerState.projectById[binding.sourceProjectId]
                       : undefined;
                     const syncLabel = binding.cutoffMessageId
-                      ? "Snapshot from selected message"
-                      : "Snapshot from thread";
+                      ? "From selected message"
+                      : "From thread";
                     const tooltip = [
-                      "Snapshot context",
+                      "Attached thread context",
                       sourceProject?.name,
                       sourceProject?.cwd,
                       syncLabel,
@@ -2305,23 +2335,24 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                       <Tooltip key={binding.id}>
                         <TooltipTrigger
                           render={
-                            <span className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-border/70 bg-background/55 px-2 py-1 text-xs text-muted-foreground shadow-xs/5" />
+                            <span
+                              className={cn(
+                                "relative mr-3.5 inline-flex h-8 max-w-full items-center overflow-visible rounded-md border border-border/70 bg-background/55 py-0 pl-2.5 pr-5 shadow-xs/5 dark:border-white/12 dark:bg-transparent dark:shadow-none",
+                                SIDEBAR_MUTED_TEXT_CLASS,
+                                SIDEBAR_LABEL_TEXT_CLASS,
+                              )}
+                            />
                           }
                         >
-                          <GitBranchIcon className="size-3.5 shrink-0" />
-                          <span className="truncate">Snapshot: {binding.sourceThreadTitle}</span>
-                          <button
-                            type="button"
-                            aria-label={`Remove ${binding.sourceThreadTitle} context`}
-                            className="-mr-0.5 inline-flex size-4 shrink-0 items-center justify-center rounded-full text-muted-foreground/70 hover:bg-muted hover:text-foreground"
+                          <span className="truncate">{binding.sourceThreadTitle}</span>
+                          <AttachmentRemoveButton
+                            ariaLabel={`Remove ${binding.sourceThreadTitle} context`}
                             onClick={(event) => {
                               event.preventDefault();
                               event.stopPropagation();
                               void removeChatContextBinding(binding.id);
                             }}
-                          >
-                            <XIcon className="size-3" />
-                          </button>
+                          />
                         </TooltipTrigger>
                         <TooltipPopup side="top" className="max-w-80 whitespace-normal">
                           {tooltip}
@@ -2329,75 +2360,18 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                       </Tooltip>
                     );
                   })}
+                  {composerImages.length > 0 ? (
+                    <ImageAttachmentPreviewStrip
+                      images={composerImages}
+                      variant="composer"
+                      className="contents"
+                      nonPersistedImageIds={nonPersistedComposerImageIdSet}
+                      onExpandImage={onExpandImage}
+                      onRemoveImage={removeComposerImage}
+                    />
+                  ) : null}
                 </div>
               ) : null}
-
-              {!isComposerApprovalState &&
-                pendingUserInputs.length === 0 &&
-                composerImages.length > 0 && (
-                  <div className="mb-3 flex flex-wrap gap-2">
-                    {composerImages.map((image) => (
-                      <div
-                        key={image.id}
-                        className="relative h-16 w-16 overflow-hidden rounded-lg border border-border/80 bg-background"
-                      >
-                        {image.previewUrl ? (
-                          <button
-                            type="button"
-                            className="h-full w-full cursor-zoom-in"
-                            aria-label={`Preview ${image.name}`}
-                            onClick={() => {
-                              const preview = buildExpandedImagePreview(composerImages, image.id);
-                              if (!preview) return;
-                              onExpandImage(preview);
-                            }}
-                          >
-                            <img
-                              src={image.previewUrl}
-                              alt={image.name}
-                              className="h-full w-full object-cover"
-                            />
-                          </button>
-                        ) : (
-                          <div className="flex h-full w-full items-center justify-center px-1 text-center text-[10px] text-muted-foreground/70">
-                            {image.name}
-                          </div>
-                        )}
-                        {nonPersistedComposerImageIdSet.has(image.id) && (
-                          <Tooltip>
-                            <TooltipTrigger
-                              render={
-                                <span
-                                  role="img"
-                                  aria-label="Draft attachment may not persist"
-                                  className="absolute left-1 top-1 inline-flex items-center justify-center rounded bg-background/85 p-0.5 text-amber-600"
-                                >
-                                  <CircleAlertIcon className="size-3" />
-                                </span>
-                              }
-                            />
-                            <TooltipPopup
-                              side="top"
-                              className="max-w-64 whitespace-normal leading-tight"
-                            >
-                              Draft attachment could not be saved locally and may be lost on
-                              navigation.
-                            </TooltipPopup>
-                          </Tooltip>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="icon-xs"
-                          className="absolute right-1 top-1 bg-background/80 hover:bg-background/90"
-                          onClick={() => removeComposerImage(image.id)}
-                          aria-label={`Remove ${image.name}`}
-                        >
-                          <XIcon />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                )}
 
               <div className="relative">
                 <ComposerPromptEditor
@@ -2416,15 +2390,14 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                       : []
                   }
                   skills={selectedProviderStatus?.skills ?? []}
-                  className="min-h-14 sm:min-h-14"
+                  className="min-h-8 sm:min-h-8"
                   onRemoveTerminalContext={removeComposerTerminalContextFromDraft}
                   onChange={onPromptChange}
                   onCommandKeyDown={onComposerCommandKey}
                   onPaste={onComposerPaste}
                   placeholder={
                     isComposerApprovalState
-                      ? (activePendingApproval?.detail ??
-                        "Resolve this approval request to continue")
+                      ? ""
                       : activePendingProgress
                         ? "Type your own answer, or leave this blank to use the selected option"
                         : showPlanFollowUpPrompt && activeProposedPlan
@@ -2437,7 +2410,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                               }`
                             : phase === "disconnected"
                               ? "Ask for follow-up changes or attach images"
-                              : "Ask anything, @tag files/folders, $use skills, or / for commands"
+                              : isComposerFooterCompact
+                                ? "Ask anything"
+                                : "Ask anything, @tag files/folders, $use skills, or / for commands"
                   }
                   disabled={
                     isConnecting ||
@@ -2450,7 +2425,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
 
             {/* Bottom toolbar */}
             {activePendingApproval ? (
-              <div className="flex items-center justify-end gap-2 px-2.5 pb-2.5 sm:px-3 sm:pb-3">
+              <div className="flex flex-wrap items-center justify-end gap-2 px-5 pb-4 sm:px-6">
                 <ComposerPendingApprovalActions
                   requestId={activePendingApproval.requestId}
                   isResponding={respondingRequestIds.includes(activePendingApproval.requestId)}
@@ -2477,10 +2452,17 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                       <ComposerToolbarSeparator />
                     </>
                   ) : null}
-                  <ComposerToolbarIconAction
-                    label="Attach chat context"
-                    icon={GitBranchIcon}
-                    onClick={openChatContextDialog}
+                  <AttachChatContextPicker
+                    open={chatContextPickerOpen}
+                    onOpenChange={handleChatContextPickerOpenChange}
+                    candidates={chatContextCandidates}
+                    projectById={chatContextPickerState.projectById}
+                    search={chatContextSearch}
+                    onSearchChange={setChatContextSearch}
+                    highlightedSourceId={highlightedChatContextSourceId}
+                    onHighlightedSourceIdChange={setHighlightedChatContextSourceId}
+                    attachingSourceId={attachingChatContextSourceId}
+                    onSelectSource={attachChatContextSource}
                   />
                   <ComposerToolbarSeparator />
                   {showComposerBrowserUseControl ? (
@@ -2494,29 +2476,70 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   ) : null}
 
                   {isComposerFooterCompact ? (
-                    <ComposerProviderModelPicker
-                      compact
-                      activeInstanceId={selectedInstanceId}
-                      model={selectedModelForPickerWithCustomFallback}
-                      lockedProvider={lockedProvider}
-                      lockedContinuationGroupKey={lockedContinuationGroupKey}
-                      instanceEntries={providerInstanceEntries}
-                      keybindings={keybindings}
-                      modelOptionsByInstance={modelOptionsByInstance}
-                      terminalOpen={terminalOpen}
-                      open={isComposerModelPickerOpen}
-                      triggerClassName="max-w-42"
-                      {...(composerProviderState.modelPickerIconClassName
-                        ? {
-                            activeProviderIconClassName:
-                              composerProviderState.modelPickerIconClassName,
-                          }
-                        : {})}
-                      onOpenChange={(open) => {
-                        setIsComposerModelPickerOpen(open);
-                      }}
-                      onInstanceModelChange={onProviderModelSelect}
-                    />
+                    <>
+                      {composerProviderControls.showInteractionModeToggle ? (
+                        <>
+                          <Select
+                            value={interactionMode}
+                            onValueChange={(value) => {
+                              if (!value) return;
+                              handleInteractionModeChange(value as ProviderInteractionMode);
+                            }}
+                          >
+                            <ComposerSelectTrigger
+                              variant="ghost"
+                              size="sm"
+                              className="max-w-28"
+                              aria-label="Interaction mode"
+                              title={interactionModeConfig[interactionMode].description}
+                            >
+                              <SelectValue>
+                                {interactionModeConfig[interactionMode].label}
+                              </SelectValue>
+                            </ComposerSelectTrigger>
+                            <SelectPopup alignItemWithTrigger={false}>
+                              {INTERACTION_MODE_ORDER.map((mode) => {
+                                const option = interactionModeConfig[mode];
+                                return (
+                                  <SelectItem key={mode} value={mode} className="min-w-56 py-2">
+                                    <div className="grid min-w-0 gap-0.5">
+                                      <span
+                                        className={cn(
+                                          SIDEBAR_LABEL_COLOR_CLASS,
+                                          SIDEBAR_LABEL_TEXT_CLASS,
+                                        )}
+                                      >
+                                        {option.label}
+                                      </span>
+                                      <span
+                                        className={cn(
+                                          SIDEBAR_MUTED_TEXT_CLASS,
+                                          SIDEBAR_LABEL_TEXT_CLASS,
+                                        )}
+                                      >
+                                        {option.description}
+                                      </span>
+                                    </div>
+                                  </SelectItem>
+                                );
+                              })}
+                            </SelectPopup>
+                          </Select>
+                          <ComposerToolbarSeparator />
+                        </>
+                      ) : null}
+                      <ComposerFooterModeControls
+                        showInteractionModeToggle={false}
+                        interactionMode={interactionMode}
+                        runtimeMode={runtimeMode}
+                        showPlanToggle={showPlanSidebarToggle}
+                        planSidebarLabel={planSidebarLabel}
+                        planSidebarOpen={planSidebarOpen}
+                        onInteractionModeChange={handleInteractionModeChange}
+                        onRuntimeModeChange={handleRuntimeModeChange}
+                        onTogglePlanSidebar={togglePlanSidebar}
+                      />
+                    </>
                   ) : (
                     <>
                       {composerProviderControls.showInteractionModeToggle ? (
@@ -2545,10 +2568,20 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                                 return (
                                   <SelectItem key={mode} value={mode} className="min-w-56 py-2">
                                     <div className="grid min-w-0 gap-0.5">
-                                      <span className="font-medium text-foreground">
+                                      <span
+                                        className={cn(
+                                          SIDEBAR_LABEL_COLOR_CLASS,
+                                          SIDEBAR_LABEL_TEXT_CLASS,
+                                        )}
+                                      >
                                         {option.label}
                                       </span>
-                                      <span className="text-muted-foreground text-xs leading-4">
+                                      <span
+                                        className={cn(
+                                          SIDEBAR_MUTED_TEXT_CLASS,
+                                          SIDEBAR_LABEL_TEXT_CLASS,
+                                        )}
+                                      >
                                         {option.description}
                                       </span>
                                     </div>
@@ -2606,18 +2639,18 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     </>
                   )}
 
-                  {isComposerFooterCompact ? (
+                  {isComposerFooterCompact && providerTraitsMenuContent ? (
                     <>
                       <ComposerToolbarSeparator />
                       <CompactComposerControlsMenu
-                        activePlan={showPlanSidebarToggle}
+                        activePlan={false}
                         interactionMode={interactionMode}
                         planSidebarLabel={planSidebarLabel}
                         planSidebarOpen={planSidebarOpen}
                         runtimeMode={runtimeMode}
-                        showInteractionModeToggle={
-                          composerProviderControls.showInteractionModeToggle
-                        }
+                        showInteractionModeToggle={false}
+                        showRuntimeModeToggle={false}
+                        showPlanToggle={false}
                         traitsMenuContent={providerTraitsMenuContent}
                         onInteractionModeChange={handleInteractionModeChange}
                         onTogglePlanSidebar={togglePlanSidebar}
@@ -2659,82 +2692,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           </div>
         </div>
       </form>
-
-      <Dialog open={chatContextDialogOpen} onOpenChange={setChatContextDialogOpen}>
-        <DialogPopup className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <GitBranchIcon className="size-4" />
-              Attach chat context
-            </DialogTitle>
-            <DialogDescription>Select a source chat to attach as a snapshot.</DialogDescription>
-          </DialogHeader>
-          <DialogPanel className="space-y-4">
-            <Input
-              value={chatContextSearch}
-              placeholder="Search chats, projects, paths"
-              onChange={(event) => setChatContextSearch(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key !== "Enter") {
-                  return;
-                }
-                event.preventDefault();
-                void confirmAttachChatContext();
-              }}
-            />
-
-            <div className="max-h-72 space-y-1 overflow-y-auto pr-1">
-              {chatContextCandidates.length === 0 ? (
-                <div className="rounded-lg border border-border/70 bg-muted/20 px-3 py-6 text-center text-muted-foreground text-sm">
-                  No other chats in this environment.
-                </div>
-              ) : (
-                chatContextCandidates.map((thread) => {
-                  const project = chatContextPickerState.projectById[thread.projectId];
-                  const selected = selectedChatContextSourceId === thread.id;
-                  return (
-                    <button
-                      key={thread.id}
-                      type="button"
-                      className={cn(
-                        "flex w-full min-w-0 items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left transition-colors",
-                        selected
-                          ? "border-ring/55 bg-accent/60 text-foreground"
-                          : "border-border/60 bg-background/40 text-foreground hover:bg-accent/40",
-                      )}
-                      aria-pressed={selected}
-                      onClick={() => setSelectedChatContextSourceId(thread.id)}
-                    >
-                      <span className="min-w-0">
-                        <span className="block truncate text-sm font-medium">{thread.title}</span>
-                        <span className="block truncate text-muted-foreground text-xs">
-                          {project ? `${project.name} · ${project.cwd}` : thread.id}
-                        </span>
-                      </span>
-                      <span className="shrink-0 text-muted-foreground text-xs">
-                        {thread.archivedAt ? "Archived" : ""}
-                      </span>
-                    </button>
-                  );
-                })
-              )}
-            </div>
-          </DialogPanel>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setChatContextDialogOpen(false);
-              }}
-            >
-              Cancel
-            </Button>
-            <Button disabled={!selectedChatContextSourceId} onClick={confirmAttachChatContext}>
-              Attach
-            </Button>
-          </DialogFooter>
-        </DialogPopup>
-      </Dialog>
     </>
   );
 });
