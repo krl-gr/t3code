@@ -182,7 +182,7 @@ jobs:
     needs: preflight
     if: ${{ !failure() && !cancelled() && needs.preflight.result == 'success' }}
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 30
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
