@@ -614,6 +614,7 @@ const createBuildConfig = Effect.fn("createBuildConfig")(function* (
   signed: boolean,
   mockUpdates: boolean,
   mockUpdateServerPort: number | undefined,
+  macAfterSignHook: string | undefined,
 ) {
   const buildConfig: Record<string, unknown> = {
     appId: resolveDesktopAppId(version),
@@ -639,10 +640,14 @@ const createBuildConfig = Effect.fn("createBuildConfig")(function* (
   }
 
   if (platform === "mac") {
+    if (macAfterSignHook) {
+      buildConfig.afterSign = macAfterSignHook;
+    }
     buildConfig.mac = {
       target: target === "dmg" ? [target, "zip"] : [target],
       icon: "icon.icns",
       category: "public.app-category.developer-tools",
+      ...(signed ? { notarize: false } : {}),
     };
   }
 
@@ -767,6 +772,10 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
   );
   const iconAssets = resolveDesktopBuildIconAssets(appVersion);
   const commitHash = yield* resolveGitCommitHash(repoRoot);
+  const macAfterSignHook =
+    options.platform === "mac" && options.signed
+      ? path.join(repoRoot, "scripts/notarize-macos-after-sign.cjs")
+      : undefined;
   const mkdir = options.keepStage ? fs.makeTempDirectory : fs.makeTempDirectoryScoped;
   const stageRoot = yield* mkdir({
     prefix: `t3code-desktop-${options.platform}-stage-`,
@@ -847,6 +856,7 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
       options.signed,
       options.mockUpdates,
       options.mockUpdateServerPort,
+      macAfterSignHook,
     ),
     dependencies: {
       ...resolvedServerDependencies,
