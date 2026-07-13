@@ -1423,7 +1423,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
         },
         scope: "orchestration:read orchestration:operate terminal:operate review:write",
         clientMetadata: {
-          label: "T3 Code Mobile",
+          label: "Up.computer Mobile",
           deviceType: "mobile",
           os: "iOS",
         },
@@ -1450,7 +1450,7 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
       assert.equal(response.status, 200);
       assert.equal(clientsResponse.status, 200);
       assert.deepInclude(mobileClient?.client, {
-        label: "T3 Code Mobile",
+        label: "Up.computer Mobile",
         deviceType: "mobile",
         os: "iOS",
         ipAddress: "127.0.0.1",

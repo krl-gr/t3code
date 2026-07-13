@@ -1,5 +1,5 @@
 ---
-import { GITHUB_REPOSITORY_URL, MARKETING_STATS } from "../lib/site";
+import { GITHUB_REPOSITORY_URL } from "../lib/site";
 
 interface Props {
   title?: string;
@@ -7,8 +7,8 @@ interface Props {
 }
 
 const {
-  title = "T3 Code",
-  description = "T3 Code — The open-source control plane for coding agents.",
+  title = "Up.computer",
+  description = "Up.computer — The open-source control plane for coding agents.",
 } = Astro.props;
 ---
 
@@ -33,8 +33,8 @@ const {
     <div class="page">
       <nav class="nav">
         <div class="nav-inner">
-          <a href="/" class="nav-brand" aria-label="T3 Code home">
-            <span class="nav-brand-name">T3 Code</span>
+          <a href="/" class="nav-brand" aria-label="Up.computer home">
+            <span class="nav-brand-name">Up.computer</span>
           </a>
           <div class="nav-right">
             <a
@@ -42,12 +42,12 @@ const {
               href={GITHUB_REPOSITORY_URL}
               target="_blank"
               rel="noopener noreferrer"
-              aria-label={`Star T3 Code on GitHub — ${MARKETING_STATS.githubStars} stars`}
+              aria-label="Open Up.computer on GitHub"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                 <path d="M12 2.3l2.9 5.88 6.49.94-4.7 4.58 1.11 6.47L12 17.12l-5.8 3.05 1.11-6.47-4.7-4.58 6.49-.94L12 2.3z"/>
               </svg>
-              <span><strong>{MARKETING_STATS.githubStars}</strong> GitHub stars</span>
+              <span>GitHub</span>
             </a>
           </div>
         </div>
@@ -61,7 +61,7 @@ const {
         <div class="footer-inner">
           <div class="footer-brand">
             <img src="/icon.webp" alt="" />
-            <span>&copy; {new Date().getFullYear()} T3 Tools Inc · MIT licensed</span>
+            <span>&copy; {new Date().getFullYear()} Up.computer · MIT licensed</span>
           </div>
           <div class="footer-links">
             <a href={GITHUB_REPOSITORY_URL} target="_blank" rel="noopener noreferrer">GitHub</a>

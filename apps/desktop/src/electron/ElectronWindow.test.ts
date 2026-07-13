@@ -53,7 +53,7 @@ describe("ElectronWindow", () => {
         throw cause;
       });
       const options = {
-        title: "T3 Code",
+        title: "Up.computer",
         width: 1100,
         height: 780,
         minWidth: 840,
@@ -81,7 +81,7 @@ describe("ElectronWindow", () => {
       assert.instanceOf(error, ElectronWindow.ElectronWindowCreateError);
       assert.isTrue(ElectronWindow.isElectronWindowCreateError(error));
       assert.deepEqual(error.options, {
-        title: "T3 Code",
+        title: "Up.computer",
         width: 1100,
         height: 780,
         minWidth: 840,
@@ -103,7 +103,10 @@ describe("ElectronWindow", () => {
       assert.isFalse("icon" in error.options);
       assert.isFalse("spellcheck" in error.options.webPreferences);
       assert.strictEqual(error.cause, cause);
-      assert.equal(error.message, 'Failed to create Electron BrowserWindow "T3 Code" (1100x780).');
+      assert.equal(
+        error.message,
+        'Failed to create Electron BrowserWindow "Up.computer" (1100x780).',
+      );
       assert.notInclude(error.message, cause.message);
       assert.deepEqual(browserWindowMock.mock.calls, [[options]]);
     }).pipe(Effect.provide(TestLayer)),

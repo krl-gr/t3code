@@ -1,90 +1,136 @@
-# T3 Code
+# Up.computer
 
-T3 Code is a minimal web GUI for coding agents (currently Codex, Claude, Cursor, and OpenCode, more coming soon).
+The desktop workspace for coding-agent CLIs.
 
-## Installation
+Up.computer runs coding-agent CLIs from one visual surface. Keep Codex CLI,
+Claude Code, Cursor CLI, OpenCode, your editor, and your git workflow. Add
+durable threads, terminals, diffs, branches, source-control actions, and local
+or remote environment controls around them.
 
-> [!WARNING]
-> T3 Code currently supports Codex, Claude, Cursor, and OpenCode.
-> Install and authenticate at least one provider before use:
->
-> - Codex: install [Codex CLI](https://developers.openai.com/codex/cli) and run `codex login`
-> - Claude: install [Claude Code](https://claude.com/product/claude-code) and run `claude auth login`
-> - Cursor: install [Cursor CLI](https://cursor.com/cli) and run `cursor-agent login`
-> - OpenCode: install [OpenCode](https://opencode.ai) and run `opencode auth login`
+## Status
 
-### Run without installing
+Up.computer is an alpha project. It is usable, but the app and repository are
+moving quickly. Expect rough edges, incomplete docs, and occasional breaking
+changes while the product direction settles.
 
-```bash
-npx t3@latest
-```
+Bug reports and focused feedback are welcome. Large feature work should start
+with an issue before a pull request.
 
-Tip: Use `npx t3@latest --help` for the full CLI reference.
+## Install
 
-### Desktop app
+This public repository produces **Upcomputer Core**, the MIT-licensed core-only
+composition. Build it from source using the instructions below.
 
-Install the latest version of the desktop app from [GitHub Releases](https://github.com/pingdotgg/t3code/releases), or from your favorite package registry:
+The normal official Upcomputer installer is assembled by a separate private
+release pipeline from this exact public core plus bundled first-party
+extensions. It is still one Upcomputer application, but the complete official
+binary is not represented by this public source tree alone.
 
-#### Windows (`winget`)
+Provider CLIs are installed and authenticated separately. At minimum, install
+and log in to one runtime you want to use:
 
-```bash
-winget install T3Tools.T3Code
-```
+- Codex CLI: install the [Codex CLI](https://developers.openai.com/codex/cli)
+  and run `codex login`.
+- Claude Code: install [Claude Code](https://claude.com/product/claude-code)
+  and run `claude auth login`.
+- Cursor CLI: install [Cursor CLI](https://cursor.com/cli) and run
+  `cursor-agent login`.
+- OpenCode: install [OpenCode](https://opencode.ai) and run
+  `opencode auth login`.
 
-#### macOS (Homebrew)
+Package-manager installs such as Homebrew, winget, and AUR are not an official
+install path yet.
 
-```bash
-brew install --cask t3-code
-```
+## Run From Source
 
-#### Arch Linux (AUR)
+Requirements:
 
-```bash
-yay -S t3code-bin
-```
+- Vite+ `vp`
+- Node 24.13.1+
+- Git
+- At least one supported coding-agent CLI installed and authenticated
 
-## Some notes
-
-We are very very early in this project. Expect bugs.
-
-We are not accepting contributions yet.
-
-There's no public docs site yet, checkout the miscellaneous markdown files in [docs](./docs).
-
-## Documentation
-
-- [Getting started](./docs/getting-started/quick-start.md)
-- [Architecture overview](./docs/architecture/overview.md)
-- [Provider guides](./docs/providers/codex.md)
-- [Operations](./docs/operations/ci.md)
-- [Reference](./docs/reference/encyclopedia.md)
-
-## If you REALLY want to contribute still.... read this first
-
-### Install `vp`
-
-T3 Code uses Vite+ so you'll need to install the global `vp` command-line tool.
-
-#### macOS / Linux
+Install Vite+:
 
 ```bash
 curl -fsSL https://vite.plus | bash
 ```
 
-#### Windows
+Install dependencies and run the app:
 
 ```bash
-irm https://vite.plus/ps1 | iex
+vp install
+vp run dev
 ```
 
-Checkout their getting started guide for more information: https://viteplus.dev/guide/
-
-### Install dependencies
+Useful development commands:
 
 ```bash
-vp i
+vp run dev:web
+vp run dev:server
+vp run start:desktop
+vp run dev:marketing
 ```
 
-Read [CONTRIBUTING.md](./CONTRIBUTING.md) before opening an issue or PR.
+## What It Does
 
-Need support? Join the [Discord](https://discord.gg/jn4EGJjrvv).
+- Run multiple coding-agent CLIs from one desktop GUI.
+- Keep agent work grouped into project threads instead of scattered terminal
+  sessions.
+- Review changed files and diffs before trusting or shipping a run.
+- Use integrated terminals in the same project/worktree context.
+- Commit, push, publish repositories, and open pull requests from the app.
+- Work against local, network, and SSH-backed environments as that support
+  matures.
+
+## Repository Layout
+
+- `apps/desktop`: Electron desktop shell and desktop release integration.
+- `apps/server`: Node.js server that brokers provider sessions and serves the
+  web app.
+- `apps/web`: React/Vite application for the main product UI.
+- `apps/marketing`: Astro marketing and download site.
+- `apps/mobile`: Experimental Expo/React Native app.
+- `packages/contracts`: Shared Effect Schema contracts for provider events,
+  WebSocket protocol, settings, and session types.
+- `packages/shared`: Shared runtime utilities consumed by server and clients.
+- `packages/ssh` and `packages/tailscale`: Remote-environment support.
+- `docs`: User-facing and operational docs.
+
+## Relationship To T3 Code
+
+Up.computer is built as a fork of the open-source T3 Code project:
+
+<https://github.com/pingdotgg/t3code>
+
+This fork keeps the upstream runtime, provider orchestration, contracts,
+desktop infrastructure, and release plumbing close to upstream while developing
+a different product direction, UI, branding, and workflow layer.
+
+Some package names, storage keys, docs, and internal identifiers still refer to
+T3 Code while the fork is being separated. That is expected during the alpha.
+
+## Contributing
+
+The project is early and the architecture is still settling. Small, focused bug
+fixes, reliability improvements, performance improvements, and clear docs fixes
+are the easiest contributions to review.
+
+If you want to make a non-trivial product, UI, or architecture change, open an
+issue first so scope can be discussed before you spend time on a large branch.
+
+Read [CONTRIBUTING.md](./CONTRIBUTING.md) before opening a pull request.
+
+## Security
+
+Please do not report security vulnerabilities in public issues. See
+[SECURITY.md](./SECURITY.md) for the current reporting process.
+
+## License And Brand
+
+The source code is MIT licensed. See [LICENSE](./LICENSE).
+
+The MIT license does not grant trademark rights in the Up.computer name, logo,
+or visual identity. You may use the name to refer to this project, but do not
+use the branding in a way that implies endorsement or an official build unless
+you have permission.
