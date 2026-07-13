@@ -1,14 +1,21 @@
 /**
  * Experimental public build-time server product API.
  *
- * This narrow B3 boundary exposes product composition and CLI assembly only.
- * Runtime extension seams such as RPC, HTTP routes, dynamic tools, migrations,
- * interaction modes, and internal service exports are intentionally deferred.
+ * This B3 boundary exposes product composition, server CLI assembly, feature
+ * runtime layers, feature migrations, and selected service tags needed by
+ * first-party private products. RPC, HTTP routes, dynamic tools, and
+ * interaction modes are intentionally deferred.
  */
+export * from "./product/FeatureMigrations.ts";
+export * from "./product/ProviderRuntimeEvents.ts";
 export * from "./product/ServerProductComposition.ts";
 export * from "./product/ServerProductEntry.ts";
 export * from "./product/ProductServerCli.ts";
 export { CORE_SERVER_PRODUCT_ENTRY } from "./product/defaultProductEntry.ts";
+export { OrchestrationEngineService } from "./orchestration/Services/OrchestrationEngine.ts";
+export { ProjectionSnapshotQuery } from "./orchestration/Services/ProjectionSnapshotQuery.ts";
+export { ProviderRegistry } from "./provider/Services/ProviderRegistry.ts";
+export { ServerSettingsService } from "./serverSettings.ts";
 export {
   makeRoutesLayerForProduct,
   makeServerLayerForProduct,

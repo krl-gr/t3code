@@ -86,6 +86,8 @@ import { OrchestrationLayerLive } from "./orchestration/runtimeLayer.ts";
 import { CORE_SERVER_PRODUCT_ENTRY } from "./product/defaultProductEntry.ts";
 import type { ExperimentalServerProductComposition } from "./product/ServerProductComposition.ts";
 import type { ExperimentalServerProductEntry } from "./product/ServerProductEntry.ts";
+import { runExperimentalFeatureMigrations } from "./product/FeatureMigrations.ts";
+import { ExperimentalProviderRuntimeEventsLive } from "./product/ProviderRuntimeEvents.ts";
 import {
   clearPersistedServerRuntimeState,
   makePersistedServerRuntimeState,
@@ -184,7 +186,10 @@ const ProviderLayerLive = ProviderServiceLive.pipe(
   Layer.provideMerge(ProviderSessionDirectoryLayerLive),
 );
 
-const PersistenceLayerLive = Layer.empty.pipe(Layer.provideMerge(SqlitePersistenceLayerLive));
+const makePersistenceLayerLive = (composition: ExperimentalServerProductComposition) =>
+  Layer.effectDiscard(runExperimentalFeatureMigrations(composition.migrations)).pipe(
+    Layer.provideMerge(SqlitePersistenceLayerLive),
+  );
 
 const VcsDriverRegistryLayerLive = VcsDriverRegistry.layer.pipe(
   Layer.provide(VcsProjectConfig.layer),
@@ -269,10 +274,11 @@ const ProjectFaviconResolverLayerLive = ProjectFaviconResolver.layer.pipe(
   Layer.provide(WorkspacePaths.layer),
 );
 
-const AuthLayerLive = EnvironmentAuth.layer.pipe(
-  Layer.provideMerge(PersistenceLayerLive),
-  Layer.provide(ServerSecretStore.layer),
-);
+const makeAuthLayerLive = (persistenceLayer: ReturnType<typeof makePersistenceLayerLive>) =>
+  EnvironmentAuth.layer.pipe(
+    Layer.provideMerge(persistenceLayer),
+    Layer.provide(ServerSecretStore.layer),
+  );
 
 const CloudManagedEndpointRuntimeLive = Layer.mergeAll(
   RelayClientLive,
@@ -287,16 +293,23 @@ const ProviderRuntimeLayerLive = ProviderSessionReaperLive.pipe(
   Layer.provideMerge(OrchestrationLayerLive),
 );
 
-const makeRuntimeCoreDependenciesLive = (productEntry: ExperimentalServerProductEntry) =>
-  ReactorLayerLive.pipe(
+const ProviderRuntimeWithEventsLayerLive = ExperimentalProviderRuntimeEventsLive.pipe(
+  Layer.provideMerge(ProviderRuntimeLayerLive),
+);
+
+const makeRuntimeCoreDependenciesLive = (productEntry: ExperimentalServerProductEntry) => {
+  const persistenceLayer = makePersistenceLayerLive(productEntry.composition);
+  const authLayer = makeAuthLayerLive(persistenceLayer);
+
+  return ReactorLayerLive.pipe(
     // Core Services
     Layer.provideMerge(CheckpointingLayerLive),
     Layer.provideMerge(SourceControlProviderRegistryLayerLive),
     Layer.provideMerge(GitLayerLive),
     Layer.provideMerge(VcsLayerLive),
-    Layer.provideMerge(ProviderRuntimeLayerLive),
+    Layer.provideMerge(ProviderRuntimeWithEventsLayerLive),
     Layer.provideMerge(Layer.mergeAll(TerminalLayerLive, PreviewLayerLive)),
-    Layer.provideMerge(PersistenceLayerLive),
+    Layer.provideMerge(persistenceLayer),
     Layer.provideMerge(Keybindings.layer),
     Layer.provideMerge(ProviderRegistryLive),
     // The instance registry is the new routing keystone — text generation,
@@ -322,7 +335,7 @@ const makeRuntimeCoreDependenciesLive = (productEntry: ExperimentalServerProduct
     Layer.provideMerge(ProjectFaviconResolverLayerLive),
     Layer.provideMerge(RepositoryIdentityResolver.layer),
     Layer.provideMerge(ServerEnvironment.layerForProduct(productEntry.manifest)),
-    Layer.provideMerge(AuthLayerLive),
+    Layer.provideMerge(authLayer),
     Layer.provideMerge(ServerSecretStore.layer),
     Layer.provideMerge(
       Layer.mergeAll(
@@ -331,9 +344,13 @@ const makeRuntimeCoreDependenciesLive = (productEntry: ExperimentalServerProduct
       ),
     ),
   );
+};
 
-const makeRuntimeDependenciesLive = (productEntry: ExperimentalServerProductEntry) =>
-  makeRuntimeCoreDependenciesLive(productEntry).pipe(
+const makeRuntimeDependenciesLive = (productEntry: ExperimentalServerProductEntry) => {
+  const core = makeRuntimeCoreDependenciesLive(productEntry);
+  const features = productEntry.composition.featureLayer.pipe(Layer.provide(core));
+
+  return Layer.mergeAll(core, features).pipe(
     // Misc.
     Layer.provideMerge(ProcessDiagnostics.layer),
     Layer.provideMerge(ProcessResourceMonitor.layer),
@@ -343,6 +360,7 @@ const makeRuntimeDependenciesLive = (productEntry: ExperimentalServerProductEntr
     Layer.provideMerge(ServerLifecycleEvents.layer),
     Layer.provide(NetService.layer),
   );
+};
 
 const makeRuntimeServicesLive = (productEntry: ExperimentalServerProductEntry) =>
   ServerRuntimeStartup.layer.pipe(Layer.provideMerge(makeRuntimeDependenciesLive(productEntry)));

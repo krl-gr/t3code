@@ -1,0 +1,21 @@
+import type { ProviderRuntimeEvent } from "@t3tools/contracts";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import type * as Stream from "effect/Stream";
+
+import { ProviderService } from "../provider/Services/ProviderService.ts";
+
+export interface ExperimentalProviderRuntimeEventsShape {
+  readonly stream: Stream.Stream<ProviderRuntimeEvent>;
+}
+
+export class ExperimentalProviderRuntimeEvents extends Context.Service<
+  ExperimentalProviderRuntimeEvents,
+  ExperimentalProviderRuntimeEventsShape
+>()("t3/product/ProviderRuntimeEvents/ExperimentalProviderRuntimeEvents") {}
+
+export const ExperimentalProviderRuntimeEventsLive = Layer.effect(
+  ExperimentalProviderRuntimeEvents,
+  Effect.map(ProviderService, ({ streamEvents }) => ({ stream: streamEvents })),
+);

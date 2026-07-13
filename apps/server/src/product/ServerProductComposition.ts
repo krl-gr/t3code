@@ -1,19 +1,52 @@
+import * as Layer from "effect/Layer";
+
+import {
+  createExperimentalFeatureMigrationPlan,
+  type ExperimentalFeatureMigrationContribution,
+} from "./FeatureMigrations.ts";
+
 const STABLE_ID = /^[a-z0-9]+(?:[._-][a-z0-9]+)*$/;
 const RESERVED_CORE_FEATURE_ID = "upcomputer.core";
+
+export type ExperimentalOpaqueServerLayer = Layer.Layer<never, Error, never>;
+
+/**
+ * Closes a feature-owned runtime layer at the public product boundary.
+ * Feature packages keep their service graph typed locally; core composes only
+ * the startup side effect and does not expose private service tags.
+ */
+export function eraseExperimentalServerLayer<A, E, R>(
+  layer: Layer.Layer<A, E, R>,
+): ExperimentalOpaqueServerLayer {
+  return layer as unknown as ExperimentalOpaqueServerLayer;
+}
+
+export interface ExperimentalServerLayerContribution {
+  readonly id: string;
+  readonly ownerId: string;
+  readonly version: number;
+  readonly layer: ExperimentalOpaqueServerLayer;
+}
 
 export interface ExperimentalServerFeatureContribution {
   readonly id: string;
   readonly version: number;
+  readonly layers?: ReadonlyArray<ExperimentalServerLayerContribution>;
+  readonly migrations?: ReadonlyArray<ExperimentalFeatureMigrationContribution<Error>>;
 }
 
 export interface ExperimentalServerFeatureDiagnostic {
   readonly id: string;
   readonly version: number;
+  readonly layers: number;
+  readonly migrationNamespaces: number;
 }
 
 export interface ExperimentalServerProductComposition {
   readonly features: ReadonlyArray<ExperimentalServerFeatureContribution>;
   readonly diagnostics: ReadonlyArray<ExperimentalServerFeatureDiagnostic>;
+  readonly featureLayer: ExperimentalOpaqueServerLayer;
+  readonly migrations: ReadonlyArray<ExperimentalFeatureMigrationContribution<Error>>;
 }
 
 export class ServerProductCompositionInvariantError extends Error {
@@ -22,14 +55,22 @@ export class ServerProductCompositionInvariantError extends Error {
     | "invalid-feature-id"
     | "invalid-feature-version"
     | "reserved-feature-id"
-    | "duplicate-feature";
+    | "duplicate-feature"
+    | "invalid-layer-id"
+    | "invalid-layer-version"
+    | "duplicate-layer"
+    | "owner-mismatch";
 
   constructor(
     code:
       | "invalid-feature-id"
       | "invalid-feature-version"
       | "reserved-feature-id"
-      | "duplicate-feature",
+      | "duplicate-feature"
+      | "invalid-layer-id"
+      | "invalid-layer-version"
+      | "duplicate-layer"
+      | "owner-mismatch",
     message: string,
   ) {
     super(message);
@@ -37,10 +78,14 @@ export class ServerProductCompositionInvariantError extends Error {
   }
 }
 
-function assertStableId(value: string, field: string): void {
+function assertStableId(
+  value: string,
+  code: "invalid-feature-id" | "invalid-layer-id",
+  field: string,
+): void {
   if (!STABLE_ID.test(value)) {
     throw new ServerProductCompositionInvariantError(
-      "invalid-feature-id",
+      code,
       `${field} '${value}' must be a lowercase dot, dash, or underscore separated id.`,
     );
   }
@@ -55,6 +100,35 @@ function assertFeatureVersion(feature: ExperimentalServerFeatureContribution): v
   }
 }
 
+function assertLayerVersion(featureId: string, layer: ExperimentalServerLayerContribution): void {
+  if (!Number.isSafeInteger(layer.version) || layer.version < 1) {
+    throw new ServerProductCompositionInvariantError(
+      "invalid-layer-version",
+      `Server layer '${layer.id}' for feature '${featureId}' must have a positive safe-integer version.`,
+    );
+  }
+}
+
+function assertOwner(featureId: string, ownerId: string, contribution: string): void {
+  if (ownerId !== featureId) {
+    throw new ServerProductCompositionInvariantError(
+      "owner-mismatch",
+      `${contribution} owned by '${ownerId}' cannot be registered by feature '${featureId}'.`,
+    );
+  }
+}
+
+function mergeFeatureLayers(
+  contributions: ReadonlyArray<ExperimentalServerLayerContribution>,
+): ExperimentalOpaqueServerLayer {
+  if (contributions.length === 0) return Layer.empty;
+  const [first, ...rest] = contributions;
+  return Layer.mergeAll(
+    first!.layer,
+    ...rest.map(({ layer }) => layer),
+  ) as ExperimentalOpaqueServerLayer;
+}
+
 /**
  * Trusted, build-time server contribution.
  *
@@ -63,7 +137,7 @@ function assertFeatureVersion(feature: ExperimentalServerFeatureContribution): v
 export function defineExperimentalServerFeature<
   const Feature extends ExperimentalServerFeatureContribution,
 >(feature: Feature): Feature {
-  assertStableId(feature.id, "Server feature id");
+  assertStableId(feature.id, "invalid-feature-id", "Server feature id");
   if (feature.id === RESERVED_CORE_FEATURE_ID) {
     throw new ServerProductCompositionInvariantError(
       "reserved-feature-id",
@@ -78,6 +152,9 @@ export function createExperimentalServerProductComposition(input: {
   readonly features?: ReadonlyArray<ExperimentalServerFeatureContribution>;
 }): ExperimentalServerProductComposition {
   const featureIds = new Set<string>();
+  const layerIds = new Set<string>();
+  const layers: ExperimentalServerLayerContribution[] = [];
+  const migrations: ExperimentalFeatureMigrationContribution<Error>[] = [];
   const features = [...(input.features ?? [])]
     .map((feature) => defineExperimentalServerFeature(feature))
     .sort((left, right) => left.id.localeCompare(right.id));
@@ -90,12 +167,52 @@ export function createExperimentalServerProductComposition(input: {
       );
     }
     featureIds.add(feature.id);
+
+    for (const layer of feature.layers ?? []) {
+      assertOwner(feature.id, layer.ownerId, "Server layer contribution");
+      assertStableId(layer.id, "invalid-layer-id", "Server layer contribution id");
+      assertLayerVersion(feature.id, layer);
+      const layerKey = `${layer.ownerId}:${layer.id}`;
+      if (layerIds.has(layerKey)) {
+        throw new ServerProductCompositionInvariantError(
+          "duplicate-layer",
+          `Server layer contribution '${layerKey}' is registered more than once.`,
+        );
+      }
+      layerIds.add(layerKey);
+      layers.push(layer);
+    }
+
+    for (const migration of feature.migrations ?? []) {
+      assertOwner(feature.id, migration.ownerId, "Feature migration contribution");
+      migrations.push(migration);
+    }
   }
+
+  const orderedLayers = layers.sort(
+    (left, right) => left.ownerId.localeCompare(right.ownerId) || left.id.localeCompare(right.id),
+  );
+  createExperimentalFeatureMigrationPlan(migrations);
 
   return Object.freeze({
     features: Object.freeze(features),
-    diagnostics: Object.freeze(features.map(({ id, version }) => ({ id, version }))),
+    diagnostics: Object.freeze(
+      features.map(({ id, version, layers, migrations }) => ({
+        id,
+        version,
+        layers: layers?.length ?? 0,
+        migrationNamespaces: migrations?.length ?? 0,
+      })),
+    ),
+    featureLayer: mergeFeatureLayers(orderedLayers),
+    migrations: Object.freeze([...migrations]),
   });
+}
+
+export function composeExperimentalServerFeatures(
+  features: ReadonlyArray<ExperimentalServerFeatureContribution>,
+): ExperimentalServerProductComposition {
+  return createExperimentalServerProductComposition({ features });
 }
 
 export const CORE_SERVER_PRODUCT_COMPOSITION = createExperimentalServerProductComposition({});
