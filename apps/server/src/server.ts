@@ -297,7 +297,9 @@ const ProviderRuntimeWithEventsLayerLive = ExperimentalProviderRuntimeEventsLive
   Layer.provideMerge(ProviderRuntimeLayerLive),
 );
 
-const makeRuntimeCoreDependenciesLive = (productEntry: ExperimentalServerProductEntry) => {
+const makeRuntimeCoreDependenciesLive = <const ProductEntry extends ExperimentalServerProductEntry>(
+  productEntry: ProductEntry,
+) => {
   const persistenceLayer = makePersistenceLayerLive(productEntry.composition);
   const authLayer = makeAuthLayerLive(persistenceLayer);
 
@@ -346,7 +348,9 @@ const makeRuntimeCoreDependenciesLive = (productEntry: ExperimentalServerProduct
   );
 };
 
-const makeRuntimeDependenciesLive = (productEntry: ExperimentalServerProductEntry) => {
+const makeRuntimeDependenciesLive = <const ProductEntry extends ExperimentalServerProductEntry>(
+  productEntry: ProductEntry,
+) => {
   const core = makeRuntimeCoreDependenciesLive(productEntry);
   const features = productEntry.composition.featureLayer.pipe(Layer.provide(core));
 
@@ -362,30 +366,39 @@ const makeRuntimeDependenciesLive = (productEntry: ExperimentalServerProductEntr
   );
 };
 
-const makeRuntimeServicesLive = (productEntry: ExperimentalServerProductEntry) =>
-  ServerRuntimeStartup.layer.pipe(Layer.provideMerge(makeRuntimeDependenciesLive(productEntry)));
+const makeRuntimeServicesLive = <const ProductEntry extends ExperimentalServerProductEntry>(
+  productEntry: ProductEntry,
+) => ServerRuntimeStartup.layer.pipe(Layer.provideMerge(makeRuntimeDependenciesLive(productEntry)));
 
-export const makeRoutesLayer = Layer.mergeAll(
+export const makeRoutesLayerForProduct = <
+  const Composition extends ExperimentalServerProductComposition,
+>(
+  composition: Composition,
+) =>
   Layer.mergeAll(
-    HttpApiBuilder.layer(EnvironmentHttpApi).pipe(
-      Layer.provide(authHttpApiLayer),
-      Layer.provide(connectHttpApiLayer),
-      Layer.provide(orchestrationHttpApiLayer),
-      Layer.provide(serverEnvironmentHttpApiLayer),
-      Layer.provide(environmentAuthenticatedAuthLayer),
+    Layer.mergeAll(
+      HttpApiBuilder.layer(EnvironmentHttpApi).pipe(
+        Layer.provide(authHttpApiLayer),
+        Layer.provide(connectHttpApiLayer),
+        Layer.provide(orchestrationHttpApiLayer),
+        Layer.provide(serverEnvironmentHttpApiLayer),
+        Layer.provide(environmentAuthenticatedAuthLayer),
+      ),
+      otlpTracesProxyRouteLayer,
+      assetRouteLayer,
+      staticAndDevRouteLayer,
+      websocketRpcRouteLayer(composition.rpc),
     ),
-    otlpTracesProxyRouteLayer,
-    assetRouteLayer,
-    staticAndDevRouteLayer,
-    websocketRpcRouteLayer,
-  ),
-  McpHttpServer.layer.pipe(Layer.provide(McpSessionRegistry.layer)),
-).pipe(Layer.provide(PreviewAutomationBroker.layer), Layer.provide(browserApiCorsLayer));
+    McpHttpServer.layer.pipe(Layer.provide(McpSessionRegistry.layer)),
+  ).pipe(Layer.provide(PreviewAutomationBroker.layer), Layer.provide(browserApiCorsLayer));
 
-export const makeRoutesLayerForProduct = (_composition: ExperimentalServerProductComposition) =>
-  makeRoutesLayer;
+export const makeRoutesLayer = makeRoutesLayerForProduct(CORE_SERVER_PRODUCT_ENTRY.composition);
 
-export const makeServerLayerForProduct = (productEntry: ExperimentalServerProductEntry) =>
+export const makeServerLayerForProduct = <
+  const ProductEntry extends ExperimentalServerProductEntry,
+>(
+  productEntry: ProductEntry,
+) =>
   Layer.unwrap(
     Effect.gen(function* () {
       const config = yield* ServerConfig.ServerConfig;
@@ -518,7 +531,8 @@ export const makeServerLayerForProduct = (productEntry: ExperimentalServerProduc
 export const makeServerLayer = makeServerLayerForProduct(CORE_SERVER_PRODUCT_ENTRY);
 
 // Important: Only `ServerConfig` should be provided by the CLI layer!!! Don't let other requirements leak into the launch layer.
-export const runServerForProduct = (productEntry: ExperimentalServerProductEntry) =>
-  Layer.launch(makeServerLayerForProduct(productEntry));
+export const runServerForProduct = <const ProductEntry extends ExperimentalServerProductEntry>(
+  productEntry: ProductEntry,
+) => Layer.launch(makeServerLayerForProduct(productEntry));
 
 export const runServer = runServerForProduct(CORE_SERVER_PRODUCT_ENTRY);

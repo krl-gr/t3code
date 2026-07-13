@@ -62,6 +62,8 @@ import {
 import { clamp } from "effect/Number";
 import { HttpRouter, HttpServerRequest, HttpServerRespondable } from "effect/unstable/http";
 import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
+import type * as Rpc from "effect/unstable/rpc/Rpc";
+import type * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 
 import * as CheckpointDiffQuery from "./checkpointing/CheckpointDiffQuery.ts";
 import * as ServerConfig from "./config.ts";
@@ -113,10 +115,19 @@ import * as VcsProcess from "./vcs/VcsProcess.ts";
 import * as PairingGrantStore from "./auth/PairingGrantStore.ts";
 import * as SessionStore from "./auth/SessionStore.ts";
 import { failEnvironmentAuthInvalid, failEnvironmentInternal } from "./auth/http.ts";
+import {
+  mergeRpcContributionGroups,
+  rpcContributionHandlersLayer,
+  type AnyNamespacedRpcContribution,
+  type RpcsOfContribution,
+} from "./product/RpcContribution.ts";
 import * as RelayClient from "@t3tools/shared/relayClient";
 const isOrchestrationDispatchCommandError = Schema.is(OrchestrationDispatchCommandError);
 
 const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
+
+type RpcsOfRpcGroup<Group> = Group extends RpcGroup.RpcGroup<infer Rpcs> ? Rpcs : never;
+type CoreWsRpcs = RpcsOfRpcGroup<typeof WsRpcGroup>;
 
 function unexpectedCompatibilityError(error: never): never {
   throw new Error(`Unhandled compatibility error: ${String(error)}`);
@@ -1859,66 +1870,112 @@ const makeWsRpcLayer = (
     }),
   );
 
-export const websocketRpcRouteLayer = Layer.unwrap(
-  Effect.gen(function* () {
-    const previewAutomationBroker = yield* PreviewAutomationBroker.PreviewAutomationBroker;
-    return HttpRouter.add(
-      "GET",
-      "/ws",
-      Effect.gen(function* () {
-        const request = yield* HttpServerRequest.HttpServerRequest;
-        const serverAuth = yield* EnvironmentAuth.EnvironmentAuth;
-        const sessions = yield* SessionStore.SessionStore;
-        const session = yield* serverAuth.authenticateWebSocketUpgrade(request).pipe(
-          Effect.catchIf(EnvironmentAuth.isServerAuthCredentialError, (error) =>
-            failEnvironmentAuthInvalid(EnvironmentAuth.serverAuthCredentialReason(error)),
-          ),
-          Effect.catchIf(EnvironmentAuth.isServerAuthInternalError, (error) =>
-            failEnvironmentInternal("internal_error", error),
-          ),
-        );
-        const rpcWebSocketHttpEffect = yield* RpcServer.toHttpEffectWebsocket(WsRpcGroup, {
-          disableTracing: true,
-        }).pipe(
-          Effect.provide(
-            makeWsRpcLayer(session, previewAutomationBroker).pipe(
-              Layer.provideMerge(RpcSerialization.layerJson),
-              Layer.provide(ProviderMaintenanceRunner.layer),
-              Layer.provide(
-                SourceControlDiscovery.layer.pipe(
-                  Layer.provide(
-                    SourceControlProviderRegistry.layer.pipe(
-                      Layer.provide(
-                        Layer.mergeAll(
-                          AzureDevOpsCli.layer,
-                          BitbucketApi.layer,
-                          GitHubCli.layer,
-                          GitLabCli.layer,
+function makeWsRpcHandlerLayer<
+  const Contributions extends ReadonlyArray<AnyNamespacedRpcContribution>,
+>(
+  currentSession: EnvironmentAuth.AuthenticatedSession,
+  previewAutomationBroker: PreviewAutomationBroker.PreviewAutomationBroker["Service"],
+  contributions: Contributions,
+): Layer.Layer<
+  Rpc.ToHandler<CoreWsRpcs | RpcsOfContribution<Contributions[number]>>,
+  Error,
+  never
+> {
+  return Layer.mergeAll(
+    makeWsRpcLayer(currentSession, previewAutomationBroker),
+    rpcContributionHandlersLayer(contributions, {
+      currentSessionId: currentSession.sessionId,
+    }),
+  ) as unknown as Layer.Layer<
+    Rpc.ToHandler<CoreWsRpcs | RpcsOfContribution<Contributions[number]>>,
+    Error,
+    never
+  >;
+}
+
+function makeWsRouteHandlerLayer<
+  const Contributions extends ReadonlyArray<AnyNamespacedRpcContribution>,
+>(
+  currentSession: EnvironmentAuth.AuthenticatedSession,
+  previewAutomationBroker: PreviewAutomationBroker.PreviewAutomationBroker["Service"],
+  contributions: Contributions,
+): Layer.Layer<Rpc.ToHandler<CoreWsRpcs>, never, never> {
+  return makeWsRpcHandlerLayer(
+    currentSession,
+    previewAutomationBroker,
+    contributions,
+  ) as unknown as Layer.Layer<Rpc.ToHandler<CoreWsRpcs>, never, never>;
+}
+
+export const websocketRpcRouteLayer = <
+  const Contributions extends ReadonlyArray<AnyNamespacedRpcContribution>,
+>(
+  contributions: Contributions,
+) =>
+  Layer.unwrap(
+    Effect.gen(function* () {
+      const rpcGroup = mergeRpcContributionGroups(
+        WsRpcGroup,
+        contributions,
+      ) as unknown as typeof WsRpcGroup;
+      const previewAutomationBroker = yield* PreviewAutomationBroker.PreviewAutomationBroker;
+      return HttpRouter.add(
+        "GET",
+        "/ws",
+        Effect.gen(function* () {
+          const request = yield* HttpServerRequest.HttpServerRequest;
+          const serverAuth = yield* EnvironmentAuth.EnvironmentAuth;
+          const sessions = yield* SessionStore.SessionStore;
+          const session = yield* serverAuth.authenticateWebSocketUpgrade(request).pipe(
+            Effect.catchIf(EnvironmentAuth.isServerAuthCredentialError, (error) =>
+              failEnvironmentAuthInvalid(EnvironmentAuth.serverAuthCredentialReason(error)),
+            ),
+            Effect.catchIf(EnvironmentAuth.isServerAuthInternalError, (error) =>
+              failEnvironmentInternal("internal_error", error),
+            ),
+          );
+          const rpcWebSocketHttpEffect = yield* RpcServer.toHttpEffectWebsocket(rpcGroup, {
+            disableTracing: true,
+          }).pipe(
+            Effect.provide(
+              makeWsRouteHandlerLayer(session, previewAutomationBroker, contributions).pipe(
+                Layer.provideMerge(RpcSerialization.layerJson),
+                Layer.provide(ProviderMaintenanceRunner.layer),
+                Layer.provide(
+                  SourceControlDiscovery.layer.pipe(
+                    Layer.provide(
+                      SourceControlProviderRegistry.layer.pipe(
+                        Layer.provide(
+                          Layer.mergeAll(
+                            AzureDevOpsCli.layer,
+                            BitbucketApi.layer,
+                            GitHubCli.layer,
+                            GitLabCli.layer,
+                          ),
+                        ),
+                        Layer.provideMerge(GitVcsDriver.layer),
+                        Layer.provide(
+                          VcsDriverRegistry.layer.pipe(Layer.provide(VcsProjectConfig.layer)),
                         ),
                       ),
-                      Layer.provideMerge(GitVcsDriver.layer),
-                      Layer.provide(
-                        VcsDriverRegistry.layer.pipe(Layer.provide(VcsProjectConfig.layer)),
-                      ),
                     ),
+                    Layer.provide(VcsProcess.layer),
                   ),
-                  Layer.provide(VcsProcess.layer),
                 ),
               ),
             ),
-          ),
-        );
-        return yield* Effect.acquireUseRelease(
-          sessions.markConnected(session.sessionId),
-          () => rpcWebSocketHttpEffect,
-          () => sessions.markDisconnected(session.sessionId),
-        );
-      }).pipe(
-        Effect.catchTags({
-          EnvironmentAuthInvalidError: HttpServerRespondable.toResponse,
-          EnvironmentInternalError: HttpServerRespondable.toResponse,
-        }),
-      ),
-    );
-  }),
-);
+          );
+          return yield* Effect.acquireUseRelease(
+            sessions.markConnected(session.sessionId),
+            () => rpcWebSocketHttpEffect,
+            () => sessions.markDisconnected(session.sessionId),
+          );
+        }).pipe(
+          Effect.catchTags({
+            EnvironmentAuthInvalidError: HttpServerRespondable.toResponse,
+            EnvironmentInternalError: HttpServerRespondable.toResponse,
+          }),
+        ),
+      );
+    }),
+  );

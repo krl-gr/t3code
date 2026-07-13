@@ -7,9 +7,11 @@ import type { ExperimentalServerProductEntry } from "../product/ServerProductEnt
 import { runServerForProduct } from "../server.ts";
 import { type CliServerFlags, resolveServerConfig, sharedServerCommandFlags } from "./config.ts";
 
-export const runServerCommandForProduct = (
+export const runServerCommandForProduct = <
+  const ProductEntry extends ExperimentalServerProductEntry,
+>(
   flags: CliServerFlags,
-  productEntry: ExperimentalServerProductEntry,
+  productEntry: ProductEntry,
   options?: {
     readonly startupPresentation?: StartupPresentation;
     readonly forceAutoBootstrapProjectFromCwd?: boolean;
@@ -31,13 +33,23 @@ export const runServerCommand = (
   },
 ) => runServerCommandForProduct(flags, CORE_SERVER_PRODUCT_ENTRY, options);
 
-export const makeStartCommandForProduct = (productEntry: ExperimentalServerProductEntry) =>
+export const makeStartCommandForProduct = <
+  const ProductEntry extends ExperimentalServerProductEntry,
+>(
+  productEntry: ProductEntry,
+) =>
   Command.make("start", { ...sharedServerCommandFlags }).pipe(
     Command.withDescription(`Run the ${productEntry.manifest.displayName} server.`),
     Command.withHandler((flags) => runServerCommandForProduct(flags, productEntry)),
   );
 
-export const makeServeCommandForProduct = (productEntry: ExperimentalServerProductEntry) =>
+export const makeStartCommand = makeStartCommandForProduct;
+
+export const makeServeCommandForProduct = <
+  const ProductEntry extends ExperimentalServerProductEntry,
+>(
+  productEntry: ProductEntry,
+) =>
   Command.make("serve", { ...sharedServerCommandFlags }).pipe(
     Command.withDescription(
       `Run the ${productEntry.manifest.displayName} server without opening a browser and print headless pairing details.`,
@@ -50,6 +62,8 @@ export const makeServeCommandForProduct = (productEntry: ExperimentalServerProdu
     ),
   );
 
-export const startCommand = makeStartCommandForProduct(CORE_SERVER_PRODUCT_ENTRY);
+export const makeServeCommand = makeServeCommandForProduct;
 
-export const serveCommand = makeServeCommandForProduct(CORE_SERVER_PRODUCT_ENTRY);
+export const startCommand = makeStartCommand(CORE_SERVER_PRODUCT_ENTRY);
+
+export const serveCommand = makeServeCommand(CORE_SERVER_PRODUCT_ENTRY);

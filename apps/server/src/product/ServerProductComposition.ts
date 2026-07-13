@@ -4,6 +4,7 @@ import {
   createExperimentalFeatureMigrationPlan,
   type ExperimentalFeatureMigrationContribution,
 } from "./FeatureMigrations.ts";
+import { createRpcContributionPlan, type AnyNamespacedRpcContribution } from "./RpcContribution.ts";
 
 const STABLE_ID = /^[a-z0-9]+(?:[._-][a-z0-9]+)*$/;
 const RESERVED_CORE_FEATURE_ID = "upcomputer.core";
@@ -28,25 +29,46 @@ export interface ExperimentalServerLayerContribution {
   readonly layer: ExperimentalOpaqueServerLayer;
 }
 
-export interface ExperimentalServerFeatureContribution {
+export interface ExperimentalServerFeatureContribution<
+  RpcContributions extends ReadonlyArray<AnyNamespacedRpcContribution> =
+    ReadonlyArray<AnyNamespacedRpcContribution>,
+> {
   readonly id: string;
   readonly version: number;
   readonly layers?: ReadonlyArray<ExperimentalServerLayerContribution>;
   readonly migrations?: ReadonlyArray<ExperimentalFeatureMigrationContribution<Error>>;
+  readonly rpc?: RpcContributions;
 }
+
+export type RpcContributionsOfFeature<Feature> = Feature extends {
+  readonly rpc?: infer RpcContributions;
+}
+  ? RpcContributions extends ReadonlyArray<AnyNamespacedRpcContribution>
+    ? RpcContributions[number]
+    : never
+  : never;
+
+export type RpcContributionsOfFeatures<
+  Features extends ReadonlyArray<ExperimentalServerFeatureContribution>,
+> = RpcContributionsOfFeature<Features[number]>;
 
 export interface ExperimentalServerFeatureDiagnostic {
   readonly id: string;
   readonly version: number;
   readonly layers: number;
   readonly migrationNamespaces: number;
+  readonly rpcNamespaces: number;
 }
 
-export interface ExperimentalServerProductComposition {
-  readonly features: ReadonlyArray<ExperimentalServerFeatureContribution>;
+export interface ExperimentalServerProductComposition<
+  Features extends ReadonlyArray<ExperimentalServerFeatureContribution> =
+    ReadonlyArray<ExperimentalServerFeatureContribution>,
+> {
+  readonly features: ReadonlyArray<Features[number]>;
   readonly diagnostics: ReadonlyArray<ExperimentalServerFeatureDiagnostic>;
   readonly featureLayer: ExperimentalOpaqueServerLayer;
   readonly migrations: ReadonlyArray<ExperimentalFeatureMigrationContribution<Error>>;
+  readonly rpc: ReadonlyArray<RpcContributionsOfFeatures<Features>>;
 }
 
 export class ServerProductCompositionInvariantError extends Error {
@@ -148,13 +170,14 @@ export function defineExperimentalServerFeature<
   return feature;
 }
 
-export function createExperimentalServerProductComposition(input: {
-  readonly features?: ReadonlyArray<ExperimentalServerFeatureContribution>;
-}): ExperimentalServerProductComposition {
+export function createExperimentalServerProductComposition<
+  const Features extends ReadonlyArray<ExperimentalServerFeatureContribution> = readonly [],
+>(input: { readonly features?: Features }): ExperimentalServerProductComposition<Features> {
   const featureIds = new Set<string>();
   const layerIds = new Set<string>();
   const layers: ExperimentalServerLayerContribution[] = [];
   const migrations: ExperimentalFeatureMigrationContribution<Error>[] = [];
+  const rpc: AnyNamespacedRpcContribution[] = [];
   const features = [...(input.features ?? [])]
     .map((feature) => defineExperimentalServerFeature(feature))
     .sort((left, right) => left.id.localeCompare(right.id));
@@ -187,12 +210,20 @@ export function createExperimentalServerProductComposition(input: {
       assertOwner(feature.id, migration.ownerId, "Feature migration contribution");
       migrations.push(migration);
     }
+
+    for (const contribution of feature.rpc ?? []) {
+      assertOwner(feature.id, contribution.ownerId, "RPC contribution");
+      rpc.push(contribution);
+    }
   }
 
   const orderedLayers = layers.sort(
     (left, right) => left.ownerId.localeCompare(right.ownerId) || left.id.localeCompare(right.id),
   );
   createExperimentalFeatureMigrationPlan(migrations);
+  const orderedRpc = createRpcContributionPlan(
+    rpc as unknown as ReadonlyArray<RpcContributionsOfFeatures<Features>>,
+  );
 
   return Object.freeze({
     features: Object.freeze(features),
@@ -202,16 +233,18 @@ export function createExperimentalServerProductComposition(input: {
         version,
         layers: layers?.length ?? 0,
         migrationNamespaces: migrations?.length ?? 0,
+        rpcNamespaces: rpc?.length ?? 0,
       })),
     ),
     featureLayer: mergeFeatureLayers(orderedLayers),
     migrations: Object.freeze([...migrations]),
+    rpc: Object.freeze([...orderedRpc]),
   });
 }
 
 export function composeExperimentalServerFeatures(
   features: ReadonlyArray<ExperimentalServerFeatureContribution>,
-): ExperimentalServerProductComposition {
+): ExperimentalServerProductComposition<ReadonlyArray<ExperimentalServerFeatureContribution>> {
   return createExperimentalServerProductComposition({ features });
 }
 

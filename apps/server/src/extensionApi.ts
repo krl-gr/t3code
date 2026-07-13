@@ -3,11 +3,12 @@
  *
  * This B3 boundary exposes product composition, server CLI assembly, feature
  * runtime layers, feature migrations, and selected service tags needed by
- * first-party private products. RPC, HTTP routes, dynamic tools, and
- * interaction modes are intentionally deferred.
+ * first-party private products. HTTP routes, dynamic tools, and interaction
+ * modes are intentionally deferred.
  */
 export * from "./product/FeatureMigrations.ts";
 export * from "./product/ProviderRuntimeEvents.ts";
+export * from "./product/RpcContribution.ts";
 export * from "./product/ServerProductComposition.ts";
 export * from "./product/ServerProductEntry.ts";
 export * from "./product/ProductServerCli.ts";

@@ -2,9 +2,11 @@ import type { ProductManifestSnapshot } from "@t3tools/contracts";
 
 import type { ExperimentalServerProductComposition } from "./ServerProductComposition.ts";
 
-export interface ExperimentalServerProductEntry {
+export interface ExperimentalServerProductEntry<
+  Composition extends ExperimentalServerProductComposition = ExperimentalServerProductComposition,
+> {
   readonly manifest: ProductManifestSnapshot;
-  readonly composition: ExperimentalServerProductComposition;
+  readonly composition: Composition;
   readonly commandName?: string;
   readonly description?: string;
 }
