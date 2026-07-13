@@ -1,4 +1,5 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { createExperimentalProductManifest } from "@t3tools/shared/product";
 import { expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -7,14 +8,17 @@ import * as PlatformError from "effect/PlatformError";
 import * as Schema from "effect/Schema";
 
 import * as ServerConfig from "../config.ts";
+import { PRODUCT_MANIFEST } from "../productManifest.ts";
 import * as ServerEnvironment from "./ServerEnvironment.ts";
 
 const isServerEnvironmentIdPersistenceError = Schema.is(
   ServerEnvironment.ServerEnvironmentIdPersistenceError,
 );
 
-const makeServerEnvironmentLayer = (baseDir: string) =>
-  ServerEnvironment.layer.pipe(Layer.provide(ServerConfig.layerTest(process.cwd(), baseDir)));
+const makeServerEnvironmentLayer = (baseDir: string, productManifest = PRODUCT_MANIFEST) =>
+  ServerEnvironment.layerForProduct(productManifest).pipe(
+    Layer.provide(ServerConfig.layerTest(process.cwd(), baseDir)),
+  );
 
 const makeServerConfig = Effect.fn(function* (baseDir: string) {
   const derivedPaths = yield* ServerConfig.deriveServerPaths(baseDir, undefined);
@@ -67,6 +71,30 @@ it.layer(NodeServices.layer)("ServerEnvironmentLive", (it) => {
 
       expect(first.environmentId).toBe(second.environmentId);
       expect(second.capabilities.repositoryIdentity).toBe(true);
+      expect(second.product).toEqual(PRODUCT_MANIFEST);
+    }),
+  );
+
+  it.effect("allows product metadata to be supplied by a composed build", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const baseDir = yield* fileSystem.makeTempDirectoryScoped({
+        prefix: "t3-server-environment-product-test-",
+      });
+      const productManifest = createExperimentalProductManifest({
+        id: "upcomputer.pro",
+        displayName: "Upcomputer Pro",
+        version: "9.9.9",
+        coreCapabilities: [{ id: "product.manifest", version: 1 }],
+      });
+
+      const descriptor = yield* Effect.gen(function* () {
+        const serverEnvironment = yield* ServerEnvironment.ServerEnvironment;
+        return yield* serverEnvironment.getDescriptor;
+      }).pipe(Effect.provide(makeServerEnvironmentLayer(baseDir, productManifest)));
+
+      expect(descriptor.product).toEqual(productManifest);
+      expect(descriptor.serverVersion).not.toBe(productManifest.version);
     }),
   );
 
