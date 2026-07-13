@@ -1,3 +1,5 @@
+import * as NodeURL from "node:url";
+
 import tailwindcss from "@tailwindcss/vite";
 import react, { reactCompilerPreset } from "@vitejs/plugin-react";
 import babel from "@rolldown/plugin-babel";
@@ -86,6 +88,9 @@ function resolveDevProxyTarget(wsUrl: string | undefined): string | undefined {
 }
 
 const devProxyTarget = resolveDevProxyTarget(configuredWsUrl);
+const defaultProductEntry = NodeURL.fileURLToPath(
+  new URL("./src/product/defaultProductEntry.ts", import.meta.url),
+);
 
 export default defineConfig(() => {
   return {
@@ -131,6 +136,9 @@ export default defineConfig(() => {
       "import.meta.env.APP_VERSION": JSON.stringify(configuredAppVersion),
     },
     resolve: {
+      alias: {
+        "@upcomputer/web-product-entry": defaultProductEntry,
+      },
       tsconfigPaths: true,
       dedupe: ["react", "react-dom"],
     },

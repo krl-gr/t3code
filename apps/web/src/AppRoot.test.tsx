@@ -4,6 +4,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import { ElectronBrowserHost } from "./browser/ElectronBrowserHost";
 import { PreviewAutomationHosts } from "./components/preview/PreviewAutomationHosts";
+import { WebProductCompositionProvider } from "./product/WebComposition";
 import { AppAtomRegistryProvider } from "./rpc/atomRegistry";
 import type { AppRouter } from "./router";
 import { AppRoot } from "./AppRoot";
@@ -13,8 +14,16 @@ describe("AppRoot", () => {
     const root = AppRoot({ router: {} as AppRouter });
 
     expect(root.type).toBe(AppAtomRegistryProvider);
-    const children = Children.toArray(
+    const registryChildren = Children.toArray(
       (root as ReactElement<{ readonly children: ReactNode }>).props.children,
+    );
+    expect(registryChildren).toHaveLength(1);
+    const compositionProvider = registryChildren[0];
+    expect(isValidElement(compositionProvider) && compositionProvider.type).toBe(
+      WebProductCompositionProvider,
+    );
+    const children = Children.toArray(
+      (compositionProvider as ReactElement<{ readonly children: ReactNode }>).props.children,
     );
     expect(children).toHaveLength(3);
     expect(isValidElement(children[0]) && children[0].type).toBe(RouterProvider);

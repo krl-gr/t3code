@@ -1,0 +1,128 @@
+import type { ComponentType } from "react";
+
+import type { ProductCapabilityVersionRequirement } from "@t3tools/shared/product";
+
+const STABLE_ID = /^[a-z0-9]+(?:[._-][a-z0-9]+)*$/;
+const ROUTE_PATH = /^\/[a-z0-9][a-z0-9._-]*$/;
+const RESERVED_ROUTE_PATHS = new Set(["/draft", "/pair", "/settings"]);
+const WEB_NAVIGATION_SLOTS = new Set<ExperimentalWebNavigationSlot>(["primary-after-project"]);
+
+export type ExperimentalWebNavigationSlot = "primary-after-project";
+
+export interface ExperimentalWebCapabilityRequirement extends ProductCapabilityVersionRequirement {
+  readonly id: string;
+}
+
+export interface ExperimentalWebRouteModule {
+  readonly default: ComponentType;
+}
+
+export interface ExperimentalWebRouteContribution {
+  readonly id: string;
+  /** Absolute, build-time route path such as `/tasks`. */
+  readonly path: `/${string}`;
+  readonly capabilities?: ReadonlyArray<ExperimentalWebCapabilityRequirement>;
+  /** Invoked only after the connected server passes the feature gate. */
+  readonly load: () => Promise<ExperimentalWebRouteModule>;
+}
+
+export interface ExperimentalWebNavigationContribution {
+  readonly id: string;
+  readonly label: string;
+  readonly path: `/${string}`;
+  /** Host-owned placement. Extensions provide content, never sidebar layout. */
+  readonly slot: ExperimentalWebNavigationSlot;
+  readonly order?: number;
+  readonly icon?: ComponentType<{ readonly className?: string }>;
+  readonly capabilities?: ReadonlyArray<ExperimentalWebCapabilityRequirement>;
+}
+
+/**
+ * Trusted, build-time web contribution. Executable UI is deliberately kept
+ * separate from the server-advertised product manifest.
+ *
+ * @experimental This API is unstable while first-party extraction is active.
+ */
+export interface ExperimentalWebFeatureContribution {
+  readonly id: string;
+  readonly ownerId: string;
+  readonly version: number;
+  /** Server-manifest extension id. Defaults to `id`. */
+  readonly extensionId?: string;
+  readonly routes?: ReadonlyArray<ExperimentalWebRouteContribution>;
+  readonly navigation?: ReadonlyArray<ExperimentalWebNavigationContribution>;
+}
+
+export class WebFeatureInvariantError extends Error {
+  override readonly name = "WebFeatureInvariantError";
+
+  constructor(
+    readonly code:
+      | "invalid-id"
+      | "invalid-version"
+      | "invalid-route"
+      | "invalid-navigation-slot"
+      | "duplicate-feature"
+      | "duplicate-route"
+      | "duplicate-navigation",
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+function assertStableId(value: string, field: string): void {
+  if (!STABLE_ID.test(value)) {
+    throw new WebFeatureInvariantError(
+      "invalid-id",
+      `${field} '${value}' must be a lowercase dot, dash, or underscore separated id.`,
+    );
+  }
+}
+
+function assertRoutePath(path: string): void {
+  if (!ROUTE_PATH.test(path) || RESERVED_ROUTE_PATHS.has(path)) {
+    throw new WebFeatureInvariantError(
+      "invalid-route",
+      `Web feature route '${path}' must be an unreserved top-level application path.`,
+    );
+  }
+}
+
+export function defineExperimentalWebFeature<
+  const Feature extends ExperimentalWebFeatureContribution,
+>(feature: Feature): Feature {
+  assertStableId(feature.id, "Web feature id");
+  assertStableId(feature.ownerId, "Web feature owner id");
+  assertStableId(feature.extensionId ?? feature.id, "Web feature extension id");
+  if (!Number.isSafeInteger(feature.version) || feature.version < 1) {
+    throw new WebFeatureInvariantError(
+      "invalid-version",
+      `Web feature '${feature.id}' must have a positive safe-integer version.`,
+    );
+  }
+
+  for (const route of feature.routes ?? []) {
+    assertStableId(route.id, `Route id for '${feature.id}'`);
+    assertRoutePath(route.path);
+  }
+
+  for (const item of feature.navigation ?? []) {
+    assertStableId(item.id, `Navigation id for '${feature.id}'`);
+    assertRoutePath(item.path);
+    if (!WEB_NAVIGATION_SLOTS.has(item.slot)) {
+      throw new WebFeatureInvariantError(
+        "invalid-navigation-slot",
+        `Navigation '${item.id}' for '${feature.id}' targets unknown host slot '${item.slot}'.`,
+      );
+    }
+    if (item.label.trim().length === 0) {
+      throw new WebFeatureInvariantError(
+        "invalid-id",
+        `Navigation '${item.id}' for '${feature.id}' must have a non-empty label.`,
+      );
+    }
+  }
+
+  return feature;
+}

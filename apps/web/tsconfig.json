@@ -9,6 +9,7 @@
     "jsx": "react-jsx",
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "paths": {
+      "@upcomputer/web-product-entry": ["./src/product/defaultProductEntry.ts"],
       "~/*": ["./src/*"]
     },
     "plugins": [
