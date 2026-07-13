@@ -83,6 +83,9 @@ import * as ProcessDiagnostics from "./diagnostics/ProcessDiagnostics.ts";
 import * as ProcessResourceMonitor from "./diagnostics/ProcessResourceMonitor.ts";
 import * as TraceDiagnostics from "./diagnostics/TraceDiagnostics.ts";
 import { OrchestrationLayerLive } from "./orchestration/runtimeLayer.ts";
+import { CORE_SERVER_PRODUCT_ENTRY } from "./product/defaultProductEntry.ts";
+import type { ExperimentalServerProductComposition } from "./product/ServerProductComposition.ts";
+import type { ExperimentalServerProductEntry } from "./product/ServerProductEntry.ts";
 import {
   clearPersistedServerRuntimeState,
   makePersistedServerRuntimeState,
@@ -284,64 +287,65 @@ const ProviderRuntimeLayerLive = ProviderSessionReaperLive.pipe(
   Layer.provideMerge(OrchestrationLayerLive),
 );
 
-const RuntimeCoreDependenciesLive = ReactorLayerLive.pipe(
-  // Core Services
-  Layer.provideMerge(CheckpointingLayerLive),
-  Layer.provideMerge(SourceControlProviderRegistryLayerLive),
-  Layer.provideMerge(GitLayerLive),
-  Layer.provideMerge(VcsLayerLive),
-  Layer.provideMerge(ProviderRuntimeLayerLive),
-  Layer.provideMerge(Layer.mergeAll(TerminalLayerLive, PreviewLayerLive)),
-  Layer.provideMerge(PersistenceLayerLive),
-  Layer.provideMerge(Keybindings.layer),
-  Layer.provideMerge(ProviderRegistryLive),
-  // The instance registry is the new routing keystone — text generation,
-  // adapter lookup, and runtime ingestion all resolve `ProviderInstanceId`
-  // through this layer. Built-in drivers come from `BUILT_IN_DRIVERS`;
-  // `providerInstances` hydration merges `settings.providers.<kind>`
-  // with explicit `providerInstances` entries on boot.
-  Layer.provideMerge(ProviderInstanceRegistryHydrationLive),
-  // Shared native/canonical NDJSON writers used by both the per-instance
-  // drivers (native stream, written from inside each `<X>Adapter`) and
-  // `ProviderService` (canonical stream, written after event normalization).
-  // Provided once at the runtime level so every consumer sees the same
-  // logger instances.
-  Layer.provideMerge(ProviderEventLoggers.ProviderEventLoggersLive),
-  // `OpenCodeDriver.create()` yields `OpenCodeRuntime`; previously the old
-  // `ProviderRegistryLive` pulled `OpenCodeRuntimeLive` in for itself, but
-  // the rewritten registry reads snapshots off the instance registry and
-  // no longer transitively provides it. Exposing it at the runtime level
-  // keeps a single Live for all opencode consumers.
-  Layer.provideMerge(OpenCodeRuntime.OpenCodeRuntimeLive),
-  Layer.provideMerge(ServerSettings.layer.pipe(Layer.provide(ServerSecretStore.layer))),
-  Layer.provideMerge(WorkspaceLayerLive),
-  Layer.provideMerge(ProjectFaviconResolverLayerLive),
-  Layer.provideMerge(RepositoryIdentityResolver.layer),
-  Layer.provideMerge(ServerEnvironment.layer),
-  Layer.provideMerge(AuthLayerLive),
-  Layer.provideMerge(ServerSecretStore.layer),
-  Layer.provideMerge(
-    Layer.mergeAll(
-      CloudCliTokenManager.layer.pipe(Layer.provide(ServerSecretStore.layer)),
-      CloudManagedEndpointRuntimeLive,
+const makeRuntimeCoreDependenciesLive = (productEntry: ExperimentalServerProductEntry) =>
+  ReactorLayerLive.pipe(
+    // Core Services
+    Layer.provideMerge(CheckpointingLayerLive),
+    Layer.provideMerge(SourceControlProviderRegistryLayerLive),
+    Layer.provideMerge(GitLayerLive),
+    Layer.provideMerge(VcsLayerLive),
+    Layer.provideMerge(ProviderRuntimeLayerLive),
+    Layer.provideMerge(Layer.mergeAll(TerminalLayerLive, PreviewLayerLive)),
+    Layer.provideMerge(PersistenceLayerLive),
+    Layer.provideMerge(Keybindings.layer),
+    Layer.provideMerge(ProviderRegistryLive),
+    // The instance registry is the new routing keystone — text generation,
+    // adapter lookup, and runtime ingestion all resolve `ProviderInstanceId`
+    // through this layer. Built-in drivers come from `BUILT_IN_DRIVERS`;
+    // `providerInstances` hydration merges `settings.providers.<kind>`
+    // with explicit `providerInstances` entries on boot.
+    Layer.provideMerge(ProviderInstanceRegistryHydrationLive),
+    // Shared native/canonical NDJSON writers used by both the per-instance
+    // drivers (native stream, written from inside each `<X>Adapter`) and
+    // `ProviderService` (canonical stream, written after event normalization).
+    // Provided once at the runtime level so every consumer sees the same
+    // logger instances.
+    Layer.provideMerge(ProviderEventLoggers.ProviderEventLoggersLive),
+    // `OpenCodeDriver.create()` yields `OpenCodeRuntime`; previously the old
+    // `ProviderRegistryLive` pulled `OpenCodeRuntimeLive` in for itself, but
+    // the rewritten registry reads snapshots off the instance registry and
+    // no longer transitively provides it. Exposing it at the runtime level
+    // keeps a single Live for all opencode consumers.
+    Layer.provideMerge(OpenCodeRuntime.OpenCodeRuntimeLive),
+    Layer.provideMerge(ServerSettings.layer.pipe(Layer.provide(ServerSecretStore.layer))),
+    Layer.provideMerge(WorkspaceLayerLive),
+    Layer.provideMerge(ProjectFaviconResolverLayerLive),
+    Layer.provideMerge(RepositoryIdentityResolver.layer),
+    Layer.provideMerge(ServerEnvironment.layerForProduct(productEntry.manifest)),
+    Layer.provideMerge(AuthLayerLive),
+    Layer.provideMerge(ServerSecretStore.layer),
+    Layer.provideMerge(
+      Layer.mergeAll(
+        CloudCliTokenManager.layer.pipe(Layer.provide(ServerSecretStore.layer)),
+        CloudManagedEndpointRuntimeLive,
+      ),
     ),
-  ),
-);
+  );
 
-const RuntimeDependenciesLive = RuntimeCoreDependenciesLive.pipe(
-  // Misc.
-  Layer.provideMerge(ProcessDiagnostics.layer),
-  Layer.provideMerge(ProcessResourceMonitor.layer),
-  Layer.provideMerge(TraceDiagnostics.layer),
-  Layer.provideMerge(AnalyticsService.layer),
-  Layer.provideMerge(ExternalLauncher.layer),
-  Layer.provideMerge(ServerLifecycleEvents.layer),
-  Layer.provide(NetService.layer),
-);
+const makeRuntimeDependenciesLive = (productEntry: ExperimentalServerProductEntry) =>
+  makeRuntimeCoreDependenciesLive(productEntry).pipe(
+    // Misc.
+    Layer.provideMerge(ProcessDiagnostics.layer),
+    Layer.provideMerge(ProcessResourceMonitor.layer),
+    Layer.provideMerge(TraceDiagnostics.layer),
+    Layer.provideMerge(AnalyticsService.layer),
+    Layer.provideMerge(ExternalLauncher.layer),
+    Layer.provideMerge(ServerLifecycleEvents.layer),
+    Layer.provide(NetService.layer),
+  );
 
-const RuntimeServicesLive = ServerRuntimeStartup.layer.pipe(
-  Layer.provideMerge(RuntimeDependenciesLive),
-);
+const makeRuntimeServicesLive = (productEntry: ExperimentalServerProductEntry) =>
+  ServerRuntimeStartup.layer.pipe(Layer.provideMerge(makeRuntimeDependenciesLive(productEntry)));
 
 export const makeRoutesLayer = Layer.mergeAll(
   Layer.mergeAll(
@@ -360,134 +364,143 @@ export const makeRoutesLayer = Layer.mergeAll(
   McpHttpServer.layer.pipe(Layer.provide(McpSessionRegistry.layer)),
 ).pipe(Layer.provide(PreviewAutomationBroker.layer), Layer.provide(browserApiCorsLayer));
 
-export const makeServerLayer = Layer.unwrap(
-  Effect.gen(function* () {
-    const config = yield* ServerConfig.ServerConfig;
+export const makeRoutesLayerForProduct = (_composition: ExperimentalServerProductComposition) =>
+  makeRoutesLayer;
 
-    yield* fixPath();
+export const makeServerLayerForProduct = (productEntry: ExperimentalServerProductEntry) =>
+  Layer.unwrap(
+    Effect.gen(function* () {
+      const config = yield* ServerConfig.ServerConfig;
 
-    const httpListeningLayer = Layer.effectDiscard(
-      Effect.gen(function* () {
-        yield* HttpServer.HttpServer;
-        const startup = yield* ServerRuntimeStartup.ServerRuntimeStartup;
-        yield* startup.markHttpListening;
-      }),
-    );
-    const runtimeStateLayer = Layer.effectDiscard(
-      Effect.acquireRelease(
+      yield* fixPath();
+
+      const httpListeningLayer = Layer.effectDiscard(
         Effect.gen(function* () {
+          yield* HttpServer.HttpServer;
+          const startup = yield* ServerRuntimeStartup.ServerRuntimeStartup;
+          yield* startup.markHttpListening;
+        }),
+      );
+      const runtimeStateLayer = Layer.effectDiscard(
+        Effect.acquireRelease(
+          Effect.gen(function* () {
+            const server = yield* HttpServer.HttpServer;
+            const address = server.address;
+            if (typeof address === "string" || !("port" in address)) {
+              return;
+            }
+
+            const state = yield* makePersistedServerRuntimeState({
+              config,
+              port: address.port,
+            });
+            yield* persistServerRuntimeState({
+              path: config.serverRuntimeStatePath,
+              state,
+            });
+          }),
+          () => clearPersistedServerRuntimeState(config.serverRuntimeStatePath),
+        ),
+      );
+      const tailscaleServeLayer = config.tailscaleServeEnabled
+        ? Layer.effectDiscard(
+            Effect.acquireRelease(
+              Effect.gen(function* () {
+                const server = yield* HttpServer.HttpServer;
+                const address = server.address;
+                if (typeof address === "string" || !("port" in address)) {
+                  return null;
+                }
+
+                const localPort = address.port;
+                return yield* ensureTailscaleServe({
+                  localPort,
+                  servePort: config.tailscaleServePort,
+                  localHost: "127.0.0.1",
+                }).pipe(
+                  Effect.as({ localPort, servePort: config.tailscaleServePort }),
+                  Effect.tap(() =>
+                    Effect.logInfo("Tailscale Serve configured", {
+                      localPort,
+                      servePort: config.tailscaleServePort,
+                    }),
+                  ),
+                  Effect.catch((cause) =>
+                    Effect.logWarning("Failed to configure Tailscale Serve", {
+                      cause,
+                      localPort,
+                      servePort: config.tailscaleServePort,
+                    }).pipe(Effect.as(null)),
+                  ),
+                );
+              }),
+              (configured) =>
+                configured
+                  ? disableTailscaleServe({ servePort: configured.servePort }).pipe(
+                      Effect.tap(() =>
+                        Effect.logInfo("Tailscale Serve disabled", {
+                          servePort: configured.servePort,
+                        }),
+                      ),
+                      Effect.catch((cause) =>
+                        Effect.logWarning("Failed to disable Tailscale Serve", {
+                          cause,
+                          servePort: configured.servePort,
+                        }),
+                      ),
+                    )
+                  : Effect.void,
+            ),
+          )
+        : Layer.empty;
+      const cloudDesiredLinkReconcileLayer = Layer.effectDiscard(
+        Effect.gen(function* () {
+          if (!hasCloudPublicConfig) return;
+          if (!(yield* CloudCliState.readCliDesiredCloudLink)) return;
           const server = yield* HttpServer.HttpServer;
           const address = server.address;
-          if (typeof address === "string" || !("port" in address)) {
-            return;
-          }
-
-          const state = yield* makePersistedServerRuntimeState({
-            config,
-            port: address.port,
-          });
-          yield* persistServerRuntimeState({
-            path: config.serverRuntimeStatePath,
-            state,
-          });
-        }),
-        () => clearPersistedServerRuntimeState(config.serverRuntimeStatePath),
-      ),
-    );
-    const tailscaleServeLayer = config.tailscaleServeEnabled
-      ? Layer.effectDiscard(
-          Effect.acquireRelease(
-            Effect.gen(function* () {
-              const server = yield* HttpServer.HttpServer;
-              const address = server.address;
-              if (typeof address === "string" || !("port" in address)) {
-                return null;
-              }
-
-              const localPort = address.port;
-              return yield* ensureTailscaleServe({
-                localPort,
-                servePort: config.tailscaleServePort,
-                localHost: "127.0.0.1",
-              }).pipe(
-                Effect.as({ localPort, servePort: config.tailscaleServePort }),
-                Effect.tap(() =>
-                  Effect.logInfo("Tailscale Serve configured", {
-                    localPort,
-                    servePort: config.tailscaleServePort,
-                  }),
-                ),
-                Effect.catch((cause) =>
-                  Effect.logWarning("Failed to configure Tailscale Serve", {
-                    cause,
-                    localPort,
-                    servePort: config.tailscaleServePort,
-                  }).pipe(Effect.as(null)),
-                ),
-              );
-            }),
-            (configured) =>
-              configured
-                ? disableTailscaleServe({ servePort: configured.servePort }).pipe(
-                    Effect.tap(() =>
-                      Effect.logInfo("Tailscale Serve disabled", {
-                        servePort: configured.servePort,
-                      }),
-                    ),
-                    Effect.catch((cause) =>
-                      Effect.logWarning("Failed to disable Tailscale Serve", {
-                        cause,
-                        servePort: configured.servePort,
-                      }),
-                    ),
-                  )
-                : Effect.void,
-          ),
-        )
-      : Layer.empty;
-    const cloudDesiredLinkReconcileLayer = Layer.effectDiscard(
-      Effect.gen(function* () {
-        if (!hasCloudPublicConfig) return;
-        if (!(yield* CloudCliState.readCliDesiredCloudLink)) return;
-        const server = yield* HttpServer.HttpServer;
-        const address = server.address;
-        if (typeof address === "string" || !("port" in address)) return;
-        yield* Effect.forkScoped(
-          Effect.sleep("250 millis").pipe(
-            Effect.andThen(reconcileDesiredCloudLink(`http://127.0.0.1:${address.port}`)),
-            Effect.retry({ times: 4 }),
-            Effect.tap(() => Effect.logInfo("T3 Connect desired link reconciled on startup")),
-            Effect.catch((cause) =>
-              Effect.logWarning("Failed to reconcile T3 Connect desired link on startup", {
-                cause,
-              }),
+          if (typeof address === "string" || !("port" in address)) return;
+          yield* Effect.forkScoped(
+            Effect.sleep("250 millis").pipe(
+              Effect.andThen(reconcileDesiredCloudLink(`http://127.0.0.1:${address.port}`)),
+              Effect.retry({ times: 4 }),
+              Effect.tap(() => Effect.logInfo("T3 Connect desired link reconciled on startup")),
+              Effect.catch((cause) =>
+                Effect.logWarning("Failed to reconcile T3 Connect desired link on startup", {
+                  cause,
+                }),
+              ),
             ),
-          ),
-        );
-      }),
-    );
+          );
+        }),
+      );
 
-    const serverApplicationLayer = Layer.mergeAll(
-      HttpRouter.serve(makeRoutesLayer, {
-        disableLogger: !config.logWebSocketEvents,
-      }),
-      httpListeningLayer,
-      runtimeStateLayer,
-      tailscaleServeLayer,
-      cloudDesiredLinkReconcileLayer,
-    );
+      const serverApplicationLayer = Layer.mergeAll(
+        HttpRouter.serve(makeRoutesLayerForProduct(productEntry.composition), {
+          disableLogger: !config.logWebSocketEvents,
+        }),
+        httpListeningLayer,
+        runtimeStateLayer,
+        tailscaleServeLayer,
+        cloudDesiredLinkReconcileLayer,
+      );
 
-    return serverApplicationLayer.pipe(
-      Layer.provideMerge(RuntimeServicesLive),
-      Layer.provideMerge(serverRelayBrokerTracingLayer),
-      Layer.provideMerge(HttpServerLive),
-      Layer.provide(ObservabilityLive),
-      Layer.provideMerge(FetchHttpClient.layer),
-      Layer.provideMerge(VcsProcess.layer),
-      Layer.provideMerge(PlatformServicesLive),
-    );
-  }),
-);
+      return serverApplicationLayer.pipe(
+        Layer.provideMerge(makeRuntimeServicesLive(productEntry)),
+        Layer.provideMerge(serverRelayBrokerTracingLayer),
+        Layer.provideMerge(HttpServerLive),
+        Layer.provide(ObservabilityLive),
+        Layer.provideMerge(FetchHttpClient.layer),
+        Layer.provideMerge(VcsProcess.layer),
+        Layer.provideMerge(PlatformServicesLive),
+      );
+    }),
+  );
+
+export const makeServerLayer = makeServerLayerForProduct(CORE_SERVER_PRODUCT_ENTRY);
 
 // Important: Only `ServerConfig` should be provided by the CLI layer!!! Don't let other requirements leak into the launch layer.
-export const runServer = Layer.launch(makeServerLayer);
+export const runServerForProduct = (productEntry: ExperimentalServerProductEntry) =>
+  Layer.launch(makeServerLayerForProduct(productEntry));
+
+export const runServer = runServerForProduct(CORE_SERVER_PRODUCT_ENTRY);

@@ -12,7 +12,13 @@ import { connectCommand } from "./cli/connect.ts";
 import { hasCloudPublicConfig } from "./cloud/publicConfig.ts";
 import { sharedServerCommandFlags } from "./cli/config.ts";
 import { projectCommand } from "./cli/project.ts";
-import { runServerCommand, serveCommand, startCommand } from "./cli/server.ts";
+import {
+  makeServeCommandForProduct,
+  makeStartCommandForProduct,
+  runServerCommandForProduct,
+} from "./cli/server.ts";
+import { CORE_SERVER_PRODUCT_ENTRY } from "./product/defaultProductEntry.ts";
+import type { ExperimentalServerProductEntry } from "./product/ServerProductEntry.ts";
 
 const CliRuntimeLayer = Layer.mergeAll(NodeServices.layer, NetService.layer);
 
@@ -38,13 +44,21 @@ const connectUnavailableCommand = Command.make("connect").pipe(
   ),
 );
 
-export const makeCli = ({ cloudEnabled = hasCloudPublicConfig } = {}) =>
-  Command.make("t3", { ...sharedServerCommandFlags }).pipe(
-    Command.withDescription("Run the T3 Code server."),
-    Command.withHandler((flags) => runServerCommand(flags)),
+export const makeCli = ({
+  cloudEnabled = hasCloudPublicConfig,
+  productEntry = CORE_SERVER_PRODUCT_ENTRY,
+}: {
+  readonly cloudEnabled?: boolean;
+  readonly productEntry?: ExperimentalServerProductEntry;
+} = {}) =>
+  Command.make(productEntry.commandName ?? "t3", { ...sharedServerCommandFlags }).pipe(
+    Command.withDescription(
+      productEntry.description ?? `Run the ${productEntry.manifest.displayName} server.`,
+    ),
+    Command.withHandler((flags) => runServerCommandForProduct(flags, productEntry)),
     Command.withSubcommands([
-      startCommand,
-      serveCommand,
+      makeStartCommandForProduct(productEntry),
+      makeServeCommandForProduct(productEntry),
       authCommand,
       projectCommand,
       cloudEnabled ? connectCommand : connectUnavailableCommand,
