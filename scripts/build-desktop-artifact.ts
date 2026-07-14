@@ -1012,6 +1012,20 @@ const resolveBooleanFlag = (flag: Option.Option<boolean>, envValue: boolean) =>
 const mergeOptions = <A>(a: Option.Option<A>, b: Option.Option<A>, defaultValue: A) =>
   Option.getOrElse(a, () => Option.getOrElse(b, () => defaultValue));
 
+function prependPathEntry(
+  env: NodeJS.ProcessEnv,
+  entry: string,
+  platform: string,
+): NodeJS.ProcessEnv {
+  const pathKey = Object.keys(env).find((key) => key.toLowerCase() === "path") ?? "PATH";
+  const delimiter = platform === "win32" ? ";" : ":";
+  const currentPath = env[pathKey];
+  return {
+    ...env,
+    [pathKey]: currentPath && currentPath.length > 0 ? `${entry}${delimiter}${currentPath}` : entry,
+  };
+}
+
 export const resolveMockUpdateServerPort = Effect.fn("resolveMockUpdateServerPort")(function* (
   mockUpdateServerPort: string | undefined,
 ) {
@@ -1650,6 +1664,8 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
 
   const stageAppDir = path.join(stageRoot, "app");
   const stageResourcesDir = path.join(stageAppDir, "apps/desktop/resources");
+  const publicNodeBinDir = path.join(repoRoot, "node_modules/.bin");
+  const vpEnv = prependPathEntry(process.env, publicNodeBinDir, hostPlatform);
   const distDirs = {
     desktopDist: path.join(repoRoot, "apps/desktop/dist-electron"),
     desktopResources: path.join(repoRoot, "apps/desktop/resources"),
@@ -1659,10 +1675,13 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
 
   if (!options.skipBuild) {
     yield* Effect.log("[desktop-artifact] Building desktop/server/web artifacts...");
-    const spawnCommand = yield* resolveSpawnCommand("vp", ["run", "build:desktop"]);
+    const spawnCommand = yield* resolveSpawnCommand("vp", ["run", "build:desktop"], {
+      env: vpEnv,
+    });
     yield* runCommand(
       ChildProcess.make(spawnCommand.command, spawnCommand.args, {
         cwd: repoRoot,
+        env: vpEnv,
         shell: spawnCommand.shell,
       }),
       { label: "vp run build:desktop", verbose: options.verbose },
@@ -1827,10 +1846,13 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
   }
 
   yield* Effect.log("[desktop-artifact] Installing staged production dependencies...");
-  const installCommand = yield* resolveSpawnCommand("vp", [...STAGE_INSTALL_ARGS]);
+  const installCommand = yield* resolveSpawnCommand("vp", [...STAGE_INSTALL_ARGS], {
+    env: vpEnv,
+  });
   yield* runCommand(
     ChildProcess.make(installCommand.command, installCommand.args, {
       cwd: stageAppDir,
+      env: vpEnv,
       shell: installCommand.shell,
     }),
     { label: "vp install --prod", verbose: options.verbose },
@@ -1850,9 +1872,7 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
   // electron-builder treats several set-but-empty variables (e.g. CSC_LINK="")
   // as enabled, so copy the host env and scrub empty values instead of relying
   // on `extendEnv` merging.
-  const buildEnv: NodeJS.ProcessEnv = {
-    ...process.env,
-  };
+  const buildEnv: NodeJS.ProcessEnv = prependPathEntry(process.env, publicNodeBinDir, hostPlatform);
   buildEnv.npm_config_user_agent = resolvePackageManagerUserAgent(rootPackageJson.packageManager);
   for (const [key, value] of Object.entries(buildEnv)) {
     if (value === "") {
