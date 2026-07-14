@@ -6,6 +6,7 @@ import {
   SidebarMenuButton,
   SidebarMenuSubButton,
   SidebarProvider,
+  SidebarRail,
   SidebarTrigger,
 } from "./sidebar";
 import { resolveSidebarState } from "./sidebarState";
@@ -82,5 +83,20 @@ describe("sidebar interactive cursors", () => {
 
     expect(html).toContain('data-slot="sidebar-menu-sub-button"');
     expect(html).toContain("cursor-pointer");
+  });
+
+  it("keeps the resize rail visually neutral on hover", () => {
+    const html = renderToStaticMarkup(
+      <SidebarProvider>
+        <SidebarRail />
+      </SidebarProvider>,
+    );
+
+    expect(html).toContain('data-slot="sidebar-rail"');
+    expect(html).toContain("cursor-w-resize");
+    expect(html).toContain('title="Toggle Sidebar"');
+    expect(html).not.toContain("hover:after:bg-sidebar-border");
+    expect(html).not.toContain("hover:group-data-[collapsible=offcanvas]:bg-sidebar");
+    expect(html).not.toContain('data-slot="tooltip-popup"');
   });
 });
