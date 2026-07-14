@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import {
   createThreadJumpHintVisibilityController,
+  formatSidebarThreadTimestamp,
   getSidebarThreadIdsToPrewarm,
   getVisibleSidebarThreadIds,
   resolveAdjacentThreadId,
@@ -36,6 +37,27 @@ import {
 } from "../types";
 
 const localEnvironmentId = EnvironmentId.make("environment-local");
+
+describe("formatSidebarThreadTimestamp", () => {
+  it("keeps the compact UpComputer timestamp without the ago suffix", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-14T12:00:00.000Z"));
+
+    expect(formatSidebarThreadTimestamp("2026-07-14T11:00:00.000Z")).toBe("1h");
+    expect(formatSidebarThreadTimestamp("2026-06-23T12:00:00.000Z")).toBe("21d");
+
+    vi.useRealTimers();
+  });
+
+  it("shortens just now to now", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-14T12:00:00.000Z"));
+
+    expect(formatSidebarThreadTimestamp("2026-07-14T12:00:00.000Z")).toBe("now");
+
+    vi.useRealTimers();
+  });
+});
 
 describe("resolveSidebarStageBadgeLabel", () => {
   it("returns Nightly for nightly primary server versions", () => {

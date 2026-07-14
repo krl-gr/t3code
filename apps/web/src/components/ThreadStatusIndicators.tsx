@@ -17,6 +17,7 @@ import { resolveThreadStatusPill, type ThreadStatusPill } from "./Sidebar.logic"
 import type { SidebarThreadSummary } from "../types";
 import { formatWorktreePathForDisplay } from "../worktreeCleanup";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
+import { SIDEBAR_LABEL_TEXT_CLASS } from "./sidebar/sidebarTextStyles";
 
 export interface PrStatusIndicator {
   label: string;
@@ -138,45 +139,32 @@ export function ThreadStatusLabel({
 }) {
   if (compact) {
     return (
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <span
-              aria-label={status.label}
-              className={`inline-flex size-3.5 shrink-0 items-center justify-center ${status.colorClass}`}
-            />
-          }
-        >
-          <span
-            className={`size-[9px] rounded-full ${status.dotClass} ${
-              status.pulse ? "animate-pulse" : ""
-            }`}
-          />
-        </TooltipTrigger>
-        <TooltipPopup side="top">{status.label}</TooltipPopup>
-      </Tooltip>
+      <span
+        title={status.label}
+        className={`inline-flex size-3.5 shrink-0 items-center justify-center ${status.colorClass}`}
+      >
+        <span
+          className={`size-[9px] rounded-full ${status.dotClass} ${
+            status.pulse ? "animate-pulse" : ""
+          }`}
+        />
+        <span className="sr-only">{status.label}</span>
+      </span>
     );
   }
 
   return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <span
-            aria-label={status.label}
-            className={`inline-flex items-center gap-1 text-[10px] ${status.colorClass}`}
-          />
-        }
-      >
-        <span
-          className={`h-1.5 w-1.5 rounded-full ${status.dotClass} ${
-            status.pulse ? "animate-pulse" : ""
-          }`}
-        />
-        <span className="hidden md:inline">{status.label}</span>
-      </TooltipTrigger>
-      <TooltipPopup side="top">{status.label}</TooltipPopup>
-    </Tooltip>
+    <span
+      title={status.label}
+      className={`inline-flex items-center gap-1 ${SIDEBAR_LABEL_TEXT_CLASS} ${status.colorClass}`}
+    >
+      <span
+        className={`h-1.5 w-1.5 rounded-full ${status.dotClass} ${
+          status.pulse ? "animate-pulse" : ""
+        }`}
+      />
+      <span className="hidden md:inline">{status.label}</span>
+    </span>
   );
 }
 
