@@ -38,6 +38,10 @@ import * as CodexErrors from "effect-codex-app-server/errors";
 import * as EffectCodexSchema from "effect-codex-app-server/schema";
 
 import { getModelSelectionStringOptionValue } from "@t3tools/shared/model";
+import {
+  applyResolvedInteractionModePrompt,
+  type ResolvedInteractionMode,
+} from "@t3tools/shared/interactionMode";
 import { getCodexServiceTierOptionValue } from "../../codexModelOptions.ts";
 import * as McpProviderSession from "../../mcp/McpProviderSession.ts";
 
@@ -56,6 +60,7 @@ import {
   CodexResumeCursorSchema,
   CodexSessionRuntimeThreadIdMissingError,
   makeCodexSessionRuntime,
+  type CodexSessionRuntimeCollaborationModeInput,
   type CodexSessionRuntimeError,
   type CodexSessionRuntimeOptions,
   type CodexSessionRuntimeShape,
@@ -152,6 +157,58 @@ function isFatalCodexProcessStderrMessage(message: string): boolean {
   const normalized = message.toLowerCase();
   return FATAL_CODEX_STDERR_SNIPPETS.some((snippet) => normalized.includes(snippet));
 }
+
+function resolveCodexPrompt(
+  input: string | undefined,
+  interactionMode: ResolvedInteractionMode | undefined,
+): string | undefined {
+  if (interactionMode === undefined) {
+    return input;
+  }
+  if (
+    input === undefined &&
+    interactionMode.transformPrompt === undefined &&
+    interactionMode.provider.promptPrefix === undefined
+  ) {
+    return undefined;
+  }
+  return applyResolvedInteractionModePrompt(input ?? "", interactionMode);
+}
+
+const resolveCodexCollaborationMode = Effect.fn("resolveCodexCollaborationMode")(function* (
+  interactionMode: ResolvedInteractionMode | undefined,
+): Effect.fn.Return<
+  CodexSessionRuntimeCollaborationModeInput | undefined,
+  ProviderAdapterValidationError
+> {
+  if (interactionMode === undefined) {
+    return undefined;
+  }
+  if (interactionMode.provider.providerId !== PROVIDER) {
+    return yield* new ProviderAdapterValidationError({
+      provider: PROVIDER,
+      operation: "sendTurn",
+      issue: `Expected resolved interaction mode for provider '${PROVIDER}' but received '${interactionMode.provider.providerId}'.`,
+    });
+  }
+  const collaborationMode = interactionMode.provider.collaborationMode;
+  if (collaborationMode === undefined) {
+    return undefined;
+  }
+  if (collaborationMode !== "default" && collaborationMode !== "plan") {
+    return yield* new ProviderAdapterValidationError({
+      provider: PROVIDER,
+      operation: "sendTurn",
+      issue: `Unsupported Codex collaboration mode '${collaborationMode}' for interaction mode '${interactionMode.id}'.`,
+    });
+  }
+  return {
+    mode: collaborationMode,
+    ...(interactionMode.provider.developerInstructions !== undefined
+      ? { developerInstructions: interactionMode.provider.developerInstructions }
+      : {}),
+  };
+});
 
 function normalizeCodexTokenUsage(
   usage: EffectCodexSchema.V2ThreadTokenUsageUpdatedNotification["tokenUsage"],
@@ -1535,9 +1592,11 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
       input.modelSelection?.instanceId === boundInstanceId
         ? getCodexServiceTierOptionValue(input.modelSelection)
         : undefined;
+    const prompt = resolveCodexPrompt(input.input, input.resolvedInteractionMode);
+    const collaborationMode = yield* resolveCodexCollaborationMode(input.resolvedInteractionMode);
     return yield* session.runtime
       .sendTurn({
-        ...(input.input !== undefined ? { input: input.input } : {}),
+        ...(prompt !== undefined ? { input: prompt } : {}),
         ...(input.modelSelection?.instanceId === boundInstanceId
           ? { model: input.modelSelection.model }
           : {}),
@@ -1548,6 +1607,10 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
           : {}),
         ...(serviceTier ? { serviceTier } : {}),
         ...(input.interactionMode !== undefined ? { interactionMode: input.interactionMode } : {}),
+        ...(input.resolvedInteractionMode !== undefined
+          ? { interactionModeSandbox: input.resolvedInteractionMode.provider.sandbox }
+          : {}),
+        ...(collaborationMode !== undefined ? { collaborationMode } : {}),
         ...(codexAttachments.length > 0 ? { attachments: codexAttachments } : {}),
       })
       .pipe(Effect.mapError((cause) => mapCodexRuntimeError(input.threadId, "turn/start", cause)));

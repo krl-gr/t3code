@@ -35,7 +35,9 @@ import * as Stream from "effect/Stream";
 import * as CodexErrors from "effect-codex-app-server/errors";
 
 import { ServerConfig } from "../../config.ts";
+import { BUILT_IN_INTERACTION_MODE_REGISTRY } from "../../product/BuiltInInteractionModes.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
+import { CODEX_ASK_MODE_DEVELOPER_INSTRUCTIONS } from "../CodexDeveloperInstructions.ts";
 import { ProviderAdapterValidationError } from "../Errors.ts";
 import type { CodexAdapterShape } from "../Services/CodexAdapter.ts";
 import { ProviderSessionDirectory } from "../Services/ProviderSessionDirectory.ts";
@@ -355,6 +357,43 @@ sessionErrorLayer("CodexAdapterLive session errors", (it) => {
         model: "gpt-5.3-codex",
         effort: "high",
         serviceTier: "priority",
+      });
+    }),
+  );
+
+  it.effect("maps resolved ask mode to Codex collaboration mode", () =>
+    Effect.gen(function* () {
+      const adapter = yield* CodexAdapter;
+      yield* adapter.startSession({
+        provider: ProviderDriverKind.make("codex"),
+        threadId: asThreadId("sess-ask-mode"),
+        runtimeMode: "full-access",
+      });
+      const runtime = sessionRuntimeFactory.lastRuntime;
+      NodeAssert.ok(runtime);
+      runtime.sendTurnImpl.mockClear();
+
+      yield* Effect.ignore(
+        adapter.sendTurn({
+          threadId: asThreadId("sess-ask-mode"),
+          input: "Explain this file",
+          interactionMode: "ask",
+          resolvedInteractionMode: BUILT_IN_INTERACTION_MODE_REGISTRY.resolveOrThrow(
+            "ask",
+            "codex",
+          ),
+          attachments: [],
+        }),
+      );
+
+      NodeAssert.deepStrictEqual(runtime.sendTurnImpl.mock.calls[0]?.[0], {
+        input: "Explain this file",
+        interactionMode: "ask",
+        interactionModeSandbox: "inherit-runtime",
+        collaborationMode: {
+          mode: "default",
+          developerInstructions: CODEX_ASK_MODE_DEVELOPER_INSTRUCTIONS,
+        },
       });
     }),
   );

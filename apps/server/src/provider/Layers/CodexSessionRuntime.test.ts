@@ -9,6 +9,7 @@ import * as CodexErrors from "effect-codex-app-server/errors";
 import * as CodexRpc from "effect-codex-app-server/rpc";
 
 import {
+  CODEX_ASK_MODE_DEVELOPER_INSTRUCTIONS,
   CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS,
   CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS,
 } from "../CodexDeveloperInstructions.ts";
@@ -190,6 +191,46 @@ describe("buildTurnStartParams", () => {
           text: "Review",
         },
       ],
+    });
+  });
+
+  it("uses resolved collaboration instructions and sandbox overrides", () => {
+    const params = Effect.runSync(
+      buildTurnStartParams({
+        threadId: "provider-thread-1",
+        runtimeMode: "full-access",
+        prompt: "Explain the code",
+        model: "gpt-5.3-codex",
+        interactionMode: "ask",
+        interactionModeSandbox: "read-only",
+        collaborationMode: {
+          mode: "default",
+          developerInstructions: CODEX_ASK_MODE_DEVELOPER_INSTRUCTIONS,
+        },
+      }),
+    );
+
+    NodeAssert.deepStrictEqual(params, {
+      threadId: "provider-thread-1",
+      approvalPolicy: "never",
+      sandboxPolicy: {
+        type: "readOnly",
+      },
+      input: [
+        {
+          type: "text",
+          text: "Explain the code",
+        },
+      ],
+      model: "gpt-5.3-codex",
+      collaborationMode: {
+        mode: "default",
+        settings: {
+          model: "gpt-5.3-codex",
+          reasoning_effort: "medium",
+          developer_instructions: CODEX_ASK_MODE_DEVELOPER_INSTRUCTIONS,
+        },
+      },
     });
   });
 });

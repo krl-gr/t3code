@@ -2,6 +2,7 @@ import {
   ApprovalRequestId,
   DEFAULT_MODEL,
   EventId,
+  type InteractionModeSandboxPolicy,
   ProviderDriverKind,
   ProviderItemId,
   type ProviderInstanceId,
@@ -119,6 +120,13 @@ export interface CodexSessionRuntimeSendTurnInput {
   readonly serviceTier?: CodexServiceTier | undefined;
   readonly effort?: EffectCodexSchema.V2TurnStartParams__ReasoningEffort | undefined;
   readonly interactionMode?: ProviderInteractionMode;
+  readonly interactionModeSandbox?: InteractionModeSandboxPolicy;
+  readonly collaborationMode?: CodexSessionRuntimeCollaborationModeInput;
+}
+
+export interface CodexSessionRuntimeCollaborationModeInput {
+  readonly mode: EffectCodexSchema.V2TurnStartParams__ModeKind;
+  readonly developerInstructions?: string;
 }
 
 export interface CodexThreadTurnSnapshot {
@@ -324,9 +332,25 @@ function runtimeModeToTurnSandboxPolicy(
 
 function buildCodexCollaborationMode(input: {
   readonly interactionMode?: ProviderInteractionMode;
+  readonly collaborationMode?: CodexSessionRuntimeCollaborationModeInput;
   readonly model?: string;
   readonly effort?: EffectCodexSchema.V2TurnStartParams__ReasoningEffort;
 }): EffectCodexSchema.V2TurnStartParams__CollaborationMode | undefined {
+  if (input.collaborationMode !== undefined) {
+    const model = normalizeCodexModelSlug(input.model) ?? DEFAULT_MODEL;
+    return {
+      mode: input.collaborationMode.mode,
+      settings: {
+        model,
+        reasoning_effort: input.effort ?? "medium",
+        developer_instructions:
+          input.collaborationMode.developerInstructions ??
+          (input.collaborationMode.mode === "plan"
+            ? CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS
+            : CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS),
+      },
+    };
+  }
   if (input.interactionMode === undefined) {
     return undefined;
   }
@@ -361,6 +385,8 @@ export function buildTurnStartParams(input: {
   readonly serviceTier?: CodexServiceTier;
   readonly effort?: EffectCodexSchema.V2TurnStartParams__ReasoningEffort;
   readonly interactionMode?: ProviderInteractionMode;
+  readonly interactionModeSandbox?: InteractionModeSandboxPolicy;
+  readonly collaborationMode?: CodexSessionRuntimeCollaborationModeInput;
 }): Effect.Effect<
   CodexTurnStartParamsWithCollaborationMode,
   CodexErrors.CodexAppServerProtocolParseError
@@ -378,16 +404,21 @@ export function buildTurnStartParams(input: {
 
   const config = runtimeModeToThreadConfig(input.runtimeMode);
   const collaborationMode = buildCodexCollaborationMode({
+    ...(input.collaborationMode ? { collaborationMode: input.collaborationMode } : {}),
     ...(input.interactionMode ? { interactionMode: input.interactionMode } : {}),
     ...(input.model ? { model: input.model } : {}),
     ...(input.effort ? { effort: input.effort } : {}),
   });
+  const sandboxPolicy =
+    input.interactionModeSandbox === "read-only"
+      ? ({ type: "readOnly" } satisfies EffectCodexSchema.V2TurnStartParams__SandboxPolicy)
+      : runtimeModeToTurnSandboxPolicy(input.runtimeMode);
 
   return decodeCodexTurnStartParamsWithCollaborationMode({
     threadId: input.threadId,
     input: turnInput,
     approvalPolicy: config.approvalPolicy,
-    sandboxPolicy: runtimeModeToTurnSandboxPolicy(input.runtimeMode),
+    sandboxPolicy,
     ...(input.model ? { model: input.model } : {}),
     ...(input.serviceTier ? { serviceTier: input.serviceTier } : {}),
     ...(input.effort ? { effort: input.effort } : {}),
@@ -1291,6 +1322,10 @@ export const makeCodexSessionRuntime = (
             ...(input.serviceTier ? { serviceTier: input.serviceTier } : {}),
             ...(input.effort ? { effort: input.effort } : {}),
             ...(input.interactionMode ? { interactionMode: input.interactionMode } : {}),
+            ...(input.interactionModeSandbox
+              ? { interactionModeSandbox: input.interactionModeSandbox }
+              : {}),
+            ...(input.collaborationMode ? { collaborationMode: input.collaborationMode } : {}),
           });
           const rawResponse = yield* client.raw.request("turn/start", params);
           const response = yield* decodeV2TurnStartResponse(rawResponse).pipe(
