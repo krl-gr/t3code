@@ -390,6 +390,7 @@ sessionErrorLayer("CodexAdapterLive session errors", (it) => {
         input: "Explain this file",
         interactionMode: "ask",
         interactionModeSandbox: "inherit-runtime",
+        mutationPolicy: "deny",
         collaborationMode: {
           mode: "default",
           developerInstructions: CODEX_ASK_MODE_DEVELOPER_INSTRUCTIONS,
