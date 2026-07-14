@@ -31,6 +31,16 @@ describe("ClientSettings word wrap", () => {
   });
 });
 
+describe("ClientSettings sidebar view", () => {
+  it("defaults to classic nested view", () => {
+    expect(decodeClientSettings({}).sidebarViewMode).toBe("nested");
+  });
+
+  it("restores a persisted focused view", () => {
+    expect(decodeClientSettings({ sidebarViewMode: "focused" }).sidebarViewMode).toBe("focused");
+  });
+});
+
 describe("ServerSettings.providerInstances (slice-2 invariant)", () => {
   it("defaults to an empty record so legacy configs without the key still decode", () => {
     expect(DEFAULT_SERVER_SETTINGS.providerInstances).toEqual({});
