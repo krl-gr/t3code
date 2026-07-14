@@ -3,6 +3,7 @@ import {
   type OpenCodeSettings,
   ProviderDriverKind,
   ProviderInstanceId,
+  type ProviderInteractionMode,
   type ProviderRuntimeEvent,
   type ProviderSession,
   RuntimeItemId,
@@ -22,6 +23,10 @@ import * as Ref from "effect/Ref";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import type { OpencodeClient, Part, PermissionRequest, QuestionRequest } from "@opencode-ai/sdk/v2";
+import {
+  applyResolvedInteractionModePrompt,
+  type ResolvedInteractionMode,
+} from "@t3tools/shared/interactionMode";
 import { getModelSelectionStringOptionValue } from "@t3tools/shared/model";
 
 import { resolveAttachmentPath } from "../../attachmentStore.ts";
@@ -52,6 +57,53 @@ import {
 import * as Option from "effect/Option";
 
 const PROVIDER = ProviderDriverKind.make("opencode");
+
+function resolveOpenCodePromptText(
+  input: string | undefined,
+  interactionMode: ResolvedInteractionMode | undefined,
+): string | undefined {
+  const text = input?.trim();
+  if (interactionMode === undefined) {
+    return text && text.length > 0 ? text : undefined;
+  }
+  if (
+    (text === undefined || text.length === 0) &&
+    interactionMode.transformPrompt === undefined &&
+    interactionMode.provider.promptPrefix === undefined
+  ) {
+    return undefined;
+  }
+  return applyResolvedInteractionModePrompt(text ?? "", interactionMode);
+}
+
+const resolveOpenCodeAgent = Effect.fn("resolveOpenCodeAgent")(function* (input: {
+  readonly userAgent: string | undefined;
+  readonly interactionMode: ProviderInteractionMode | undefined;
+  readonly resolvedInteractionMode: ResolvedInteractionMode | undefined;
+}): Effect.fn.Return<string | undefined, ProviderAdapterValidationError> {
+  const { resolvedInteractionMode } = input;
+  if (resolvedInteractionMode === undefined) {
+    return input.userAgent ?? (input.interactionMode === "plan" ? "plan" : undefined);
+  }
+  if (resolvedInteractionMode.provider.providerId !== PROVIDER) {
+    return yield* new ProviderAdapterValidationError({
+      provider: PROVIDER,
+      operation: "sendTurn",
+      issue: `Expected resolved interaction mode for provider '${PROVIDER}' but received '${resolvedInteractionMode.provider.providerId}'.`,
+    });
+  }
+  if (
+    resolvedInteractionMode.provider.nativeModePrecedence === "user-first" &&
+    input.userAgent !== undefined
+  ) {
+    return input.userAgent;
+  }
+  return (
+    resolvedInteractionMode.provider.nativeMode ??
+    input.userAgent ??
+    (input.interactionMode === "plan" ? "plan" : undefined)
+  );
+});
 
 interface OpenCodeTurnSnapshot {
   readonly id: TurnId;
@@ -1213,9 +1265,15 @@ export function makeOpenCodeAdapter(
 
       const agent = getModelSelectionStringOptionValue(modelSelection, "agent");
       const variant = getModelSelectionStringOptionValue(modelSelection, "variant");
+      const resolvedAgent = yield* resolveOpenCodeAgent({
+        userAgent: agent,
+        interactionMode: input.interactionMode,
+        resolvedInteractionMode: input.resolvedInteractionMode,
+      });
+      const promptText = resolveOpenCodePromptText(input.input, input.resolvedInteractionMode);
 
       context.activeTurnId = turnId;
-      context.activeAgent = agent ?? (input.interactionMode === "plan" ? "plan" : undefined);
+      context.activeAgent = resolvedAgent;
       context.activeVariant = variant;
       yield* updateProviderSession(
         context,
@@ -1244,7 +1302,10 @@ export function makeOpenCodeAdapter(
           model: parsedModel,
           ...(context.activeAgent ? { agent: context.activeAgent } : {}),
           ...(context.activeVariant ? { variant: context.activeVariant } : {}),
-          parts: [...(text ? [{ type: "text" as const, text }] : []), ...fileParts],
+          parts: [
+            ...(promptText ? [{ type: "text" as const, text: promptText }] : []),
+            ...fileParts,
+          ],
         }),
       ).pipe(
         Effect.mapError(toRequestError),

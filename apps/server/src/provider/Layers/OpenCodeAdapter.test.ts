@@ -21,6 +21,8 @@ import {
 } from "@t3tools/contracts";
 import { createModelSelection } from "@t3tools/shared/model";
 import { ServerConfig } from "../../config.ts";
+import { BUILT_IN_INTERACTION_MODE_REGISTRY } from "../../product/BuiltInInteractionModes.ts";
+import { ASK_MODE_PROMPT_PREFIX } from "../AskModeInstructions.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
 import { ProviderSessionDirectory } from "../Services/ProviderSessionDirectory.ts";
 import type { OpenCodeAdapterShape } from "../Services/OpenCodeAdapter.ts";
@@ -520,6 +522,113 @@ it.layer(OpenCodeAdapterTestLayer)("OpenCodeAdapterLive", (it) => {
       });
     }).pipe(Effect.provide(adapterLayer));
   });
+
+  it.effect("maps resolved plan mode to the OpenCode plan agent", () =>
+    Effect.gen(function* () {
+      const adapter = yield* OpenCodeAdapter;
+      const threadId = asThreadId("thread-resolved-plan-agent");
+      yield* adapter.startSession({
+        provider: ProviderDriverKind.make("opencode"),
+        threadId,
+        runtimeMode: "full-access",
+      });
+
+      yield* adapter.sendTurn({
+        threadId,
+        input: "Plan the implementation",
+        interactionMode: "plan",
+        resolvedInteractionMode: BUILT_IN_INTERACTION_MODE_REGISTRY.resolveOrThrow(
+          "plan",
+          "opencode",
+        ),
+        modelSelection: createModelSelection(ProviderInstanceId.make("opencode"), "openai/gpt-5"),
+      });
+
+      NodeAssert.deepEqual(runtimeMock.state.promptCalls.at(-1), {
+        sessionID: "http://127.0.0.1:9999/session",
+        model: {
+          providerID: "openai",
+          modelID: "gpt-5",
+        },
+        agent: "plan",
+        parts: [{ type: "text", text: "Plan the implementation" }],
+      });
+    }),
+  );
+
+  it.effect("keeps a user-selected OpenCode agent ahead of resolved native mode", () =>
+    Effect.gen(function* () {
+      const adapter = yield* OpenCodeAdapter;
+      const threadId = asThreadId("thread-resolved-plan-user-agent");
+      yield* adapter.startSession({
+        provider: ProviderDriverKind.make("opencode"),
+        threadId,
+        runtimeMode: "full-access",
+      });
+
+      yield* adapter.sendTurn({
+        threadId,
+        input: "Review this plan",
+        interactionMode: "plan",
+        resolvedInteractionMode: BUILT_IN_INTERACTION_MODE_REGISTRY.resolveOrThrow(
+          "plan",
+          "opencode",
+        ),
+        modelSelection: createModelSelection(ProviderInstanceId.make("opencode"), "openai/gpt-5", [
+          { id: "agent", value: "github-copilot" },
+          { id: "variant", value: "review" },
+        ]),
+      });
+
+      NodeAssert.deepEqual(runtimeMock.state.promptCalls.at(-1), {
+        sessionID: "http://127.0.0.1:9999/session",
+        model: {
+          providerID: "openai",
+          modelID: "gpt-5",
+        },
+        agent: "github-copilot",
+        variant: "review",
+        parts: [{ type: "text", text: "Review this plan" }],
+      });
+    }),
+  );
+
+  it.effect("maps resolved ask mode to prompt prefix without forcing an OpenCode agent", () =>
+    Effect.gen(function* () {
+      const adapter = yield* OpenCodeAdapter;
+      const threadId = asThreadId("thread-resolved-ask-prompt-prefix");
+      yield* adapter.startSession({
+        provider: ProviderDriverKind.make("opencode"),
+        threadId,
+        runtimeMode: "full-access",
+      });
+
+      yield* adapter.sendTurn({
+        threadId,
+        input: "Explain this file",
+        interactionMode: "ask",
+        resolvedInteractionMode: BUILT_IN_INTERACTION_MODE_REGISTRY.resolveOrThrow(
+          "ask",
+          "opencode",
+        ),
+        modelSelection: createModelSelection(ProviderInstanceId.make("opencode"), "openai/gpt-5"),
+      });
+
+      NodeAssert.deepEqual(runtimeMock.state.promptCalls.at(-1), {
+        sessionID: "http://127.0.0.1:9999/session",
+        model: {
+          providerID: "openai",
+          modelID: "gpt-5",
+        },
+        parts: [
+          {
+            type: "text",
+            text: `${ASK_MODE_PROMPT_PREFIX}\n\nUser question:\nExplain this file`,
+          },
+        ],
+      });
+    }),
+  );
 
   it.effect("uses the bound custom instance id for fallback sendTurn model selection", () => {
     const instanceId = ProviderInstanceId.make("opencode_zen");
