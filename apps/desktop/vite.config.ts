@@ -4,6 +4,9 @@ import { loadRepoEnv } from "../../scripts/lib/public-config.ts";
 
 const repoEnv = loadRepoEnv();
 const shouldLaunchElectronAfterPack = process.env.T3CODE_DESKTOP_DEV === "1";
+const desktopSourcemapEnv = process.env.T3CODE_DESKTOP_SOURCEMAP?.trim().toLowerCase();
+const shouldGenerateDesktopSourcemaps =
+  desktopSourcemapEnv !== "0" && desktopSourcemapEnv !== "false";
 const publicConfigDefine = {
   __T3CODE_BUILD_CLERK_PUBLISHABLE_KEY__: JSON.stringify(
     repoEnv.T3CODE_CLERK_PUBLISHABLE_KEY?.trim() ?? "",
@@ -39,7 +42,7 @@ export default defineConfig({
     {
       format: "cjs",
       outDir: "dist-electron",
-      sourcemap: true,
+      sourcemap: shouldGenerateDesktopSourcemaps,
       outExtensions: () => ({ js: ".cjs" }),
       define: publicConfigDefine,
       entry: ["src/main.ts"],
@@ -52,7 +55,7 @@ export default defineConfig({
     {
       format: "cjs",
       outDir: "dist-electron",
-      sourcemap: true,
+      sourcemap: shouldGenerateDesktopSourcemaps,
       outExtensions: () => ({ js: ".cjs" }),
       define: publicConfigDefine,
       entry: ["src/preload.ts"],
@@ -66,7 +69,7 @@ export default defineConfig({
     {
       format: "cjs",
       outDir: "dist-electron",
-      sourcemap: true,
+      sourcemap: shouldGenerateDesktopSourcemaps,
       outExtensions: () => ({ js: ".cjs" }),
       entry: ["src/preview-pick-preload.ts"],
       deps: {
