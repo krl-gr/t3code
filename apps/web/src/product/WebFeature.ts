@@ -1,4 +1,5 @@
 import type { ComponentType } from "react";
+import type { ProviderInteractionMode } from "@t3tools/contracts";
 
 import type { ProductCapabilityVersionRequirement } from "@t3tools/shared/product";
 
@@ -37,6 +38,15 @@ export interface ExperimentalWebNavigationContribution {
   readonly capabilities?: ReadonlyArray<ExperimentalWebCapabilityRequirement>;
 }
 
+export interface ExperimentalWebInteractionModePresentation {
+  readonly id: ProviderInteractionMode;
+  readonly label: string;
+  readonly description: string;
+  readonly order?: number;
+  readonly supportedProviders?: ReadonlyArray<string>;
+  readonly capabilities?: ReadonlyArray<ExperimentalWebCapabilityRequirement>;
+}
+
 /**
  * Trusted, build-time web contribution. Executable UI is deliberately kept
  * separate from the server-advertised product manifest.
@@ -51,6 +61,7 @@ export interface ExperimentalWebFeatureContribution {
   readonly extensionId?: string;
   readonly routes?: ReadonlyArray<ExperimentalWebRouteContribution>;
   readonly navigation?: ReadonlyArray<ExperimentalWebNavigationContribution>;
+  readonly interactionModes?: ReadonlyArray<ExperimentalWebInteractionModePresentation>;
 }
 
 export class WebFeatureInvariantError extends Error {
@@ -64,7 +75,8 @@ export class WebFeatureInvariantError extends Error {
       | "invalid-navigation-slot"
       | "duplicate-feature"
       | "duplicate-route"
-      | "duplicate-navigation",
+      | "duplicate-navigation"
+      | "duplicate-presentation",
     message: string,
   ) {
     super(message);
@@ -120,6 +132,15 @@ export function defineExperimentalWebFeature<
       throw new WebFeatureInvariantError(
         "invalid-id",
         `Navigation '${item.id}' for '${feature.id}' must have a non-empty label.`,
+      );
+    }
+  }
+  for (const mode of feature.interactionModes ?? []) {
+    assertStableId(mode.id, `Interaction mode id for '${feature.id}'`);
+    if (mode.label.trim().length === 0 || mode.description.trim().length === 0) {
+      throw new WebFeatureInvariantError(
+        "invalid-id",
+        `Interaction mode '${mode.id}' for '${feature.id}' must have display metadata.`,
       );
     }
   }

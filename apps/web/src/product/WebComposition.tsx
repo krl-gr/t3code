@@ -6,6 +6,7 @@ import {
   defineExperimentalWebFeature,
   WebFeatureInvariantError,
   type ExperimentalWebFeatureContribution,
+  type ExperimentalWebInteractionModePresentation,
   type ExperimentalWebNavigationContribution,
   type ExperimentalWebNavigationSlot,
   type ExperimentalWebRouteContribution,
@@ -83,6 +84,7 @@ export function createExperimentalWebProductComposition(input: {
   const routeIds = new Set<string>();
   const routePaths = new Set<string>();
   const navigationIds = new Set<string>();
+  const interactionModeIds = new Set<string>();
   const features = [...(input.features ?? [])]
     .map((feature) => defineExperimentalWebFeature(feature))
     .sort((left, right) => left.id.localeCompare(right.id));
@@ -115,6 +117,15 @@ export function createExperimentalWebProductComposition(input: {
         );
       }
       navigationIds.add(item.id);
+    }
+    for (const mode of feature.interactionModes ?? []) {
+      if (interactionModeIds.has(mode.id)) {
+        throw new WebFeatureInvariantError(
+          "duplicate-presentation",
+          `Interaction mode presentation '${mode.id}' is registered more than once.`,
+        );
+      }
+      interactionModeIds.add(mode.id);
     }
   }
 
@@ -166,6 +177,25 @@ export function listExperimentalWebNavigation(
       const order = (left.item.order ?? 0) - (right.item.order ?? 0);
       return order !== 0 ? order : left.item.id.localeCompare(right.item.id);
     });
+}
+
+function compareOrderedPresentation(
+  left: { readonly id: string; readonly order?: number },
+  right: { readonly id: string; readonly order?: number },
+): number {
+  const order = (left.order ?? 0) - (right.order ?? 0);
+  return order !== 0 ? order : left.id.localeCompare(right.id);
+}
+
+export function listExperimentalWebInteractionModes(
+  composition: ExperimentalWebProductComposition,
+): ReadonlyArray<{
+  readonly feature: ExperimentalWebFeatureContribution;
+  readonly mode: ExperimentalWebInteractionModePresentation;
+}> {
+  return composition.features
+    .flatMap((feature) => (feature.interactionModes ?? []).map((mode) => ({ feature, mode })))
+    .sort((left, right) => compareOrderedPresentation(left.mode, right.mode));
 }
 
 const WebProductCompositionContext = createContext<ExperimentalWebProductComposition>(
