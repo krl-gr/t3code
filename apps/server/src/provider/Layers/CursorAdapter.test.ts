@@ -26,6 +26,7 @@ import {
 } from "@t3tools/contracts";
 
 import { ServerConfig } from "../../config.ts";
+import { BUILT_IN_INTERACTION_MODE_REGISTRY } from "../../product/BuiltInInteractionModes.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
 import type { CursorAdapterShape } from "../Services/CursorAdapter.ts";
 import { makeCursorAdapter } from "./CursorAdapter.ts";
@@ -127,6 +128,23 @@ function waitForJsonLogMatch(
       yield* Effect.yieldNow;
     }
     return yield* Effect.promise(() => readJsonLines(filePath));
+  });
+}
+
+function cursorModeRequestValues(entries: ReadonlyArray<Record<string, unknown>>) {
+  return entries.flatMap((entry) => {
+    const params = entry.params as Record<string, unknown> | undefined;
+    if (entry.method === "session/set_mode" && typeof params?.modeId === "string") {
+      return [params.modeId];
+    }
+    if (
+      entry.method === "session/set_config_option" &&
+      params?.configId === "mode" &&
+      typeof params.value === "string"
+    ) {
+      return [params.value];
+    }
+    return [];
   });
 }
 
@@ -326,6 +344,81 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
     }),
   );
 
+  it.effect("does not switch resolved interaction mode while steering a running turn", () =>
+    Effect.gen(function* () {
+      const adapter = yield* CursorAdapter;
+      const settings = yield* ServerSettingsService;
+      const threadId = ThreadId.make("cursor-steer-mode-thread");
+      const tempDir = yield* Effect.promise(() =>
+        NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "cursor-acp-")),
+      );
+      const requestLogPath = NodePath.join(tempDir, "requests.ndjson");
+      const argvLogPath = NodePath.join(tempDir, "argv.txt");
+      yield* Effect.promise(() => NodeFSP.writeFile(requestLogPath, "", "utf8"));
+
+      const wrapperPath = yield* Effect.promise(() =>
+        makeProbeWrapper(requestLogPath, argvLogPath, { T3_ACP_PROMPT_DELAY_MS: "1500" }),
+      );
+      yield* settings.updateSettings({ providers: { cursor: { binaryPath: wrapperPath } } });
+
+      yield* adapter.startSession({
+        threadId,
+        provider: ProviderDriverKind.make("cursor"),
+        cwd: process.cwd(),
+        runtimeMode: "full-access",
+        modelSelection: { instanceId: ProviderInstanceId.make("cursor"), model: "default" },
+      });
+
+      const firstTurnFiber = yield* adapter
+        .sendTurn({
+          threadId,
+          input: "answer this first",
+          attachments: [],
+          interactionMode: "ask",
+          resolvedInteractionMode: BUILT_IN_INTERACTION_MODE_REGISTRY.resolveOrThrow(
+            "ask",
+            "cursor",
+          ),
+        })
+        .pipe(Effect.forkChild);
+
+      yield* Effect.gen(function* () {
+        for (let attempt = 0; attempt < 200; attempt += 1) {
+          const sessions = yield* adapter.listSessions();
+          const session = sessions.find((entry) => entry.threadId === threadId);
+          if (session?.activeTurnId !== undefined) {
+            return;
+          }
+          yield* TestClock.adjust("10 millis");
+        }
+        throw new Error("Timed out waiting for the first prompt to be in flight.");
+      });
+
+      const steeredTurn = yield* adapter.sendTurn({
+        threadId,
+        input: "actually plan it",
+        attachments: [],
+        interactionMode: "plan",
+        resolvedInteractionMode: BUILT_IN_INTERACTION_MODE_REGISTRY.resolveOrThrow(
+          "plan",
+          "cursor",
+        ),
+      });
+      const firstTurn = yield* Fiber.join(firstTurnFiber);
+      assert.equal(String(steeredTurn.turnId), String(firstTurn.turnId));
+
+      yield* adapter.stopSession(threadId);
+
+      const modeValues = cursorModeRequestValues(
+        yield* Effect.promise(() => readJsonLines(requestLogPath)),
+      );
+      assert.include(modeValues, "ask");
+      assert.notInclude(modeValues, "architect");
+      assert.notInclude(modeValues, "plan");
+      assert.equal(modeValues.at(-1), "ask");
+    }),
+  );
+
   it.effect("closes the ACP child process when a session stops", () =>
     Effect.gen(function* () {
       const adapter = yield* CursorAdapter;
@@ -479,6 +572,46 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
             (modeRequest?.params as Record<string, unknown> | undefined)?.value,
         ),
       );
+    }),
+  );
+
+  it.effect("maps resolved ask mode onto the ACP ask session mode", () =>
+    Effect.gen(function* () {
+      const adapter = yield* CursorAdapter;
+      const serverSettings = yield* ServerSettingsService;
+      const threadId = ThreadId.make("cursor-ask-mode-probe");
+      const tempDir = yield* Effect.promise(() =>
+        NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "cursor-acp-")),
+      );
+      const requestLogPath = NodePath.join(tempDir, "requests.ndjson");
+      const argvLogPath = NodePath.join(tempDir, "argv.txt");
+      yield* Effect.promise(() => NodeFSP.writeFile(requestLogPath, "", "utf8"));
+      const wrapperPath = yield* Effect.promise(() =>
+        makeProbeWrapper(requestLogPath, argvLogPath),
+      );
+      yield* serverSettings.updateSettings({ providers: { cursor: { binaryPath: wrapperPath } } });
+
+      yield* adapter.startSession({
+        threadId,
+        provider: ProviderDriverKind.make("cursor"),
+        cwd: process.cwd(),
+        runtimeMode: "full-access",
+        modelSelection: { instanceId: ProviderInstanceId.make("cursor"), model: "composer-2" },
+      });
+
+      yield* adapter.sendTurn({
+        threadId,
+        input: "answer this question",
+        attachments: [],
+        interactionMode: "ask",
+        resolvedInteractionMode: BUILT_IN_INTERACTION_MODE_REGISTRY.resolveOrThrow("ask", "cursor"),
+      });
+      yield* adapter.stopSession(threadId);
+
+      const modeValues = cursorModeRequestValues(
+        yield* Effect.promise(() => readJsonLines(requestLogPath)),
+      );
+      assert.equal(modeValues.at(-1), "ask");
     }),
   );
 

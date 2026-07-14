@@ -7,6 +7,7 @@
 import {
   ApprovalRequestId,
   type CursorSettings,
+  type InteractionModeNativeModeFallback,
   type ProviderOptionSelection,
   EventId,
   type ProviderApprovalDecision,
@@ -21,6 +22,7 @@ import {
   type ThreadId,
   TurnId,
 } from "@t3tools/contracts";
+import type { ResolvedInteractionMode } from "@t3tools/shared/interactionMode";
 import * as DateTime from "effect/DateTime";
 import * as Crypto from "effect/Crypto";
 import * as Deferred from "effect/Deferred";
@@ -214,20 +216,11 @@ function isPlanMode(mode: AcpSessionMode): boolean {
   return findModeByAliases([mode], ACP_PLAN_MODE_ALIASES) !== undefined;
 }
 
-function resolveRequestedModeId(input: {
-  readonly interactionMode: ProviderInteractionMode | undefined;
+function resolveRuntimeDefaultModeId(input: {
   readonly runtimeMode: RuntimeMode;
-  readonly modeState: AcpSessionModeState | undefined;
+  readonly modeState: AcpSessionModeState;
 }): string | undefined {
   const modeState = input.modeState;
-  if (!modeState) {
-    return undefined;
-  }
-
-  if (input.interactionMode === "plan") {
-    return findModeByAliases(modeState.availableModes, ACP_PLAN_MODE_ALIASES)?.id;
-  }
-
   if (input.runtimeMode === "approval-required") {
     return (
       findModeByAliases(modeState.availableModes, ACP_APPROVAL_MODE_ALIASES)?.id ??
@@ -245,10 +238,112 @@ function resolveRequestedModeId(input: {
   );
 }
 
+function resolveNativeModeId(
+  modeState: AcpSessionModeState,
+  nativeMode: string,
+): string | undefined {
+  switch (nativeMode) {
+    case "ask":
+      return findModeByAliases(modeState.availableModes, ACP_APPROVAL_MODE_ALIASES)?.id;
+    case "plan":
+      return findModeByAliases(modeState.availableModes, ACP_PLAN_MODE_ALIASES)?.id;
+    case "code":
+    case "agent":
+    case "default":
+    case "implement":
+      return findModeByAliases(modeState.availableModes, ACP_IMPLEMENT_MODE_ALIASES)?.id;
+    default:
+      return findModeByAliases(modeState.availableModes, [nativeMode])?.id;
+  }
+}
+
+function resolveFallbackModeId(
+  modeState: AcpSessionModeState,
+  fallback: InteractionModeNativeModeFallback | undefined,
+): string | undefined {
+  switch (fallback) {
+    case "non-plan": {
+      const currentMode = modeState.availableModes.find(
+        (mode) => mode.id === modeState.currentModeId,
+      );
+      if (currentMode && !isPlanMode(currentMode)) {
+        return currentMode.id;
+      }
+      return (
+        findModeByAliases(modeState.availableModes, ACP_IMPLEMENT_MODE_ALIASES)?.id ??
+        findModeByAliases(modeState.availableModes, ACP_APPROVAL_MODE_ALIASES)?.id ??
+        modeState.availableModes.find((mode) => !isPlanMode(mode))?.id
+      );
+    }
+    case "reject":
+    case "unchanged":
+    default:
+      return undefined;
+  }
+}
+
+const resolveRequestedModeId = Effect.fn("resolveRequestedModeId")(function* (input: {
+  readonly interactionMode: ProviderInteractionMode | undefined;
+  readonly resolvedInteractionMode: ResolvedInteractionMode | undefined;
+  readonly runtimeMode: RuntimeMode;
+  readonly modeState: AcpSessionModeState | undefined;
+}): Effect.fn.Return<string | undefined, ProviderAdapterValidationError> {
+  const modeState = input.modeState;
+  if (!modeState) {
+    return undefined;
+  }
+
+  const resolvedMode = input.resolvedInteractionMode;
+  if (resolvedMode !== undefined) {
+    if (resolvedMode.provider.providerId !== PROVIDER) {
+      return yield* new ProviderAdapterValidationError({
+        provider: PROVIDER,
+        operation: "sendTurn",
+        issue: `Expected resolved interaction mode for provider '${PROVIDER}' but received '${resolvedMode.provider.providerId}'.`,
+      });
+    }
+
+    const nativeMode = resolvedMode.provider.nativeMode;
+    if (nativeMode === undefined) {
+      return undefined;
+    }
+    if (nativeMode === "runtime-default") {
+      return resolveRuntimeDefaultModeId({
+        runtimeMode: input.runtimeMode,
+        modeState,
+      });
+    }
+
+    const requestedModeId = resolveNativeModeId(modeState, nativeMode);
+    if (requestedModeId !== undefined) {
+      return requestedModeId;
+    }
+    if (resolvedMode.provider.nativeModeFallback === "reject") {
+      return yield* new ProviderAdapterValidationError({
+        provider: PROVIDER,
+        operation: "sendTurn",
+        issue: `Unsupported Cursor native mode '${nativeMode}' for interaction mode '${resolvedMode.id}'.`,
+      });
+    }
+    return resolveFallbackModeId(modeState, resolvedMode.provider.nativeModeFallback);
+  }
+
+  if (input.interactionMode === "plan") {
+    return findModeByAliases(modeState.availableModes, ACP_PLAN_MODE_ALIASES)?.id;
+  }
+
+  return resolveRuntimeDefaultModeId({
+    runtimeMode: input.runtimeMode,
+    modeState,
+  });
+});
+
 function applyRequestedSessionConfiguration<E>(input: {
   readonly runtime: AcpSessionRuntime.AcpSessionRuntime["Service"];
   readonly runtimeMode: RuntimeMode;
+  readonly configureMode: boolean;
   readonly interactionMode: ProviderInteractionMode | undefined;
+  readonly resolvedInteractionMode: ResolvedInteractionMode | undefined;
   readonly modelSelection:
     | {
         readonly model: string;
@@ -259,7 +354,7 @@ function applyRequestedSessionConfiguration<E>(input: {
     readonly cause: import("effect-acp/errors").AcpError;
     readonly method: "session/set_config_option" | "session/set_mode";
   }) => E;
-}): Effect.Effect<void, E> {
+}): Effect.Effect<void, E | ProviderAdapterValidationError> {
   return Effect.gen(function* () {
     if (input.modelSelection) {
       yield* applyCursorAcpModelSelection({
@@ -274,8 +369,13 @@ function applyRequestedSessionConfiguration<E>(input: {
       });
     }
 
-    const requestedModeId = resolveRequestedModeId({
+    if (!input.configureMode) {
+      return;
+    }
+
+    const requestedModeId = yield* resolveRequestedModeId({
       interactionMode: input.interactionMode,
+      resolvedInteractionMode: input.resolvedInteractionMode,
       runtimeMode: input.runtimeMode,
       modeState: yield* input.runtime.getModeState,
     });
@@ -743,7 +843,9 @@ export function makeCursorAdapter(
           yield* applyRequestedSessionConfiguration({
             runtime: acp,
             runtimeMode: input.runtimeMode,
+            configureMode: true,
             interactionMode: undefined,
+            resolvedInteractionMode: undefined,
             modelSelection: cursorModelSelection,
             mapError: ({ cause, method }) =>
               mapAcpToAdapterError(PROVIDER, input.threadId, method, cause),
@@ -927,7 +1029,10 @@ export function makeCursorAdapter(
           yield* applyRequestedSessionConfiguration({
             runtime: ctx.acp,
             runtimeMode: ctx.session.runtimeMode,
-            interactionMode: input.interactionMode,
+            configureMode: steeringTurnId === undefined,
+            interactionMode: steeringTurnId === undefined ? input.interactionMode : undefined,
+            resolvedInteractionMode:
+              steeringTurnId === undefined ? input.resolvedInteractionMode : undefined,
             modelSelection:
               model === undefined
                 ? undefined
