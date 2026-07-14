@@ -115,6 +115,28 @@ describe("ProviderSessionStartInput", () => {
 });
 
 describe("ProviderSendTurnInput", () => {
+  it("accepts open interaction mode ids", () => {
+    const parsed = decodeProviderSendTurnInput({
+      threadId: "thread-1",
+      input: "Explain the change",
+      interactionMode: "ask",
+    });
+
+    expect(parsed.interactionMode).toBe("ask");
+  });
+
+  it("rejects malformed interaction mode ids", () => {
+    expect(() =>
+      decodeProviderSendTurnInput({
+        threadId: "thread-1",
+        input: "Explain the change",
+        interactionMode: "Ask Mode",
+      }),
+    ).toThrow();
+  });
+});
+
+describe("ProviderSendTurnInput", () => {
   it("accepts codex modelSelection", () => {
     const parsed = decodeProviderSendTurnInput({
       threadId: "thread-1",

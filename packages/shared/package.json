@@ -186,6 +186,10 @@
     "./product": {
       "types": "./src/product.ts",
       "import": "./src/product.ts"
+    },
+    "./interactionMode": {
+      "types": "./src/interactionMode.ts",
+      "import": "./src/interactionMode.ts"
     }
   },
   "scripts": {

@@ -330,6 +330,11 @@ function buildCodexCollaborationMode(input: {
   if (input.interactionMode === undefined) {
     return undefined;
   }
+  if (input.interactionMode !== "default" && input.interactionMode !== "plan") {
+    throw new Error(
+      `Codex interaction mode '${input.interactionMode}' requires registry resolution before provider dispatch.`,
+    );
+  }
   const model = normalizeCodexModelSlug(input.model) ?? DEFAULT_MODEL;
   return {
     mode: input.interactionMode,

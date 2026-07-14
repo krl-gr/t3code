@@ -5,6 +5,7 @@ import * as Schema from "effect/Schema";
 import {
   DEFAULT_PROVIDER_INTERACTION_MODE,
   DEFAULT_RUNTIME_MODE,
+  ProviderInteractionMode,
   ModelSelection,
   OrchestrationCommand,
   OrchestrationEvent,
@@ -30,6 +31,7 @@ const decodeThreadTurnDiff = Schema.decodeUnknownEffect(ThreadTurnDiff);
 const decodeProjectCreateCommand = Schema.decodeUnknownEffect(ProjectCreateCommand);
 const decodeProjectCreatedPayload = Schema.decodeUnknownEffect(ProjectCreatedPayload);
 const decodeProjectMetaUpdatedPayload = Schema.decodeUnknownEffect(ProjectMetaUpdatedPayload);
+const decodeProviderInteractionMode = Schema.decodeUnknownEffect(ProviderInteractionMode);
 const decodeThreadTurnStartCommand = Schema.decodeUnknownEffect(ThreadTurnStartCommand);
 const decodeThreadTurnStartRequestedPayload = Schema.decodeUnknownEffect(
   ThreadTurnStartRequestedPayload,
@@ -219,6 +221,61 @@ it.effect("decodes thread.turn.start defaults for provider and runtime mode", ()
     assert.strictEqual(parsed.modelSelection, undefined);
     assert.strictEqual(parsed.runtimeMode, DEFAULT_RUNTIME_MODE);
     assert.strictEqual(parsed.interactionMode, DEFAULT_PROVIDER_INTERACTION_MODE);
+  }),
+);
+
+it.effect("decodes open provider interaction mode ids", () =>
+  Effect.gen(function* () {
+    const parsed = yield* decodeProviderInteractionMode("ask");
+    assert.strictEqual(parsed, "ask");
+  }),
+);
+
+it.effect("rejects malformed provider interaction mode ids", () =>
+  Effect.gen(function* () {
+    const result = yield* Effect.exit(decodeProviderInteractionMode("Ask Mode"));
+    assert.strictEqual(result._tag, "Failure");
+  }),
+);
+
+it.effect("accepts ask interaction mode in thread.create commands", () =>
+  Effect.gen(function* () {
+    const parsed = yield* decodeOrchestrationCommand({
+      type: "thread.create",
+      commandId: "cmd-thread-ask",
+      threadId: "thread-ask",
+      projectId: "project-1",
+      title: "Ask thread",
+      modelSelection: {
+        provider: "codex",
+        model: "gpt-5.4",
+      },
+      runtimeMode: "full-access",
+      interactionMode: "ask",
+      branch: null,
+      worktreePath: null,
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+    if (parsed.type !== "thread.create") {
+      throw new Error(`Expected thread.create command, received ${parsed.type}`);
+    }
+    assert.strictEqual(parsed.interactionMode, "ask");
+  }),
+);
+
+it.effect("accepts ask interaction mode in thread interaction mode commands", () =>
+  Effect.gen(function* () {
+    const parsed = yield* decodeOrchestrationCommand({
+      type: "thread.interaction-mode.set",
+      commandId: "cmd-thread-mode-ask",
+      threadId: "thread-ask",
+      interactionMode: "ask",
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+    if (parsed.type !== "thread.interaction-mode.set") {
+      throw new Error(`Expected thread.interaction-mode.set command, received ${parsed.type}`);
+    }
+    assert.strictEqual(parsed.interactionMode, "ask");
   }),
 );
 
