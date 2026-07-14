@@ -5,6 +5,7 @@ import * as Layer from "effect/Layer";
 import { Atom } from "effect/unstable/reactivity";
 
 import { runtimeContextLayer } from "../lib/runtime";
+import { getInstalledWebProductComposition } from "../product/WebComposition";
 import { connectionPlatformLayer } from "./platform";
 
 const providedConnectionPlatformLayer = connectionPlatformLayer.pipe(
@@ -19,9 +20,12 @@ type ConnectionLayerSource =
   | typeof runtimeContextLayer
   | typeof connectionPlatformLayer;
 
-const connectionLayer = Layer.merge(Connection.layer, snapshotLoaderLayer).pipe(
-  Layer.provideMerge(Layer.mergeAll(runtimeContextLayer, providedConnectionPlatformLayer)),
-);
+const connectionLayer = Layer.merge(
+  Connection.layerWithOptions({
+    resolveClientFactory: () => getInstalledWebProductComposition().rpc?.clientFactory,
+  }),
+  snapshotLoaderLayer,
+).pipe(Layer.provideMerge(Layer.mergeAll(runtimeContextLayer, providedConnectionPlatformLayer)));
 
 export const connectionAtomRuntime: Atom.AtomRuntime<
   Layer.Success<ConnectionLayerSource>,

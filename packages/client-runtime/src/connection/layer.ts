@@ -15,19 +15,19 @@ const resolverLayer = ConnectionResolver.layer.pipe(
   Layer.provide(RemoteEnvironmentAuthorization.layer),
 );
 
-const driverLayer = ConnectionDriver.layer.pipe(
-  Layer.provide(Layer.mergeAll(resolverLayer, RpcSession.layer)),
-);
+const driverLayer = (options: RpcSession.RpcSessionLayerOptions = {}) =>
+  ConnectionDriver.layer.pipe(
+    Layer.provide(Layer.mergeAll(resolverLayer, RpcSession.layerWithOptions(options))),
+  );
 
-const registryLayer = EnvironmentRegistry.layer.pipe(Layer.provide(driverLayer));
+const registryLayer = (options: RpcSession.RpcSessionLayerOptions = {}) =>
+  EnvironmentRegistry.layer.pipe(Layer.provide(driverLayer(options)));
 
-const onboardingLayer = ConnectionOnboarding.layer.pipe(Layer.provide(registryLayer));
+const onboardingLayer = (options: RpcSession.RpcSessionLayerOptions = {}) =>
+  ConnectionOnboarding.layer.pipe(Layer.provide(registryLayer(options)));
 
-const connectionServicesLayer = Layer.mergeAll(
-  registryLayer,
-  RelayEnvironmentDiscovery.layer,
-  onboardingLayer,
-);
+const connectionServicesLayer = (options: RpcSession.RpcSessionLayerOptions = {}) =>
+  Layer.mergeAll(registryLayer(options), RelayEnvironmentDiscovery.layer, onboardingLayer(options));
 
 const connectionStartupLayer = Layer.effectDiscard(
   Effect.gen(function* () {
@@ -41,4 +41,7 @@ const connectionStartupLayer = Layer.effectDiscard(
   }).pipe(Effect.withSpan("clientRuntime.connection.application.start")),
 );
 
-export const layer = connectionStartupLayer.pipe(Layer.provideMerge(connectionServicesLayer));
+export const layerWithOptions = (options: RpcSession.RpcSessionLayerOptions = {}) =>
+  connectionStartupLayer.pipe(Layer.provideMerge(connectionServicesLayer(options)));
+
+export const layer = layerWithOptions();

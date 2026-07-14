@@ -18,6 +18,7 @@ import { hasCloudPublicConfig } from "./cloud/publicConfig";
 import { getRouter } from "./router";
 import { syncDocumentWindowControlsOverlayClass } from "./lib/windowControlsOverlay";
 import { AppRoot } from "./AppRoot";
+import { installWebProductComposition } from "./product/WebComposition";
 
 // Electron loads the app from a file-backed shell, so hash history avoids path resolution issues.
 const history = isElectron ? createHashHistory() : createBrowserHistory();
@@ -29,6 +30,8 @@ if (isElectron) {
 }
 
 const clerkPublishableKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined;
+
+installWebProductComposition(WEB_PRODUCT_COMPOSITION);
 
 const app = <AppRoot router={router} composition={WEB_PRODUCT_COMPOSITION} />;
 

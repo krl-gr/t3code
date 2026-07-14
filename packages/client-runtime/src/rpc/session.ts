@@ -22,6 +22,14 @@ import {
 
 const SOCKET_OPEN_TIMEOUT = "15 seconds";
 
+export type RpcSessionClientFactory<Client extends WsRpcProtocolClient = WsRpcProtocolClient> =
+  () => Effect.Effect<Client, Error, RpcClient.Protocol | Scope.Scope>;
+
+export interface RpcSessionLayerOptions {
+  readonly clientFactory?: RpcSessionClientFactory;
+  readonly resolveClientFactory?: () => RpcSessionClientFactory | undefined;
+}
+
 export interface RpcSession {
   readonly client: WsRpcProtocolClient;
   readonly initialConfig: Effect.Effect<ServerConfig, ConnectionAttemptError>;
@@ -39,9 +47,22 @@ export class RpcSessionFactory extends Context.Service<
   }
 >()("@t3tools/client-runtime/rpc/session/RpcSessionFactory") {}
 
+function resolveClientFactory(options: RpcSessionLayerOptions): RpcSessionClientFactory {
+  return (
+    options.resolveClientFactory?.() ?? options.clientFactory ?? (() => makeWsRpcProtocolClient)
+  );
+}
+
 type InitialConfigError = Effect.Error<
   ReturnType<WsRpcProtocolClient[typeof WS_METHODS.serverGetConfig]>
 >;
+
+function mapClientFactoryError(error: Error): ConnectionAttemptError {
+  return new ConnectionTransientErrorClass({
+    reason: "transport",
+    detail: error.message,
+  });
+}
 
 function mapInitialConfigError(error: InitialConfigError): ConnectionAttemptError {
   switch (error._tag) {
@@ -64,81 +85,88 @@ function mapInitialConfigError(error: InitialConfigError): ConnectionAttemptErro
   }
 }
 
-export const make = Effect.gen(function* () {
-  const webSocketConstructor = yield* Socket.WebSocketConstructor;
+export const make = (options: RpcSessionLayerOptions = {}) =>
+  Effect.gen(function* () {
+    const webSocketConstructor = yield* Socket.WebSocketConstructor;
 
-  const connect = Effect.fnUntraced(function* (connection: PreparedConnection) {
-    yield* Effect.annotateCurrentSpan({
-      "connection.environment.id": connection.environmentId,
-    });
+    const connect = Effect.fnUntraced(function* (connection: PreparedConnection) {
+      yield* Effect.annotateCurrentSpan({
+        "connection.environment.id": connection.environmentId,
+      });
 
-    const connected = yield* Deferred.make<void>();
-    const disconnected = yield* Deferred.make<never, ConnectionTransientError>();
-    const hooks = RpcClient.ConnectionHooks.of({
-      onConnect: Deferred.succeed(connected, undefined).pipe(Effect.asVoid),
-      onDisconnect: Deferred.isDone(connected).pipe(
-        Effect.flatMap((wasConnected) =>
-          Deferred.fail(
-            disconnected,
-            new ConnectionTransientErrorClass({
-              reason: "transport",
-              detail: wasConnected
-                ? `${connection.label} disconnected.`
-                : `${connection.label} could not establish a WebSocket connection.`,
-            }),
+      const connected = yield* Deferred.make<void>();
+      const disconnected = yield* Deferred.make<never, ConnectionTransientError>();
+      const hooks = RpcClient.ConnectionHooks.of({
+        onConnect: Deferred.succeed(connected, undefined).pipe(Effect.asVoid),
+        onDisconnect: Deferred.isDone(connected).pipe(
+          Effect.flatMap((wasConnected) =>
+            Deferred.fail(
+              disconnected,
+              new ConnectionTransientErrorClass({
+                reason: "transport",
+                detail: wasConnected
+                  ? `${connection.label} disconnected.`
+                  : `${connection.label} could not establish a WebSocket connection.`,
+              }),
+            ),
+          ),
+          Effect.asVoid,
+        ),
+      });
+      const socketLayer = Socket.layerWebSocket(connection.socketUrl, {
+        openTimeout: SOCKET_OPEN_TIMEOUT,
+      }).pipe(Layer.provide(Layer.succeed(Socket.WebSocketConstructor, webSocketConstructor)));
+      const protocolLayer = Layer.effect(
+        RpcClient.Protocol,
+        RpcClient.makeProtocolSocket({
+          retryTransientErrors: false,
+          retryPolicy: Schedule.recurs(0),
+        }),
+      ).pipe(
+        Layer.provide(
+          Layer.mergeAll(
+            socketLayer,
+            RpcSerialization.layerJson,
+            Layer.succeed(RpcClient.ConnectionHooks, hooks),
           ),
         ),
-        Effect.asVoid,
-      ),
-    });
-    const socketLayer = Socket.layerWebSocket(connection.socketUrl, {
-      openTimeout: SOCKET_OPEN_TIMEOUT,
-    }).pipe(Layer.provide(Layer.succeed(Socket.WebSocketConstructor, webSocketConstructor)));
-    const protocolLayer = Layer.effect(
-      RpcClient.Protocol,
-      RpcClient.makeProtocolSocket({
-        retryTransientErrors: false,
-        retryPolicy: Schedule.recurs(0),
-      }),
-    ).pipe(
-      Layer.provide(
-        Layer.mergeAll(
-          socketLayer,
-          RpcSerialization.layerJson,
-          Layer.succeed(RpcClient.ConnectionHooks, hooks),
+      );
+      const protocolContext = yield* Layer.build(protocolLayer).pipe(
+        Effect.withSpan("environment.websocket.connect"),
+      );
+      const client = yield* resolveClientFactory(options)().pipe(
+        Effect.provide(protocolContext),
+        Effect.mapError(mapClientFactoryError),
+      );
+      const initialConfig = yield* Effect.cached(
+        client[WS_METHODS.serverGetConfig]({}).pipe(
+          Effect.mapError(mapInitialConfigError),
+          Effect.withSpan("environment.initialSync"),
         ),
-      ),
-    );
-    const protocolContext = yield* Layer.build(protocolLayer).pipe(
-      Effect.withSpan("environment.websocket.connect"),
-    );
-    const client = yield* makeWsRpcProtocolClient.pipe(Effect.provide(protocolContext));
-    const initialConfig = yield* Effect.cached(
-      client[WS_METHODS.serverGetConfig]({}).pipe(
+      );
+      const probe = client[WS_METHODS.serverGetConfig]({}).pipe(
         Effect.mapError(mapInitialConfigError),
-        Effect.withSpan("environment.initialSync"),
-      ),
-    );
-    const probe = client[WS_METHODS.serverGetConfig]({}).pipe(
-      Effect.mapError(mapInitialConfigError),
-      Effect.asVoid,
-      Effect.withSpan("clientRuntime.connection.rpcSession.probe"),
-    );
-
-    return {
-      client,
-      initialConfig,
-      ready: Deferred.await(connected).pipe(
-        Effect.andThen(initialConfig),
         Effect.asVoid,
-        Effect.raceFirst(Deferred.await(disconnected)),
-      ),
-      probe,
-      closed: Deferred.await(disconnected),
-    } satisfies RpcSession;
+        Effect.withSpan("clientRuntime.connection.rpcSession.probe"),
+      );
+
+      return {
+        client,
+        initialConfig,
+        ready: Deferred.await(connected).pipe(
+          Effect.andThen(initialConfig),
+          Effect.asVoid,
+          Effect.raceFirst(Deferred.await(disconnected)),
+        ),
+        probe,
+        closed: Deferred.await(disconnected),
+      } satisfies RpcSession;
+    });
+
+    return RpcSessionFactory.of({ connect });
   });
 
-  return RpcSessionFactory.of({ connect });
-});
+export const layerWithOptions = (options: RpcSessionLayerOptions = {}) =>
+  Layer.effect(RpcSessionFactory, make(options));
 
-export const layer = Layer.effect(RpcSessionFactory, make);
+export const layer = layerWithOptions();

@@ -1,4 +1,6 @@
 import { createContext, useContext, type PropsWithChildren } from "react";
+import type { EnvironmentId } from "@t3tools/contracts";
+import type { RpcSessionClientFactory, WsRpcProtocolClient } from "@t3tools/client-runtime/rpc";
 
 import {
   defineExperimentalWebFeature,
@@ -8,13 +10,74 @@ import {
   type ExperimentalWebNavigationSlot,
   type ExperimentalWebRouteContribution,
 } from "./WebFeature";
+import type {
+  EnvironmentExtensionRpcRequest,
+  ExperimentalEnvironmentExtensionApiFactory,
+} from "./EnvironmentExtensionApi";
+
+interface ErasedEnvironmentExtensionApiFactory<Client extends WsRpcProtocolClient> {
+  readonly definition: { readonly id: string };
+  readonly create: (context: {
+    readonly environmentId: EnvironmentId;
+    readonly request: EnvironmentExtensionRpcRequest<Client>;
+  }) => unknown;
+}
+
+export interface ExperimentalWebRpcComposition {
+  readonly clientFactory: RpcSessionClientFactory;
+  readonly extensionApis: ReadonlyArray<{
+    readonly id: string;
+    readonly create: (context: {
+      readonly environmentId: EnvironmentId;
+      readonly request: EnvironmentExtensionRpcRequest<WsRpcProtocolClient>;
+    }) => unknown;
+  }>;
+}
 
 export interface ExperimentalWebProductComposition {
   readonly features: ReadonlyArray<ExperimentalWebFeatureContribution>;
+  readonly rpc?: ExperimentalWebRpcComposition;
+}
+
+export function defineExperimentalWebRpcComposition<Client extends WsRpcProtocolClient>(input: {
+  readonly clientFactory: RpcSessionClientFactory<Client>;
+  readonly extensionApis?: ReadonlyArray<
+    ExperimentalEnvironmentExtensionApiFactory<Client, unknown>
+  >;
+}): ExperimentalWebRpcComposition {
+  const ids = new Set<string>();
+  const extensionApis = [...(input.extensionApis ?? [])]
+    .sort((left, right) => left.definition.id.localeCompare(right.definition.id))
+    .map((factory: ErasedEnvironmentExtensionApiFactory<Client>) => {
+      if (ids.has(factory.definition.id)) {
+        throw new WebFeatureInvariantError(
+          "duplicate-feature",
+          `Environment extension API '${factory.definition.id}' is registered more than once.`,
+        );
+      }
+      ids.add(factory.definition.id);
+      return {
+        id: factory.definition.id,
+        create: (context: {
+          readonly environmentId: EnvironmentId;
+          readonly request: EnvironmentExtensionRpcRequest<WsRpcProtocolClient>;
+        }) =>
+          factory.create({
+            environmentId: context.environmentId,
+            request: context.request as EnvironmentExtensionRpcRequest<Client>,
+          }),
+      };
+    });
+
+  return Object.freeze({
+    clientFactory: input.clientFactory as RpcSessionClientFactory,
+    extensionApis: Object.freeze(extensionApis),
+  });
 }
 
 export function createExperimentalWebProductComposition(input: {
   readonly features?: ReadonlyArray<ExperimentalWebFeatureContribution>;
+  readonly rpc?: ExperimentalWebRpcComposition;
 }): ExperimentalWebProductComposition {
   const featureIds = new Set<string>();
   const routeIds = new Set<string>();
@@ -57,10 +120,22 @@ export function createExperimentalWebProductComposition(input: {
 
   return Object.freeze({
     features: Object.freeze(features),
+    ...(input.rpc === undefined ? {} : { rpc: input.rpc }),
   });
 }
 
 export const CORE_WEB_PRODUCT_COMPOSITION = createExperimentalWebProductComposition({});
+
+let installedComposition: ExperimentalWebProductComposition = CORE_WEB_PRODUCT_COMPOSITION;
+
+/** Installs the immutable build composition before environment connections start. */
+export function installWebProductComposition(composition: ExperimentalWebProductComposition): void {
+  installedComposition = composition;
+}
+
+export function getInstalledWebProductComposition(): ExperimentalWebProductComposition {
+  return installedComposition;
+}
 
 export function listExperimentalWebRoutes(
   composition: ExperimentalWebProductComposition,
