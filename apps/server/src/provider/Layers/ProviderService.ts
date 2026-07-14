@@ -10,6 +10,7 @@
  * @module ProviderServiceLive
  */
 import {
+  EventId,
   ModelSelection,
   NonNegativeInt,
   ThreadId,
@@ -23,7 +24,12 @@ import {
   type ProviderDriverKind,
   type ProviderRuntimeEvent,
   type ProviderSession,
+  TurnId,
 } from "@t3tools/contracts";
+import {
+  resolveInteractionModeFinalOutput,
+  type ResolvedInteractionMode,
+} from "@t3tools/shared/interactionMode";
 import { causeErrorTag } from "@t3tools/shared/observability";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -57,6 +63,7 @@ import * as McpProviderSession from "../../mcp/McpProviderSession.ts";
 import * as McpSessionRegistry from "../../mcp/McpSessionRegistry.ts";
 import { InteractionModeRegistryService } from "../../product/InteractionModeRegistryService.ts";
 const isModelSelection = Schema.is(ModelSelection);
+const MAX_INTERACTION_MODE_OUTPUT_SOURCE_CHARS = 120_000;
 
 /**
  * Hook for tests that want to override the canonical event logger pulled
@@ -69,6 +76,16 @@ export interface ProviderServiceLiveOptions {
 
 type ProviderServiceMethod<Name extends keyof ProviderService.ProviderService["Service"]> =
   ProviderService.ProviderService["Service"][Name];
+
+const providerTurnKey = (threadId: ThreadId, turnId: TurnId): string => `${threadId}:${turnId}`;
+
+function appendCappedText(previous: string | undefined, delta: string): string {
+  const next = `${previous ?? ""}${delta}`;
+  if (next.length <= MAX_INTERACTION_MODE_OUTPUT_SOURCE_CHARS) {
+    return next;
+  }
+  return next.slice(next.length - MAX_INTERACTION_MODE_OUTPUT_SOURCE_CHARS);
+}
 
 const ProviderRollbackConversationInput = Schema.Struct({
   threadId: ThreadId,
@@ -215,6 +232,9 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
   const directory = yield* ProviderSessionDirectory.ProviderSessionDirectory;
   const interactionModeRegistryService = yield* InteractionModeRegistryService;
   const runtimeEventPubSub = yield* PubSub.unbounded<ProviderRuntimeEvent>();
+  const interactionModeByTurn = yield* Ref.make(new Map<string, ResolvedInteractionMode>());
+  const assistantTextByTurn = yield* Ref.make(new Map<string, string>());
+  const completedInteractionModeOutputKeys = yield* Ref.make(new Set<string>());
   const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
   const prepareMcpSession = (threadId: ThreadId, providerInstanceId: ProviderInstanceId) =>
     McpSessionRegistry.issueActiveMcpCredential({ threadId, providerInstanceId }).pipe(
@@ -239,6 +259,211 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
       Effect.flatMap((canonicalEvent) => PubSub.publish(runtimeEventPubSub, canonicalEvent)),
       Effect.asVoid,
     );
+
+  const publishCanonicalRuntimeEvent = (event: ProviderRuntimeEvent): Effect.Effect<void> =>
+    increment(providerRuntimeEventsTotal, {
+      provider: event.provider,
+      eventType: event.type,
+    }).pipe(Effect.andThen(publishRuntimeEvent(event)));
+
+  const rememberTurnInteractionMode = (
+    threadId: ThreadId,
+    turnId: TurnId,
+    resolvedInteractionMode: ResolvedInteractionMode,
+  ) =>
+    Ref.update(interactionModeByTurn, (current) => {
+      const next = new Map(current);
+      next.set(providerTurnKey(threadId, turnId), resolvedInteractionMode);
+      return next;
+    }).pipe(
+      Effect.andThen(
+        Ref.update(assistantTextByTurn, (current) => {
+          const next = new Map(current);
+          next.delete(providerTurnKey(threadId, turnId));
+          return next;
+        }),
+      ),
+    );
+
+  const forgetTurnInteractionMode = (key: string) =>
+    Ref.update(interactionModeByTurn, (current) => {
+      const next = new Map(current);
+      next.delete(key);
+      return next;
+    }).pipe(
+      Effect.andThen(
+        Ref.update(assistantTextByTurn, (current) => {
+          const next = new Map(current);
+          next.delete(key);
+          return next;
+        }),
+      ),
+      Effect.andThen(
+        Ref.update(completedInteractionModeOutputKeys, (current) => {
+          const next = new Set(current);
+          for (const outputKey of current) {
+            if (outputKey.startsWith(`${key}:`)) {
+              next.delete(outputKey);
+            }
+          }
+          return next;
+        }),
+      ),
+    );
+
+  const appendAssistantTextForTurn = (key: string, delta: string) =>
+    Ref.update(assistantTextByTurn, (current) => {
+      const next = new Map(current);
+      next.set(key, appendCappedText(next.get(key), delta));
+      return next;
+    });
+
+  const setAssistantTextForTurnIfEmpty = (key: string, text: string) =>
+    Ref.update(assistantTextByTurn, (current) => {
+      if (current.has(key)) {
+        return current;
+      }
+      const next = new Map(current);
+      next.set(key, text.slice(-MAX_INTERACTION_MODE_OUTPUT_SOURCE_CHARS));
+      return next;
+    });
+
+  const emitInteractionModeOutputFromText = (input: {
+    readonly event: ProviderRuntimeEvent;
+    readonly mode: ResolvedInteractionMode;
+    readonly key: string;
+    readonly text: string;
+    readonly source: "assistant-final-text" | "proposed-plan-event";
+  }) =>
+    Effect.gen(function* () {
+      const output =
+        input.source === "proposed-plan-event" &&
+        input.mode.outputKind === "proposed-plan" &&
+        input.mode.parseFinalOutput === undefined
+          ? {
+              ownerId: input.mode.ownerId,
+              modeId: input.mode.id,
+              modeVersion: input.mode.version,
+              outputKind: input.mode.outputKind,
+              output: input.text.trim(),
+              sourceText: input.text.trim(),
+            }
+          : resolveInteractionModeFinalOutput(input.text, input.mode);
+      if (output === undefined || output.sourceText.length === 0) {
+        return;
+      }
+
+      const outputKey = `${input.key}:${output.ownerId}:${output.modeId}:${output.modeVersion}:${output.outputKind}`;
+      const shouldEmit = yield* Ref.modify(completedInteractionModeOutputKeys, (current) => {
+        if (current.has(outputKey)) {
+          return [false, current] as const;
+        }
+        const next = new Set(current);
+        next.add(outputKey);
+        return [true, next] as const;
+      });
+      if (!shouldEmit) {
+        return;
+      }
+
+      const outputEvent: ProviderRuntimeEvent = {
+        type: "turn.interaction-mode-output.completed",
+        eventId: EventId.make(`${input.event.eventId}:interaction-mode-output`),
+        provider: input.event.provider,
+        ...(input.event.providerInstanceId !== undefined
+          ? { providerInstanceId: input.event.providerInstanceId }
+          : {}),
+        threadId: input.event.threadId,
+        createdAt: input.event.createdAt,
+        ...(input.event.turnId !== undefined ? { turnId: input.event.turnId } : {}),
+        ...(input.event.providerRefs !== undefined
+          ? { providerRefs: input.event.providerRefs }
+          : {}),
+        payload: output,
+      };
+      yield* publishCanonicalRuntimeEvent(outputEvent);
+
+      if (
+        output.outputKind === "proposed-plan" &&
+        typeof output.output === "string" &&
+        input.source !== "proposed-plan-event"
+      ) {
+        yield* publishCanonicalRuntimeEvent({
+          type: "turn.proposed.completed",
+          eventId: EventId.make(`${input.event.eventId}:proposed-plan-output`),
+          provider: input.event.provider,
+          ...(input.event.providerInstanceId !== undefined
+            ? { providerInstanceId: input.event.providerInstanceId }
+            : {}),
+          threadId: input.event.threadId,
+          createdAt: input.event.createdAt,
+          ...(input.event.turnId !== undefined ? { turnId: input.event.turnId } : {}),
+          ...(input.event.providerRefs !== undefined
+            ? { providerRefs: input.event.providerRefs }
+            : {}),
+          payload: {
+            planMarkdown: output.output,
+          },
+        });
+      }
+    });
+
+  const processInteractionModeOutput = (event: ProviderRuntimeEvent): Effect.Effect<void> =>
+    Effect.gen(function* () {
+      if (event.turnId === undefined) {
+        return;
+      }
+      const turnId = TurnId.make(String(event.turnId));
+      const key = providerTurnKey(event.threadId, turnId);
+      const mode = (yield* Ref.get(interactionModeByTurn)).get(key);
+      if (mode === undefined) {
+        return;
+      }
+
+      if (event.type === "content.delta" && event.payload.streamKind === "assistant_text") {
+        yield* appendAssistantTextForTurn(key, event.payload.delta);
+        return;
+      }
+
+      if (
+        event.type === "item.completed" &&
+        event.payload.itemType === "assistant_message" &&
+        event.payload.detail !== undefined
+      ) {
+        yield* setAssistantTextForTurnIfEmpty(key, event.payload.detail);
+        return;
+      }
+
+      if (event.type === "turn.proposed.completed") {
+        yield* emitInteractionModeOutputFromText({
+          event,
+          mode,
+          key,
+          text: event.payload.planMarkdown,
+          source: "proposed-plan-event",
+        });
+        return;
+      }
+
+      if (event.type === "turn.completed") {
+        const assistantText = (yield* Ref.get(assistantTextByTurn)).get(key);
+        if (assistantText !== undefined) {
+          yield* emitInteractionModeOutputFromText({
+            event,
+            mode,
+            key,
+            text: assistantText,
+            source: "assistant-final-text",
+          });
+        }
+        yield* forgetTurnInteractionMode(key);
+        return;
+      }
+
+      if (event.type === "turn.aborted") {
+        yield* forgetTurnInteractionMode(key);
+      }
+    });
 
   const requireBindingInstanceId = (
     operation: string,
@@ -305,10 +530,9 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
   ): Effect.Effect<void> =>
     Effect.sync(() => correlateRuntimeEventWithInstance(source, event)).pipe(
       Effect.flatMap((canonicalEvent) =>
-        increment(providerRuntimeEventsTotal, {
-          provider: canonicalEvent.provider,
-          eventType: canonicalEvent.type,
-        }).pipe(Effect.andThen(publishRuntimeEvent(canonicalEvent))),
+        publishCanonicalRuntimeEvent(canonicalEvent).pipe(
+          Effect.andThen(processInteractionModeOutput(canonicalEvent)),
+        ),
       ),
     );
 
@@ -710,6 +934,9 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         ...input,
         ...(resolvedInteractionMode !== undefined ? { resolvedInteractionMode } : {}),
       });
+      if (resolvedInteractionMode !== undefined) {
+        yield* rememberTurnInteractionMode(input.threadId, turn.turnId, resolvedInteractionMode);
+      }
       yield* directory.upsert({
         threadId: input.threadId,
         provider: routed.adapter.provider,

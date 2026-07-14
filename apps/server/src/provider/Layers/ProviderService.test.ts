@@ -12,12 +12,17 @@ import type {
 import {
   ApprovalRequestId,
   EventId,
+  type InteractionModeDescriptor,
   ProviderDriverKind,
   ProviderInstanceId,
   ProviderSessionStartInput,
   ThreadId,
   TurnId,
 } from "@t3tools/contracts";
+import {
+  createExperimentalInteractionModeRegistry,
+  type ExperimentalInteractionModeRegistry,
+} from "@t3tools/shared/interactionMode";
 import { createModelSelection } from "@t3tools/shared/model";
 import { it, assert, vi } from "@effect/vitest";
 
@@ -64,12 +69,13 @@ import * as AnalyticsService from "../../telemetry/AnalyticsService.ts";
 import { makeAdapterRegistryMock } from "../testUtils/providerAdapterRegistryMock.ts";
 
 const defaultServerSettingsLayer = ServerSettings.ServerSettingsService.layerTest();
-const coreInteractionModeRegistryLayer = InteractionModeRegistryService.layer(
-  CORE_SERVER_PRODUCT_COMPOSITION.interactionModeRegistry,
-);
-
-function makeProviderServiceTestLive(options?: Parameters<typeof makeProviderServiceLive>[0]) {
-  return makeProviderServiceLive(options).pipe(Layer.provide(coreInteractionModeRegistryLayer));
+function makeProviderServiceTestLive(
+  options?: Parameters<typeof makeProviderServiceLive>[0],
+  interactionModeRegistry: ExperimentalInteractionModeRegistry = CORE_SERVER_PRODUCT_COMPOSITION.interactionModeRegistry,
+) {
+  return makeProviderServiceLive(options).pipe(
+    Layer.provide(InteractionModeRegistryService.layer(interactionModeRegistry)),
+  );
 }
 
 const asRequestId = (value: string): ApprovalRequestId => ApprovalRequestId.make(value);
@@ -280,7 +286,9 @@ const hasMetricSnapshot = (
       Object.entries(attributes).every(([key, value]) => snapshot.attributes?.[key] === value),
   );
 
-function makeProviderServiceLayer() {
+function makeProviderServiceLayer(options?: {
+  readonly interactionModeRegistry?: ExperimentalInteractionModeRegistry;
+}) {
   const codex = makeFakeCodexAdapter();
   const claude = makeFakeCodexAdapter(CLAUDE_AGENT_DRIVER);
   const cursor = makeFakeCodexAdapter(CURSOR_DRIVER);
@@ -303,7 +311,10 @@ function makeProviderServiceLayer() {
 
   const layer = it.layer(
     Layer.mergeAll(
-      makeProviderServiceTestLive().pipe(
+      makeProviderServiceTestLive(
+        undefined,
+        options?.interactionModeRegistry ?? CORE_SERVER_PRODUCT_COMPOSITION.interactionModeRegistry,
+      ).pipe(
         Layer.provide(providerAdapterLayer),
         Layer.provide(directoryLayer),
         Layer.provide(defaultServerSettingsLayer),
@@ -330,6 +341,44 @@ function makeProviderServiceLayer() {
     layer,
   };
 }
+
+const STRUCTURED_TEST_INTERACTION_MODE_DESCRIPTOR = {
+  id: "orchestrator",
+  ownerId: "upcomputer.orchestrator",
+  version: 1,
+  displayName: "Orchestrator",
+  description: "Emit a structured orchestration proposal.",
+  intent: "propose",
+  safety: {
+    mutations: "deny",
+    sandbox: "read-only",
+    computerUse: "observe-only",
+  },
+  outputKind: "structured",
+  supportedProviders: ["codex"],
+  unsupportedProviderBehavior: "reject",
+  providerBehaviors: [
+    {
+      providerId: "codex",
+      collaborationMode: "plan",
+      sandbox: "read-only",
+    },
+  ],
+} satisfies InteractionModeDescriptor;
+
+const structuredTestInteractionModeRegistry = createExperimentalInteractionModeRegistry([
+  {
+    descriptor: STRUCTURED_TEST_INTERACTION_MODE_DESCRIPTOR,
+    parseFinalOutput: (text) => {
+      try {
+        const parsed = JSON.parse(text) as unknown;
+        return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : undefined;
+      } catch {
+        return undefined;
+      }
+    },
+  },
+]);
 
 it.effect("ProviderServiceLive catches stopAll failures during shutdown", () =>
   Effect.gen(function* () {
@@ -1608,6 +1657,138 @@ fanout.layer("ProviderServiceLive fanout", (it) => {
     }),
   );
 
+  it.effect("emits interaction-mode output and proposed-plan events from plan final text", () =>
+    Effect.gen(function* () {
+      const provider = yield* ProviderService.ProviderService;
+      const threadId = asThreadId("thread-plan-output");
+      const turnId = asTurnId("turn-thread-plan-output");
+      yield* provider.startSession(threadId, {
+        provider: ProviderDriverKind.make("codex"),
+        providerInstanceId: codexInstanceId,
+        threadId,
+        runtimeMode: "full-access",
+      });
+
+      const receivedRef = yield* Ref.make<Array<ProviderRuntimeEvent>>([]);
+      const consumer = yield* Stream.take(provider.streamEvents, 4).pipe(
+        Stream.runForEach((event) => Ref.update(receivedRef, (current) => [...current, event])),
+        Effect.forkChild,
+      );
+      yield* advanceTestClock(50);
+
+      yield* provider.sendTurn({
+        threadId,
+        input: "make a plan",
+        attachments: [],
+        interactionMode: "plan",
+      });
+      fanout.codex.emit({
+        type: "content.delta",
+        eventId: asEventId("evt-plan-output-delta"),
+        provider: ProviderDriverKind.make("codex"),
+        createdAt: "2026-01-01T00:00:00.000Z",
+        threadId,
+        turnId,
+        payload: {
+          streamKind: "assistant_text",
+          delta: "Notes\n\n<proposed_plan>\n# Ship it\n\n- wire event\n</proposed_plan>",
+        },
+      });
+      fanout.codex.emit({
+        type: "turn.completed",
+        eventId: asEventId("evt-plan-output-completed"),
+        provider: ProviderDriverKind.make("codex"),
+        createdAt: "2026-01-01T00:00:01.000Z",
+        threadId,
+        turnId,
+        payload: {
+          state: "completed",
+        },
+      });
+
+      yield* Fiber.join(consumer);
+      const received = yield* Ref.get(receivedRef);
+      const outputEvent = received.find(
+        (event) => event.type === "turn.interaction-mode-output.completed",
+      );
+      assert.equal(outputEvent?.type, "turn.interaction-mode-output.completed");
+      if (outputEvent?.type === "turn.interaction-mode-output.completed") {
+        assert.equal(outputEvent.payload.ownerId, "upcomputer.core");
+        assert.equal(outputEvent.payload.modeId, "plan");
+        assert.equal(outputEvent.payload.outputKind, "proposed-plan");
+        assert.equal(outputEvent.payload.output, "# Ship it\n\n- wire event");
+      }
+      const proposedEvent = received.find((event) => event.type === "turn.proposed.completed");
+      assert.equal(proposedEvent?.type, "turn.proposed.completed");
+      if (proposedEvent?.type === "turn.proposed.completed") {
+        assert.equal(proposedEvent.payload.planMarkdown, "# Ship it\n\n- wire event");
+      }
+      assert.deepEqual(
+        received.map((event) => String(event.eventId)),
+        [
+          "evt-plan-output-delta",
+          "evt-plan-output-completed",
+          "evt-plan-output-completed:interaction-mode-output",
+          "evt-plan-output-completed:proposed-plan-output",
+        ],
+      );
+    }),
+  );
+
+  it.effect("emits interaction-mode output for provider-native proposed-plan events", () =>
+    Effect.gen(function* () {
+      const provider = yield* ProviderService.ProviderService;
+      const threadId = asThreadId("thread-native-plan-output");
+      const turnId = asTurnId("turn-thread-native-plan-output");
+      yield* provider.startSession(threadId, {
+        provider: ProviderDriverKind.make("codex"),
+        providerInstanceId: codexInstanceId,
+        threadId,
+        runtimeMode: "full-access",
+      });
+
+      const receivedRef = yield* Ref.make<Array<ProviderRuntimeEvent>>([]);
+      const consumer = yield* Stream.take(provider.streamEvents, 2).pipe(
+        Stream.runForEach((event) => Ref.update(receivedRef, (current) => [...current, event])),
+        Effect.forkChild,
+      );
+      yield* advanceTestClock(50);
+
+      yield* provider.sendTurn({
+        threadId,
+        input: "make a plan",
+        attachments: [],
+        interactionMode: "plan",
+      });
+      fanout.codex.emit({
+        type: "turn.proposed.completed",
+        eventId: asEventId("evt-native-plan-output"),
+        provider: ProviderDriverKind.make("codex"),
+        createdAt: "2026-01-01T00:00:00.000Z",
+        threadId,
+        turnId,
+        payload: {
+          planMarkdown: "# Direct provider plan",
+        },
+      });
+
+      yield* Fiber.join(consumer);
+      const received = yield* Ref.get(receivedRef);
+      assert.deepEqual(
+        received.map((event) => String(event.eventId)),
+        ["evt-native-plan-output", "evt-native-plan-output:interaction-mode-output"],
+      );
+      const outputEvent = received.find(
+        (event) => event.type === "turn.interaction-mode-output.completed",
+      );
+      assert.equal(outputEvent?.type, "turn.interaction-mode-output.completed");
+      if (outputEvent?.type === "turn.interaction-mode-output.completed") {
+        assert.equal(outputEvent.payload.outputKind, "proposed-plan");
+        assert.equal(outputEvent.payload.output, "# Direct provider plan");
+      }
+    }),
+  );
+
   it.effect("keeps subscriber delivery ordered and isolates failing subscribers", () =>
     Effect.gen(function* () {
       const provider = yield* ProviderService.ProviderService;
@@ -1794,6 +1975,85 @@ fanout.layer("ProviderServiceLive fanout", (it) => {
           true,
         );
       }),
+  );
+});
+
+const structuredOutputFanout = makeProviderServiceLayer({
+  interactionModeRegistry: structuredTestInteractionModeRegistry,
+});
+structuredOutputFanout.layer("ProviderServiceLive interaction-mode output", (it) => {
+  it.effect("emits structured interaction-mode output through registered parsers", () =>
+    Effect.gen(function* () {
+      const provider = yield* ProviderService.ProviderService;
+      const threadId = asThreadId("thread-structured-output");
+      const turnId = asTurnId("turn-thread-structured-output");
+      yield* provider.startSession(threadId, {
+        provider: ProviderDriverKind.make("codex"),
+        providerInstanceId: codexInstanceId,
+        threadId,
+        runtimeMode: "full-access",
+      });
+
+      const receivedRef = yield* Ref.make<Array<ProviderRuntimeEvent>>([]);
+      const consumer = yield* Stream.take(provider.streamEvents, 3).pipe(
+        Stream.runForEach((event) => Ref.update(receivedRef, (current) => [...current, event])),
+        Effect.forkChild,
+      );
+      yield* advanceTestClock(50);
+
+      yield* provider.sendTurn({
+        threadId,
+        input: "draft a structured proposal",
+        attachments: [],
+        interactionMode: "orchestrator",
+      });
+      structuredOutputFanout.codex.emit({
+        type: "content.delta",
+        eventId: asEventId("evt-structured-output-delta"),
+        provider: ProviderDriverKind.make("codex"),
+        createdAt: "2026-01-01T00:00:00.000Z",
+        threadId,
+        turnId,
+        payload: {
+          streamKind: "assistant_text",
+          delta: '{"tasks":[{"title":"Ship it"}]}',
+        },
+      });
+      structuredOutputFanout.codex.emit({
+        type: "turn.completed",
+        eventId: asEventId("evt-structured-output-completed"),
+        provider: ProviderDriverKind.make("codex"),
+        createdAt: "2026-01-01T00:00:01.000Z",
+        threadId,
+        turnId,
+        payload: {
+          state: "completed",
+        },
+      });
+
+      yield* Fiber.join(consumer);
+      const received = yield* Ref.get(receivedRef);
+      assert.deepEqual(
+        received.map((event) => String(event.eventId)),
+        [
+          "evt-structured-output-delta",
+          "evt-structured-output-completed",
+          "evt-structured-output-completed:interaction-mode-output",
+        ],
+      );
+      const outputEvent = received.find(
+        (event) => event.type === "turn.interaction-mode-output.completed",
+      );
+      assert.equal(outputEvent?.type, "turn.interaction-mode-output.completed");
+      if (outputEvent?.type === "turn.interaction-mode-output.completed") {
+        assert.equal(outputEvent.payload.ownerId, "upcomputer.orchestrator");
+        assert.equal(outputEvent.payload.modeId, "orchestrator");
+        assert.equal(outputEvent.payload.outputKind, "structured");
+        assert.deepEqual(outputEvent.payload.output, {
+          tasks: [{ title: "Ship it" }],
+        });
+      }
+    }),
   );
 });
 

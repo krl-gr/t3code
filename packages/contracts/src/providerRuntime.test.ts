@@ -69,6 +69,38 @@ describe("ProviderRuntimeEvent", () => {
     expect(parsed.payload.planMarkdown).toBe("# Ship it");
   });
 
+  it("decodes interaction-mode output completion events", () => {
+    const parsed = decodeRuntimeEvent({
+      type: "turn.interaction-mode-output.completed",
+      eventId: "event-interaction-mode-output-1",
+      provider: "codex",
+      createdAt: "2026-02-28T00:00:00.000Z",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      payload: {
+        ownerId: "upcomputer.orchestrator",
+        modeId: "orchestrator",
+        modeVersion: 1,
+        outputKind: "structured",
+        output: {
+          tasks: [{ title: "Ship it" }],
+        },
+        sourceText: '```orchestration_proposal\n{"tasks":[{"title":"Ship it"}]}\n```',
+      },
+    });
+
+    expect(parsed.type).toBe("turn.interaction-mode-output.completed");
+    if (parsed.type !== "turn.interaction-mode-output.completed") {
+      throw new Error("expected turn.interaction-mode-output.completed");
+    }
+    expect(parsed.payload.ownerId).toBe("upcomputer.orchestrator");
+    expect(parsed.payload.modeId).toBe("orchestrator");
+    expect(parsed.payload.outputKind).toBe("structured");
+    expect(parsed.payload.output).toEqual({
+      tasks: [{ title: "Ship it" }],
+    });
+  });
+
   it("decodes user-input.requested with structured questions", () => {
     const parsed = decodeRuntimeEvent({
       type: "user-input.requested",

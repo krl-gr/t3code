@@ -13,6 +13,7 @@ import {
   TrimmedNonEmptyString,
   TurnId,
 } from "./baseSchemas.ts";
+import { InteractionModeId, InteractionModeOutputKind } from "./interactionMode.ts";
 import { ProviderInstanceId, ProviderDriverKind } from "./providerInstance.ts";
 
 const TrimmedNonEmptyStringSchema = TrimmedNonEmptyString;
@@ -165,6 +166,7 @@ const ProviderRuntimeEventType = Schema.Literals([
   "turn.plan.updated",
   "turn.proposed.delta",
   "turn.proposed.completed",
+  "turn.interaction-mode-output.completed",
   "turn.diff.updated",
   "item.started",
   "item.updated",
@@ -215,6 +217,9 @@ const TurnAbortedType = Schema.Literal("turn.aborted");
 const TurnPlanUpdatedType = Schema.Literal("turn.plan.updated");
 const TurnProposedDeltaType = Schema.Literal("turn.proposed.delta");
 const TurnProposedCompletedType = Schema.Literal("turn.proposed.completed");
+const TurnInteractionModeOutputCompletedType = Schema.Literal(
+  "turn.interaction-mode-output.completed",
+);
 const TurnDiffUpdatedType = Schema.Literal("turn.diff.updated");
 const ItemStartedType = Schema.Literal("item.started");
 const ItemUpdatedType = Schema.Literal("item.updated");
@@ -395,6 +400,17 @@ const TurnProposedCompletedPayload = Schema.Struct({
   planMarkdown: TrimmedNonEmptyStringSchema,
 });
 export type TurnProposedCompletedPayload = typeof TurnProposedCompletedPayload.Type;
+
+const TurnInteractionModeOutputCompletedPayload = Schema.Struct({
+  ownerId: InteractionModeId,
+  modeId: InteractionModeId,
+  modeVersion: PositiveInt,
+  outputKind: InteractionModeOutputKind,
+  output: Schema.Unknown,
+  sourceText: Schema.optional(TrimmedNonEmptyStringSchema),
+});
+export type TurnInteractionModeOutputCompletedPayload =
+  typeof TurnInteractionModeOutputCompletedPayload.Type;
 
 const TurnDiffUpdatedPayload = Schema.Struct({
   unifiedDiff: Schema.String,
@@ -756,6 +772,14 @@ const ProviderRuntimeTurnProposedCompletedEvent = Schema.Struct({
 export type ProviderRuntimeTurnProposedCompletedEvent =
   typeof ProviderRuntimeTurnProposedCompletedEvent.Type;
 
+const ProviderRuntimeTurnInteractionModeOutputCompletedEvent = Schema.Struct({
+  ...ProviderRuntimeEventBase.fields,
+  type: TurnInteractionModeOutputCompletedType,
+  payload: TurnInteractionModeOutputCompletedPayload,
+});
+export type ProviderRuntimeTurnInteractionModeOutputCompletedEvent =
+  typeof ProviderRuntimeTurnInteractionModeOutputCompletedEvent.Type;
+
 const ProviderRuntimeTurnDiffUpdatedEvent = Schema.Struct({
   ...ProviderRuntimeEventBase.fields,
   type: TurnDiffUpdatedType,
@@ -984,6 +1008,7 @@ export const ProviderRuntimeEventV2 = Schema.Union([
   ProviderRuntimeTurnPlanUpdatedEvent,
   ProviderRuntimeTurnProposedDeltaEvent,
   ProviderRuntimeTurnProposedCompletedEvent,
+  ProviderRuntimeTurnInteractionModeOutputCompletedEvent,
   ProviderRuntimeTurnDiffUpdatedEvent,
   ProviderRuntimeItemStartedEvent,
   ProviderRuntimeItemUpdatedEvent,

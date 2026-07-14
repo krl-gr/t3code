@@ -55,6 +55,15 @@ export interface ResolvedInteractionModeProviderBehavior {
   readonly promptInputLabel: string | undefined;
 }
 
+export interface InteractionModeFinalOutput {
+  readonly ownerId: string;
+  readonly modeId: string;
+  readonly modeVersion: number;
+  readonly outputKind: ResolvedInteractionMode["outputKind"];
+  readonly output: unknown;
+  readonly sourceText: string;
+}
+
 type InteractionModeRegistryErrorCode =
   | "invalid-mode-id"
   | "invalid-owner-id"
@@ -280,6 +289,50 @@ export function applyResolvedInteractionModePrompt(
 
   const label = mode.provider.promptInputLabel;
   return label === undefined ? `${prefix}\n\n${trimmed}` : `${prefix}\n\n${label}\n${trimmed}`;
+}
+
+const PROPOSED_PLAN_BLOCK_PATTERN = /<proposed_plan>\s*([\s\S]*?)\s*<\/proposed_plan>/g;
+
+export function extractProposedPlanMarkdown(text: string): string | undefined {
+  const matches = [...text.matchAll(PROPOSED_PLAN_BLOCK_PATTERN)];
+  if (matches.length !== 1) {
+    return undefined;
+  }
+  const planMarkdown = matches[0]?.[1]?.trim();
+  return planMarkdown && planMarkdown.length > 0 ? planMarkdown : undefined;
+}
+
+export function resolveInteractionModeFinalOutput(
+  text: string,
+  mode: ResolvedInteractionMode,
+): InteractionModeFinalOutput | undefined {
+  const sourceText = text.trim();
+  if (sourceText.length === 0) {
+    return undefined;
+  }
+
+  const output =
+    mode.parseFinalOutput !== undefined
+      ? mode.parseFinalOutput(sourceText, {
+          modeId: mode.id,
+          providerId: mode.provider.providerId,
+        })
+      : mode.outputKind === "proposed-plan"
+        ? extractProposedPlanMarkdown(sourceText)
+        : undefined;
+
+  if (output === undefined) {
+    return undefined;
+  }
+
+  return {
+    ownerId: mode.ownerId,
+    modeId: mode.id,
+    modeVersion: mode.version,
+    outputKind: mode.outputKind,
+    output,
+    sourceText,
+  };
 }
 
 function validateRegistration(

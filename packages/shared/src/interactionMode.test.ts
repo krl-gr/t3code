@@ -7,6 +7,8 @@ import {
   InteractionModeResolutionError,
   applyResolvedInteractionModePrompt,
   createExperimentalInteractionModeRegistry,
+  extractProposedPlanMarkdown,
+  resolveInteractionModeFinalOutput,
 } from "./interactionMode.ts";
 
 const makeDescriptor = (
@@ -74,6 +76,77 @@ describe("ExperimentalInteractionModeRegistry", () => {
     expect(applyResolvedInteractionModePrompt("What changed?", resolved)).toBe(
       "You are in Ask mode.\n\nUser question:\nWhat changed?",
     );
+  });
+
+  it("extracts exactly one proposed plan markdown block", () => {
+    expect(
+      extractProposedPlanMarkdown("Before\n<proposed_plan>\n# Ship it\n\n- step\n</proposed_plan>"),
+    ).toBe("# Ship it\n\n- step");
+    expect(extractProposedPlanMarkdown("No block")).toBeUndefined();
+    expect(
+      extractProposedPlanMarkdown(
+        "<proposed_plan># One</proposed_plan>\n<proposed_plan># Two</proposed_plan>",
+      ),
+    ).toBeUndefined();
+  });
+
+  it("resolves proposed-plan final output from tagged markdown", () => {
+    const registry = createExperimentalInteractionModeRegistry([
+      {
+        descriptor: makeDescriptor({
+          id: "plan",
+          displayName: "Plan",
+          intent: "propose",
+          outputKind: "proposed-plan",
+        }),
+      },
+    ]);
+    const resolved = registry.resolveOrThrow("plan", "codex");
+
+    expect(
+      resolveInteractionModeFinalOutput(
+        "Summary\n\n<proposed_plan>\n# Ship it\n</proposed_plan>",
+        resolved,
+      ),
+    ).toEqual({
+      ownerId: "upcomputer.core",
+      modeId: "plan",
+      modeVersion: 1,
+      outputKind: "proposed-plan",
+      output: "# Ship it",
+      sourceText: "Summary\n\n<proposed_plan>\n# Ship it\n</proposed_plan>",
+    });
+  });
+
+  it("resolves structured final output through the registered parser", () => {
+    const registry = createExperimentalInteractionModeRegistry([
+      {
+        descriptor: makeDescriptor({
+          id: "orchestrator",
+          ownerId: "upcomputer.orchestrator",
+          displayName: "Orchestrator",
+          intent: "propose",
+          safety: {
+            mutations: "deny",
+            sandbox: "read-only",
+            computerUse: "observe-only",
+          },
+          outputKind: "structured",
+        }),
+        parseFinalOutput: (text) => (text.includes("ship") ? { action: "ship" } : undefined),
+      },
+    ]);
+    const resolved = registry.resolveOrThrow("orchestrator", "codex");
+
+    expect(resolveInteractionModeFinalOutput("please ship", resolved)).toEqual({
+      ownerId: "upcomputer.orchestrator",
+      modeId: "orchestrator",
+      modeVersion: 1,
+      outputKind: "structured",
+      output: { action: "ship" },
+      sourceText: "please ship",
+    });
+    expect(resolveInteractionModeFinalOutput("ignore", resolved)).toBeUndefined();
   });
 
   it("rejects duplicate mode registrations", () => {
