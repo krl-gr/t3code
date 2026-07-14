@@ -706,7 +706,10 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
           "provider.interaction_mode.output_kind": resolvedInteractionMode.outputKind,
         });
       }
-      const turn = yield* routed.adapter.sendTurn(input);
+      const turn = yield* routed.adapter.sendTurn({
+        ...input,
+        ...(resolvedInteractionMode !== undefined ? { resolvedInteractionMode } : {}),
+      });
       yield* directory.upsert({
         threadId: input.threadId,
         provider: routed.adapter.provider,

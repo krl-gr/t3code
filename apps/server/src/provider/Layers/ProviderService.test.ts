@@ -6,7 +6,6 @@ import * as NodePath from "node:path";
 import type {
   ProviderApprovalDecision,
   ProviderRuntimeEvent,
-  ProviderSendTurnInput,
   ProviderSession,
   ProviderTurnStartResult,
 } from "@t3tools/contracts";
@@ -42,7 +41,10 @@ import {
   ProviderValidationError,
   type ProviderAdapterError,
 } from "../Errors.ts";
-import type { ProviderAdapterShape } from "../Services/ProviderAdapter.ts";
+import type {
+  ProviderAdapterSendTurnInput,
+  ProviderAdapterShape,
+} from "../Services/ProviderAdapter.ts";
 import * as ProviderAdapterRegistry from "../Services/ProviderAdapterRegistry.ts";
 import * as ProviderService from "../Services/ProviderService.ts";
 import * as ProviderSessionDirectory from "../Services/ProviderSessionDirectory.ts";
@@ -124,7 +126,7 @@ function makeFakeCodexAdapter(provider: ProviderDriverKind = CODEX_DRIVER) {
 
   const sendTurn = vi.fn(
     (
-      input: ProviderSendTurnInput,
+      input: ProviderAdapterSendTurnInput,
     ): Effect.Effect<ProviderTurnStartResult, ProviderAdapterError> => {
       if (!sessions.has(input.threadId)) {
         return Effect.fail(
@@ -1887,7 +1889,11 @@ validation.layer("ProviderServiceLive validation", (it) => {
       });
 
       assert.equal(validation.codex.sendTurn.mock.calls.length, 1);
-      assert.equal(validation.codex.sendTurn.mock.calls[0]?.[0].interactionMode, "plan");
+      const sendInput = validation.codex.sendTurn.mock.calls[0]?.[0];
+      assert.equal(sendInput?.interactionMode, "plan");
+      assert.equal(sendInput?.resolvedInteractionMode?.id, "plan");
+      assert.equal(sendInput?.resolvedInteractionMode?.provider.providerId, "codex");
+      assert.equal(sendInput?.resolvedInteractionMode?.provider.collaborationMode, "plan");
     }),
   );
 

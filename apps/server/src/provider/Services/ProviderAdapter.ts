@@ -20,6 +20,7 @@ import type {
   ProviderTurnStartResult,
   TurnId,
 } from "@t3tools/contracts";
+import type { ResolvedInteractionMode } from "@t3tools/shared/interactionMode";
 import type * as Effect from "effect/Effect";
 import type * as Stream from "effect/Stream";
 
@@ -30,6 +31,15 @@ export interface ProviderAdapterCapabilities {
    * Declares whether changing the model on an existing session is supported.
    */
   readonly sessionModelSwitch: ProviderSessionModelSwitchMode;
+}
+
+export interface ProviderAdapterSendTurnInput extends ProviderSendTurnInput {
+  /**
+   * Server-resolved interaction-mode metadata. Public request payloads only
+   * carry `interactionMode`; ProviderService validates support and attaches
+   * this provider-specific view before adapter dispatch.
+   */
+  readonly resolvedInteractionMode?: ResolvedInteractionMode;
 }
 
 export interface ProviderThreadTurnSnapshot {
@@ -60,7 +70,7 @@ export interface ProviderAdapterShape<TError> {
    * Send a turn to an active provider session.
    */
   readonly sendTurn: (
-    input: ProviderSendTurnInput,
+    input: ProviderAdapterSendTurnInput,
   ) => Effect.Effect<ProviderTurnStartResult, TError>;
 
   /**
