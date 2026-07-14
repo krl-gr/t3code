@@ -6,6 +6,7 @@ import { cn } from "../lib/utils";
 
 const loadedProjectFaviconSrcs = new Set<string>();
 const PROJECT_AVATAR_COLOR_KEYS = ["pink", "mint", "orange", "purple", "cyan", "lime"] as const;
+const SERVER_PROJECT_FAVICON_FALLBACK_FILE = "__upcomputer_project_favicon_fallback__.svg";
 
 type ProjectAvatarColorKey = (typeof PROJECT_AVATAR_COLOR_KEYS)[number];
 
@@ -39,6 +40,16 @@ export function resolveProjectAvatarLetter(label: string): string {
   }
 
   return (projectName?.match(/[\p{L}\p{N}]/u)?.[0] ?? "P").toLocaleUpperCase();
+}
+
+export function isServerProjectFaviconFallbackUrl(src: string): boolean {
+  try {
+    return decodeURIComponent(new URL(src).pathname).endsWith(
+      `/${SERVER_PROJECT_FAVICON_FALLBACK_FILE}`,
+    );
+  } catch {
+    return false;
+  }
 }
 
 type ProjectFaviconInput = {
@@ -94,6 +105,10 @@ export function ProjectFavicon(input: ProjectFaviconInput) {
   });
 
   if (!src) {
+    return <ProjectAvatarFallback {...input} />;
+  }
+
+  if (isServerProjectFaviconFallbackUrl(src)) {
     return <ProjectAvatarFallback {...input} />;
   }
 

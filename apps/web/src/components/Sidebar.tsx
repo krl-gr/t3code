@@ -894,6 +894,7 @@ const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
   } = props;
   const showMoreButtonRender = useMemo(() => <button type="button" />, []);
   const showLessButtonRender = useMemo(() => <button type="button" />, []);
+  const threadAuxiliaryContentClassName = cn("ml-6", threadContentClassName);
 
   return (
     <SidebarMenuSub ref={attachThreadListAutoAnimateRef} className="mt-0.5 mb-0 w-full">
@@ -907,7 +908,7 @@ const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
               SIDEBAR_LABEL_TEXT_CLASS,
             )}
           >
-            <span>No threads yet</span>
+            <span className={threadAuxiliaryContentClassName}>No threads yet</span>
           </div>
         </SidebarMenuSubItem>
       ) : null}
@@ -961,7 +962,7 @@ const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
               expandThreadListForProject(projectKey);
             }}
           >
-            <span>Show more</span>
+            <span className={threadAuxiliaryContentClassName}>Show more</span>
           </SidebarMenuSubButton>
         </SidebarMenuSubItem>
       )}
@@ -980,7 +981,7 @@ const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
               collapseThreadListForProject(projectKey);
             }}
           >
-            <span>Show less</span>
+            <span className={threadAuxiliaryContentClassName}>Show less</span>
           </SidebarMenuSubButton>
         </SidebarMenuSubItem>
       )}

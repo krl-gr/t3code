@@ -326,7 +326,9 @@ export const issueAssetUrl = Effect.fn("AssetAccess.issueAssetUrl")(function* (i
         relativePath,
         expiresAt,
       };
-      fileName = relativePath ? path.basename(relativePath) : "favicon.svg";
+      fileName = relativePath
+        ? path.basename(relativePath)
+        : "__upcomputer_project_favicon_fallback__.svg";
       break;
     }
   }
