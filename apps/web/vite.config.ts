@@ -6,7 +6,7 @@ import babel from "@rolldown/plugin-babel";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import { defineProject, type TestProjectInlineConfiguration } from "vite-plus/test/config";
 import "vite-plus/test/config";
-import { defineConfig } from "vite-plus";
+import { defineConfig, type ViteUserConfig } from "vite-plus";
 import pkg from "./package.json" with { type: "json" };
 
 import { loadRepoEnv } from "../../scripts/lib/public-config";
@@ -14,6 +14,11 @@ import { loadRepoEnv } from "../../scripts/lib/public-config";
 const repoEnv = loadRepoEnv();
 Object.assign(process.env, repoEnv);
 
+const publicWebRoot = NodeURL.fileURLToPath(new URL(".", import.meta.url));
+const publicRepositoryRoot = NodeURL.fileURLToPath(new URL("../..", import.meta.url));
+const publicWebNodeModules = NodeURL.fileURLToPath(new URL("./node_modules", import.meta.url));
+const publicRoutesDirectory = NodeURL.fileURLToPath(new URL("./src/routes", import.meta.url));
+const publicRouteTree = NodeURL.fileURLToPath(new URL("./src/routeTree.gen.ts", import.meta.url));
 const port = Number(process.env.PORT ?? 5733);
 const host = process.env.HOST?.trim() || "localhost";
 const configuredWsUrl = process.env.VITE_WS_URL?.trim();
@@ -92,10 +97,25 @@ const defaultProductEntry = NodeURL.fileURLToPath(
   new URL("./src/product/defaultProductEntry.ts", import.meta.url),
 );
 
-export default defineConfig(() => {
+const HOST_RUNTIME_PACKAGES = ["react", "react-dom", "@tanstack/react-router", "zustand"] as const;
+
+export interface WebViteConfigOptions {
+  readonly productEntry?: string;
+  readonly outDir?: string;
+  readonly sourcemap?: boolean | "inline" | "hidden";
+  readonly aliases?: Readonly<Record<string, string>>;
+  readonly additionalFsAllow?: ReadonlyArray<string>;
+}
+
+export function createWebViteConfig(options: WebViteConfigOptions = {}): ViteUserConfig {
   return {
+    root: publicWebRoot,
     plugins: [
-      tanstackRouter(),
+      tanstackRouter({
+        target: "react",
+        routesDirectory: publicRoutesDirectory,
+        generatedRouteTree: publicRouteTree,
+      }),
       react(),
       babel({
         // We need to be explicit about the parser options after moving to @vitejs/plugin-react v6.0.0
@@ -137,10 +157,15 @@ export default defineConfig(() => {
     },
     resolve: {
       alias: {
-        "@upcomputer/web-product-entry": defaultProductEntry,
+        "@upcomputer/web-product-entry": options.productEntry ?? defaultProductEntry,
+        ...options.aliases,
+        react: `${publicWebNodeModules}/react`,
+        "react-dom": `${publicWebNodeModules}/react-dom`,
+        "@tanstack/react-router": `${publicWebNodeModules}/@tanstack/react-router`,
+        zustand: `${publicWebNodeModules}/zustand`,
       },
       tsconfigPaths: true,
-      dedupe: ["react", "react-dom"],
+      dedupe: [...HOST_RUNTIME_PACKAGES],
     },
     experimental: {
       bundledDev,
@@ -149,6 +174,21 @@ export default defineConfig(() => {
       host,
       port,
       strictPort: true,
+      fs: {
+        allow: [publicRepositoryRoot, ...(options.additionalFsAllow ?? [])],
+      },
+      watch: {
+        ignored: [
+          "**/.git/**",
+          "**/.turbo/**",
+          "**/.astro/**",
+          "**/coverage/**",
+          "**/dist/**",
+          "**/dist-electron/**",
+          "**/node_modules/**",
+          "**/tsconfig.tsbuildinfo",
+        ],
+      },
       ...(devProxyTarget
         ? {
             proxy: {
@@ -177,12 +217,14 @@ export default defineConfig(() => {
       },
     },
     build: {
-      outDir: "dist",
+      outDir: options.outDir ?? "dist",
       emptyOutDir: true,
-      sourcemap: buildSourcemap,
+      sourcemap: options.sourcemap ?? buildSourcemap,
     },
     test: {
       projects: [defineProject(unitTestProject)],
     },
   };
-});
+}
+
+export default defineConfig(() => createWebViteConfig());
