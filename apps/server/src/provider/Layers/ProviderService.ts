@@ -55,6 +55,7 @@ import * as ProviderEventLoggers from "./ProviderEventLoggers.ts";
 import * as AnalyticsService from "../../telemetry/AnalyticsService.ts";
 import * as McpProviderSession from "../../mcp/McpProviderSession.ts";
 import * as McpSessionRegistry from "../../mcp/McpSessionRegistry.ts";
+import { InteractionModeRegistryService } from "../../product/InteractionModeRegistryService.ts";
 const isModelSelection = Schema.is(ModelSelection);
 
 /**
@@ -212,6 +213,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
 
   const registry = yield* ProviderAdapterRegistry.ProviderAdapterRegistry;
   const directory = yield* ProviderSessionDirectory.ProviderSessionDirectory;
+  const interactionModeRegistryService = yield* InteractionModeRegistryService;
   const runtimeEventPubSub = yield* PubSub.unbounded<ProviderRuntimeEvent>();
   const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
   const prepareMcpSession = (threadId: ThreadId, providerInstanceId: ProviderInstanceId) =>
@@ -255,6 +257,19 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
               : "Provider instance id is required.",
           ),
         );
+
+  const resolveInteractionModeForProvider = (input: {
+    readonly operation: string;
+    readonly modeId: ProviderSendTurnInput["interactionMode"] | undefined;
+    readonly provider: ProviderDriverKind;
+  }) =>
+    input.modeId === undefined
+      ? Effect.void
+      : interactionModeRegistryService.registry
+          .resolve(input.modeId, input.provider)
+          .pipe(
+            Effect.mapError((cause) => toValidationError(input.operation, cause.message, cause)),
+          );
 
   const upsertSessionBinding = (
     session: ProviderSession,
@@ -679,6 +694,18 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
         "provider.kind": routed.adapter.provider,
         ...(input.modelSelection?.model ? { "provider.model": input.modelSelection.model } : {}),
       });
+      const resolvedInteractionMode = yield* resolveInteractionModeForProvider({
+        operation: "ProviderService.sendTurn",
+        modeId: input.interactionMode,
+        provider: routed.adapter.provider,
+      });
+      if (resolvedInteractionMode !== undefined) {
+        yield* Effect.annotateCurrentSpan({
+          "provider.interaction_mode.owner": resolvedInteractionMode.ownerId,
+          "provider.interaction_mode.intent": resolvedInteractionMode.intent,
+          "provider.interaction_mode.output_kind": resolvedInteractionMode.outputKind,
+        });
+      }
       const turn = yield* routed.adapter.sendTurn(input);
       yield* directory.upsert({
         threadId: input.threadId,

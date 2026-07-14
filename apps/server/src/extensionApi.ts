@@ -7,6 +7,7 @@
  * tools are intentionally deferred.
  */
 export * from "./product/FeatureMigrations.ts";
+export * from "./product/InteractionModeRegistryService.ts";
 export * from "./product/ProviderRuntimeEvents.ts";
 export * from "./product/RpcContribution.ts";
 export * from "./product/ServerProductComposition.ts";

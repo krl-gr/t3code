@@ -26,6 +26,8 @@ import { ServerSettingsService } from "../src/serverSettings.ts";
 import { AnalyticsService } from "../src/telemetry/Services/AnalyticsService.ts";
 import { SqlitePersistenceMemory } from "../src/persistence/Layers/Sqlite.ts";
 import * as ProviderSessionRuntime from "../src/persistence/ProviderSessionRuntime.ts";
+import * as InteractionModeRegistryService from "../src/product/InteractionModeRegistryService.ts";
+import { CORE_SERVER_PRODUCT_COMPOSITION } from "../src/product/ServerProductComposition.ts";
 
 import {
   makeTestProviderAdapterHarness,
@@ -39,6 +41,9 @@ import {
 } from "./fixtures/providerRuntime.ts";
 
 const codexInstanceId = ProviderInstanceId.make("codex");
+const coreInteractionModeRegistryLayer = InteractionModeRegistryService.layer(
+  CORE_SERVER_PRODUCT_COMPOSITION.interactionModeRegistry,
+);
 
 const makeWorkspaceDirectory = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
@@ -71,6 +76,7 @@ const makeIntegrationFixture = Effect.gen(function* () {
     Layer.succeed(ProviderAdapterRegistry, registry),
     ServerSettingsService.layerTest(DEFAULT_SERVER_SETTINGS),
     AnalyticsService.layerTest,
+    coreInteractionModeRegistryLayer,
     Layer.succeed(ProviderEventLoggers, NoOpProviderEventLoggers),
   ).pipe(Layer.provide(SqlitePersistenceMemory));
 

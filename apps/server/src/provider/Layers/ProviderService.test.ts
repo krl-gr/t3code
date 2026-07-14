@@ -55,11 +55,20 @@ import {
   makeSqlitePersistenceLive,
   SqlitePersistenceMemory,
 } from "../../persistence/Layers/Sqlite.ts";
+import * as InteractionModeRegistryService from "../../product/InteractionModeRegistryService.ts";
+import { CORE_SERVER_PRODUCT_COMPOSITION } from "../../product/ServerProductComposition.ts";
 import * as ServerSettings from "../../serverSettings.ts";
 import * as AnalyticsService from "../../telemetry/AnalyticsService.ts";
 import { makeAdapterRegistryMock } from "../testUtils/providerAdapterRegistryMock.ts";
 
 const defaultServerSettingsLayer = ServerSettings.ServerSettingsService.layerTest();
+const coreInteractionModeRegistryLayer = InteractionModeRegistryService.layer(
+  CORE_SERVER_PRODUCT_COMPOSITION.interactionModeRegistry,
+);
+
+function makeProviderServiceTestLive(options?: Parameters<typeof makeProviderServiceLive>[0]) {
+  return makeProviderServiceLive(options).pipe(Layer.provide(coreInteractionModeRegistryLayer));
+}
 
 const asRequestId = (value: string): ApprovalRequestId => ApprovalRequestId.make(value);
 const asEventId = (value: string): EventId => EventId.make(value);
@@ -67,9 +76,11 @@ const asThreadId = (value: string): ThreadId => ThreadId.make(value);
 const asTurnId = (value: string): TurnId => TurnId.make(value);
 const codexInstanceId = ProviderInstanceId.make("codex");
 const claudeAgentInstanceId = ProviderInstanceId.make("claudeAgent");
+const grokInstanceId = ProviderInstanceId.make("grok");
 const CODEX_DRIVER = ProviderDriverKind.make("codex");
 const CLAUDE_AGENT_DRIVER = ProviderDriverKind.make("claudeAgent");
 const CURSOR_DRIVER = ProviderDriverKind.make("cursor");
+const GROK_DRIVER = ProviderDriverKind.make("grok");
 
 type LegacyProviderRuntimeEvent = {
   readonly type: string;
@@ -271,10 +282,12 @@ function makeProviderServiceLayer() {
   const codex = makeFakeCodexAdapter();
   const claude = makeFakeCodexAdapter(CLAUDE_AGENT_DRIVER);
   const cursor = makeFakeCodexAdapter(CURSOR_DRIVER);
+  const grok = makeFakeCodexAdapter(GROK_DRIVER);
   const registry = makeAdapterRegistryMock({
     [ProviderDriverKind.make("codex")]: codex.adapter,
     [ProviderDriverKind.make("claudeAgent")]: claude.adapter,
     [ProviderDriverKind.make("cursor")]: cursor.adapter,
+    [ProviderDriverKind.make("grok")]: grok.adapter,
   });
 
   const providerAdapterLayer = Layer.succeed(
@@ -288,7 +301,7 @@ function makeProviderServiceLayer() {
 
   const layer = it.layer(
     Layer.mergeAll(
-      makeProviderServiceLive().pipe(
+      makeProviderServiceTestLive().pipe(
         Layer.provide(providerAdapterLayer),
         Layer.provide(directoryLayer),
         Layer.provide(defaultServerSettingsLayer),
@@ -311,6 +324,7 @@ function makeProviderServiceLayer() {
     codex,
     claude,
     cursor,
+    grok,
     layer,
   };
 }
@@ -339,7 +353,7 @@ it.effect("ProviderServiceLive catches stopAll failures during shutdown", () =>
     );
     const directoryLayer = ProviderSessionDirectoryLive.pipe(Layer.provide(runtimeRepositoryLayer));
     const providerLayer = Layer.mergeAll(
-      makeProviderServiceLive().pipe(
+      makeProviderServiceTestLive().pipe(
         Layer.provide(providerAdapterLayer),
         Layer.provide(directoryLayer),
         Layer.provide(defaultServerSettingsLayer),
@@ -398,7 +412,7 @@ it.effect("ProviderServiceLive rejects new sessions for disabled providers", () 
       Layer.provide(SqlitePersistenceMemory),
     );
     const directoryLayer = ProviderSessionDirectoryLive.pipe(Layer.provide(runtimeRepositoryLayer));
-    const providerLayer = makeProviderServiceLive().pipe(
+    const providerLayer = makeProviderServiceTestLive().pipe(
       Layer.provide(providerAdapterLayer),
       Layer.provide(directoryLayer),
       Layer.provide(defaultServerSettingsLayer),
@@ -482,7 +496,7 @@ it.effect(
       const directoryLayer = ProviderSessionDirectoryLive.pipe(
         Layer.provide(runtimeRepositoryLayer),
       );
-      const providerLayer = makeProviderServiceLive().pipe(
+      const providerLayer = makeProviderServiceTestLive().pipe(
         Layer.provide(providerAdapterLayer),
         Layer.provide(directoryLayer),
         Layer.provide(serverSettingsLayer),
@@ -552,7 +566,7 @@ it.effect("ProviderServiceLive rejects new sessions for disabled custom instance
       Layer.provide(SqlitePersistenceMemory),
     );
     const directoryLayer = ProviderSessionDirectoryLive.pipe(Layer.provide(runtimeRepositoryLayer));
-    const providerLayer = makeProviderServiceLive().pipe(
+    const providerLayer = makeProviderServiceTestLive().pipe(
       Layer.provide(providerAdapterLayer),
       Layer.provide(directoryLayer),
       Layer.provide(defaultServerSettingsLayer),
@@ -597,7 +611,7 @@ it.effect("ProviderServiceLive writes canonical events to the emitting thread se
       Layer.provide(SqlitePersistenceMemory),
     );
     const directoryLayer = ProviderSessionDirectoryLive.pipe(Layer.provide(runtimeRepositoryLayer));
-    const providerLayer = makeProviderServiceLive({
+    const providerLayer = makeProviderServiceTestLive({
       canonicalEventLogger: {
         filePath: "memory://provider-canonical-events",
         write: (event, threadId) => {
@@ -667,7 +681,7 @@ it.effect("ProviderServiceLive keeps persisted resumable sessions on startup", (
       });
     }).pipe(Effect.provide(directoryLayer));
 
-    const providerLayer = makeProviderServiceLive().pipe(
+    const providerLayer = makeProviderServiceTestLive().pipe(
       Layer.provide(Layer.succeed(ProviderAdapterRegistry.ProviderAdapterRegistry, registry)),
       Layer.provide(directoryLayer),
       Layer.provide(defaultServerSettingsLayer),
@@ -731,7 +745,7 @@ it.effect(
       const firstDirectoryLayer = ProviderSessionDirectoryLive.pipe(
         Layer.provide(runtimeRepositoryLayer),
       );
-      const firstProviderLayer = makeProviderServiceLive().pipe(
+      const firstProviderLayer = makeProviderServiceTestLive().pipe(
         Layer.provide(
           Layer.succeed(ProviderAdapterRegistry.ProviderAdapterRegistry, firstRegistry),
         ),
@@ -790,7 +804,7 @@ it.effect(
       const secondDirectoryLayer = ProviderSessionDirectoryLive.pipe(
         Layer.provide(runtimeRepositoryLayer),
       );
-      const secondProviderLayer = makeProviderServiceLive().pipe(
+      const secondProviderLayer = makeProviderServiceTestLive().pipe(
         Layer.provide(
           Layer.succeed(ProviderAdapterRegistry.ProviderAdapterRegistry, secondRegistry),
         ),
@@ -1301,7 +1315,7 @@ routing.layer("ProviderServiceLive routing", (it) => {
       const firstDirectoryLayer = ProviderSessionDirectoryLive.pipe(
         Layer.provide(runtimeRepositoryLayer),
       );
-      const firstProviderLayer = makeProviderServiceLive().pipe(
+      const firstProviderLayer = makeProviderServiceTestLive().pipe(
         Layer.provide(
           Layer.succeed(ProviderAdapterRegistry.ProviderAdapterRegistry, firstRegistry),
         ),
@@ -1339,7 +1353,7 @@ routing.layer("ProviderServiceLive routing", (it) => {
       const secondDirectoryLayer = ProviderSessionDirectoryLive.pipe(
         Layer.provide(runtimeRepositoryLayer),
       );
-      const secondProviderLayer = makeProviderServiceLive().pipe(
+      const secondProviderLayer = makeProviderServiceTestLive().pipe(
         Layer.provide(
           Layer.succeed(ProviderAdapterRegistry.ProviderAdapterRegistry, secondRegistry),
         ),
@@ -1407,7 +1421,7 @@ routing.layer("ProviderServiceLive routing", (it) => {
         const firstDirectoryLayer = ProviderSessionDirectoryLive.pipe(
           Layer.provide(runtimeRepositoryLayer),
         );
-        const firstProviderLayer = makeProviderServiceLive().pipe(
+        const firstProviderLayer = makeProviderServiceTestLive().pipe(
           Layer.provide(
             Layer.succeed(ProviderAdapterRegistry.ProviderAdapterRegistry, firstRegistry),
           ),
@@ -1440,7 +1454,7 @@ routing.layer("ProviderServiceLive routing", (it) => {
         const secondDirectoryLayer = ProviderSessionDirectoryLive.pipe(
           Layer.provide(runtimeRepositoryLayer),
         );
-        const secondProviderLayer = makeProviderServiceLive().pipe(
+        const secondProviderLayer = makeProviderServiceTestLive().pipe(
           Layer.provide(
             Layer.succeed(ProviderAdapterRegistry.ProviderAdapterRegistry, secondRegistry),
           ),
@@ -1849,6 +1863,87 @@ validation.layer("ProviderServiceLive validation", (it) => {
       }
       assert.equal(failure.failure.operation, "ProviderService.startSession");
       assert.equal(failure.failure.issue.includes("invalid-provider"), true);
+    }),
+  );
+
+  it.effect("resolves registered interaction modes before provider dispatch", () =>
+    Effect.gen(function* () {
+      const provider = yield* ProviderService.ProviderService;
+      const threadId = asThreadId("thread-interaction-mode-plan");
+
+      yield* provider.startSession(threadId, {
+        provider: ProviderDriverKind.make("codex"),
+        providerInstanceId: codexInstanceId,
+        threadId,
+        runtimeMode: "full-access",
+      });
+      validation.codex.sendTurn.mockClear();
+
+      yield* provider.sendTurn({
+        threadId,
+        input: "make a plan",
+        attachments: [],
+        interactionMode: "plan",
+      });
+
+      assert.equal(validation.codex.sendTurn.mock.calls.length, 1);
+      assert.equal(validation.codex.sendTurn.mock.calls[0]?.[0].interactionMode, "plan");
+    }),
+  );
+
+  it.effect("rejects unregistered interaction modes before provider dispatch", () =>
+    Effect.gen(function* () {
+      const provider = yield* ProviderService.ProviderService;
+      const threadId = asThreadId("thread-interaction-mode-unknown");
+
+      yield* provider.startSession(threadId, {
+        provider: ProviderDriverKind.make("codex"),
+        providerInstanceId: codexInstanceId,
+        threadId,
+        runtimeMode: "full-access",
+      });
+      validation.codex.sendTurn.mockClear();
+
+      const failure = yield* Effect.flip(
+        provider.sendTurn({
+          threadId,
+          input: "review this",
+          attachments: [],
+          interactionMode: "task-review",
+        }),
+      );
+
+      assert.instanceOf(failure, ProviderValidationError);
+      assert.include(failure.issue, "Interaction mode 'task-review' is not registered.");
+      assert.equal(validation.codex.sendTurn.mock.calls.length, 0);
+    }),
+  );
+
+  it.effect("rejects interaction modes unsupported by the routed provider", () =>
+    Effect.gen(function* () {
+      const provider = yield* ProviderService.ProviderService;
+      const threadId = asThreadId("thread-interaction-mode-unsupported-provider");
+
+      yield* provider.startSession(threadId, {
+        provider: ProviderDriverKind.make("grok"),
+        providerInstanceId: grokInstanceId,
+        threadId,
+        runtimeMode: "full-access",
+      });
+      validation.grok.sendTurn.mockClear();
+
+      const failure = yield* Effect.flip(
+        provider.sendTurn({
+          threadId,
+          input: "make a plan",
+          attachments: [],
+          interactionMode: "plan",
+        }),
+      );
+
+      assert.instanceOf(failure, ProviderValidationError);
+      assert.include(failure.issue, "Interaction mode 'plan' does not support provider 'grok'.");
+      assert.equal(validation.grok.sendTurn.mock.calls.length, 0);
     }),
   );
 

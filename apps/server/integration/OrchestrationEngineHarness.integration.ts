@@ -78,8 +78,13 @@ import { VcsStatusBroadcaster } from "../src/vcs/VcsStatusBroadcaster.ts";
 import { GitWorkflowService } from "../src/git/GitWorkflowService.ts";
 import * as VcsProcess from "../src/vcs/VcsProcess.ts";
 import * as AgentAwarenessRelay from "../src/relay/AgentAwarenessRelay.ts";
+import * as InteractionModeRegistryService from "../src/product/InteractionModeRegistryService.ts";
+import { CORE_SERVER_PRODUCT_COMPOSITION } from "../src/product/ServerProductComposition.ts";
 
 const decodeCodexSettings = Schema.decodeEffect(CodexSettings);
+const coreInteractionModeRegistryLayer = InteractionModeRegistryService.layer(
+  CORE_SERVER_PRODUCT_COMPOSITION.interactionModeRegistry,
+);
 
 function runGit(cwd: string, args: ReadonlyArray<string>) {
   return NodeChildProcess.execFileSync("git", args, {
@@ -285,12 +290,14 @@ export const makeOrchestrationIntegrationHarness = (
           Layer.provide(providerSessionDirectoryLayer),
           Layer.provide(realCodexRegistry),
           Layer.provide(AnalyticsService.layerTest),
+          Layer.provide(coreInteractionModeRegistryLayer),
           Layer.provide(providerEventLoggersLayer),
         )
       : makeProviderServiceLive().pipe(
           Layer.provide(providerSessionDirectoryLayer),
           Layer.provide(fakeRegistry!),
           Layer.provide(AnalyticsService.layerTest),
+          Layer.provide(coreInteractionModeRegistryLayer),
           Layer.provide(providerEventLoggersLayer),
         );
     const providerRegistryLayer = makeProviderRegistryLayer();

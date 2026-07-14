@@ -87,6 +87,7 @@ import { CORE_SERVER_PRODUCT_ENTRY } from "./product/defaultProductEntry.ts";
 import type { ExperimentalServerProductComposition } from "./product/ServerProductComposition.ts";
 import type { ExperimentalServerProductEntry } from "./product/ServerProductEntry.ts";
 import { runExperimentalFeatureMigrations } from "./product/FeatureMigrations.ts";
+import * as InteractionModeRegistryService from "./product/InteractionModeRegistryService.ts";
 import { ExperimentalProviderRuntimeEventsLive } from "./product/ProviderRuntimeEvents.ts";
 import {
   clearPersistedServerRuntimeState,
@@ -302,6 +303,12 @@ const makeRuntimeCoreDependenciesLive = <const ProductEntry extends Experimental
 ) => {
   const persistenceLayer = makePersistenceLayerLive(productEntry.composition);
   const authLayer = makeAuthLayerLive(persistenceLayer);
+  const interactionModeRegistryLayer = InteractionModeRegistryService.layer(
+    productEntry.composition.interactionModeRegistry,
+  );
+  const providerRuntimeWithInteractionModesLayer = ProviderRuntimeWithEventsLayerLive.pipe(
+    Layer.provide(interactionModeRegistryLayer),
+  );
 
   return ReactorLayerLive.pipe(
     // Core Services
@@ -309,7 +316,7 @@ const makeRuntimeCoreDependenciesLive = <const ProductEntry extends Experimental
     Layer.provideMerge(SourceControlProviderRegistryLayerLive),
     Layer.provideMerge(GitLayerLive),
     Layer.provideMerge(VcsLayerLive),
-    Layer.provideMerge(ProviderRuntimeWithEventsLayerLive),
+    Layer.provideMerge(providerRuntimeWithInteractionModesLayer),
     Layer.provideMerge(Layer.mergeAll(TerminalLayerLive, PreviewLayerLive)),
     Layer.provideMerge(persistenceLayer),
     Layer.provideMerge(Keybindings.layer),
