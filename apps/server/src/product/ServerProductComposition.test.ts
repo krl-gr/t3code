@@ -4,6 +4,7 @@ import * as Layer from "effect/Layer";
 import * as Rpc from "effect/unstable/rpc/Rpc";
 import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 import * as Schema from "effect/Schema";
+import { InteractionModeRegistryError } from "@t3tools/shared/interactionMode";
 
 import {
   CORE_SERVER_PRODUCT_COMPOSITION,
@@ -22,10 +23,13 @@ const CompositionTestRpc = Rpc.make("upcomputer.tasks.ping", {
 const CompositionTestRpcGroup = RpcGroup.make(CompositionTestRpc);
 
 describe("server product composition", () => {
-  it("keeps the public core server composition empty", () => {
+  it("keeps the public core features empty and exposes built-in interaction modes", () => {
     expect(CORE_SERVER_PRODUCT_COMPOSITION.features).toEqual([]);
     expect(CORE_SERVER_PRODUCT_COMPOSITION.diagnostics).toEqual([]);
     expect(CORE_SERVER_PRODUCT_COMPOSITION.migrations).toEqual([]);
+    expect(
+      CORE_SERVER_PRODUCT_COMPOSITION.interactionModeRegistry.snapshot().map((mode) => mode.id),
+    ).toEqual(["ask", "default", "plan"]);
     expect(CORE_SERVER_PRODUCT_ENTRY.composition).toBe(CORE_SERVER_PRODUCT_COMPOSITION);
     expect(CORE_SERVER_PRODUCT_ENTRY.manifest.id).toBe("upcomputer");
   });
@@ -49,6 +53,7 @@ describe("server product composition", () => {
         layers: 0,
         migrationNamespaces: 0,
         rpcNamespaces: 0,
+        interactionModes: 0,
       },
       {
         id: "upcomputer.tasks",
@@ -56,6 +61,7 @@ describe("server product composition", () => {
         layers: 0,
         migrationNamespaces: 0,
         rpcNamespaces: 0,
+        interactionModes: 0,
       },
     ]);
   });
@@ -86,6 +92,32 @@ describe("server product composition", () => {
           }),
         ),
     });
+    const taskReviewMode = {
+      descriptor: {
+        id: "task-review",
+        ownerId: "upcomputer.tasks",
+        version: 1,
+        displayName: "Task Review",
+        description: "Review task state without implementing changes.",
+        intent: "answer",
+        safety: {
+          mutations: "deny",
+          sandbox: "read-only",
+          computerUse: "observe-only",
+        },
+        outputKind: "plain",
+        supportedProviders: ["codex"],
+        unsupportedProviderBehavior: "reject",
+        providerBehaviors: [
+          {
+            providerId: "codex",
+            collaborationMode: "default",
+            sandbox: "read-only",
+            developerInstructions: "Review task state without implementing changes.",
+          },
+        ],
+      },
+    } as const;
 
     const composition = createExperimentalServerProductComposition({
       features: [
@@ -95,6 +127,7 @@ describe("server product composition", () => {
           layers: [{ id: "tasks-runtime", ownerId: "upcomputer.tasks", version: 1, layer }],
           migrations: [migration],
           rpc: [rpc],
+          interactionModes: [taskReviewMode],
         },
       ],
     });
@@ -106,10 +139,14 @@ describe("server product composition", () => {
         layers: 1,
         migrationNamespaces: 1,
         rpcNamespaces: 1,
+        interactionModes: 1,
       },
     ]);
     expect(composition.migrations).toEqual([migration]);
     expect(composition.rpc).toEqual([rpc]);
+    const resolvedMode = composition.interactionModeRegistry.resolveOrThrow("task-review", "codex");
+    expect(resolvedMode.ownerId).toBe("upcomputer.tasks");
+    expect(resolvedMode.provider.sandbox).toBe("read-only");
   });
 
   it("rejects ambiguous server feature registrations", () => {
@@ -169,5 +206,83 @@ describe("server product composition", () => {
         ],
       }),
     ).toThrow(ServerProductCompositionInvariantError);
+
+    expect(() =>
+      createExperimentalServerProductComposition({
+        features: [
+          {
+            id: "upcomputer.tasks",
+            version: 1,
+            interactionModes: [
+              {
+                descriptor: {
+                  id: "task-review",
+                  ownerId: "upcomputer.other",
+                  version: 1,
+                  displayName: "Task Review",
+                  description: "Review task state without implementing changes.",
+                  intent: "answer",
+                  safety: {
+                    mutations: "deny",
+                    sandbox: "read-only",
+                    computerUse: "observe-only",
+                  },
+                  outputKind: "plain",
+                  supportedProviders: ["codex"],
+                  unsupportedProviderBehavior: "reject",
+                  providerBehaviors: [
+                    {
+                      providerId: "codex",
+                      collaborationMode: "default",
+                      sandbox: "read-only",
+                      developerInstructions: "Review only.",
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      }),
+    ).toThrow(ServerProductCompositionInvariantError);
+
+    expect(() =>
+      createExperimentalServerProductComposition({
+        features: [
+          {
+            id: "upcomputer.tasks",
+            version: 1,
+            interactionModes: [
+              {
+                descriptor: {
+                  id: "ask",
+                  ownerId: "upcomputer.tasks",
+                  version: 1,
+                  displayName: "Ask",
+                  description: "Duplicate the core Ask mode.",
+                  intent: "answer",
+                  safety: {
+                    mutations: "deny",
+                    sandbox: "read-only",
+                    computerUse: "observe-only",
+                  },
+                  outputKind: "plain",
+                  supportedProviders: ["codex"],
+                  unsupportedProviderBehavior: "reject",
+                  providerBehaviors: [
+                    {
+                      providerId: "codex",
+                      collaborationMode: "default",
+                      sandbox: "read-only",
+                      developerInstructions: "Review only.",
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      }),
+    ).toThrow(InteractionModeRegistryError);
   });
 });

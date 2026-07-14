@@ -4,7 +4,13 @@ import {
   createExperimentalFeatureMigrationPlan,
   type ExperimentalFeatureMigrationContribution,
 } from "./FeatureMigrations.ts";
+import { BUILT_IN_INTERACTION_MODE_REGISTRATIONS } from "./BuiltInInteractionModes.ts";
 import { createRpcContributionPlan, type AnyNamespacedRpcContribution } from "./RpcContribution.ts";
+import {
+  createExperimentalInteractionModeRegistry,
+  type ExperimentalInteractionModeRegistration,
+  type ExperimentalInteractionModeRegistry,
+} from "@t3tools/shared/interactionMode";
 
 const STABLE_ID = /^[a-z0-9]+(?:[._-][a-z0-9]+)*$/;
 const RESERVED_CORE_FEATURE_ID = "upcomputer.core";
@@ -38,6 +44,7 @@ export interface ExperimentalServerFeatureContribution<
   readonly layers?: ReadonlyArray<ExperimentalServerLayerContribution>;
   readonly migrations?: ReadonlyArray<ExperimentalFeatureMigrationContribution<Error>>;
   readonly rpc?: RpcContributions;
+  readonly interactionModes?: ReadonlyArray<ExperimentalInteractionModeRegistration>;
 }
 
 export type RpcContributionsOfFeature<Feature> = Feature extends {
@@ -58,6 +65,7 @@ export interface ExperimentalServerFeatureDiagnostic {
   readonly layers: number;
   readonly migrationNamespaces: number;
   readonly rpcNamespaces: number;
+  readonly interactionModes: number;
 }
 
 export interface ExperimentalServerProductComposition<
@@ -69,6 +77,7 @@ export interface ExperimentalServerProductComposition<
   readonly featureLayer: ExperimentalOpaqueServerLayer;
   readonly migrations: ReadonlyArray<ExperimentalFeatureMigrationContribution<Error>>;
   readonly rpc: ReadonlyArray<RpcContributionsOfFeatures<Features>>;
+  readonly interactionModeRegistry: ExperimentalInteractionModeRegistry;
 }
 
 export class ServerProductCompositionInvariantError extends Error {
@@ -178,6 +187,7 @@ export function createExperimentalServerProductComposition<
   const layers: ExperimentalServerLayerContribution[] = [];
   const migrations: ExperimentalFeatureMigrationContribution<Error>[] = [];
   const rpc: AnyNamespacedRpcContribution[] = [];
+  const interactionModes: ExperimentalInteractionModeRegistration[] = [];
   const features = [...(input.features ?? [])]
     .map((feature) => defineExperimentalServerFeature(feature))
     .sort((left, right) => left.id.localeCompare(right.id));
@@ -215,6 +225,11 @@ export function createExperimentalServerProductComposition<
       assertOwner(feature.id, contribution.ownerId, "RPC contribution");
       rpc.push(contribution);
     }
+
+    for (const registration of feature.interactionModes ?? []) {
+      assertOwner(feature.id, registration.descriptor.ownerId, "Interaction-mode contribution");
+      interactionModes.push(registration);
+    }
   }
 
   const orderedLayers = layers.sort(
@@ -224,21 +239,27 @@ export function createExperimentalServerProductComposition<
   const orderedRpc = createRpcContributionPlan(
     rpc as unknown as ReadonlyArray<RpcContributionsOfFeatures<Features>>,
   );
+  const interactionModeRegistry = createExperimentalInteractionModeRegistry([
+    ...BUILT_IN_INTERACTION_MODE_REGISTRATIONS,
+    ...interactionModes,
+  ]);
 
   return Object.freeze({
     features: Object.freeze(features),
     diagnostics: Object.freeze(
-      features.map(({ id, version, layers, migrations }) => ({
+      features.map(({ id, version, layers, migrations, rpc, interactionModes }) => ({
         id,
         version,
         layers: layers?.length ?? 0,
         migrationNamespaces: migrations?.length ?? 0,
         rpcNamespaces: rpc?.length ?? 0,
+        interactionModes: interactionModes?.length ?? 0,
       })),
     ),
     featureLayer: mergeFeatureLayers(orderedLayers),
     migrations: Object.freeze([...migrations]),
     rpc: Object.freeze([...orderedRpc]),
+    interactionModeRegistry,
   });
 }
 
