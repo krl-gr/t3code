@@ -1,4 +1,4 @@
-import { Outlet, createFileRoute, redirect } from "@tanstack/react-router";
+import { Outlet, createFileRoute, redirect, useLocation, useParams } from "@tanstack/react-router";
 import { useAtomValue } from "@effect/atom-react";
 import { useEffect } from "react";
 
@@ -6,8 +6,8 @@ import { isCommandPaletteOpen } from "../commandPaletteContext";
 import { dispatchPreviewAction } from "../components/preview/previewActionBus";
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
 import {
-  startNewLocalThreadFromContext,
-  startNewThreadFromContext,
+  startNewLocalThreadInWorkspacePanelFromContext,
+  startNewThreadInWorkspacePanelFromContext,
 } from "../lib/chatThreadActions";
 import { isPreviewFocused } from "../lib/previewFocus";
 import { isTerminalFocused } from "../lib/terminalFocus";
@@ -18,6 +18,16 @@ import { selectActiveRightPanel, useRightPanelStore } from "../rightPanelStore";
 import { useThreadSelectionStore } from "../threadSelectionStore";
 import { stackedThreadToast, toastManager } from "~/components/ui/toast";
 import { primaryServerKeybindingsAtom } from "~/state/server";
+import {
+  ChatWorkspace,
+  type ChatWorkspaceRouteTarget,
+} from "../components/workspace/ChatWorkspace";
+import { DraftId, useComposerDraftStore } from "../composerDraftStore";
+import { resolveThreadRouteTarget } from "../threadRoutes";
+import { useThreadDetail, useThreadShell } from "../state/entities";
+import { useEnvironmentQuery } from "../state/query";
+import { environmentShell } from "../state/shell";
+import { useEnvironments } from "../state/environments";
 
 function ChatRouteGlobalShortcuts() {
   const clearSelection = useThreadSelectionStore((state) => state.clearSelection);
@@ -63,7 +73,7 @@ function ChatRouteGlobalShortcuts() {
       if (command === "chat.newLocal") {
         event.preventDefault();
         event.stopPropagation();
-        void startNewLocalThreadFromContext({
+        void startNewLocalThreadInWorkspacePanelFromContext({
           activeDraftThread,
           activeThread: activeThread ?? undefined,
           defaultProjectRef,
@@ -75,7 +85,7 @@ function ChatRouteGlobalShortcuts() {
       if (command === "chat.new") {
         event.preventDefault();
         event.stopPropagation();
-        void startNewThreadFromContext({
+        void startNewThreadInWorkspacePanelFromContext({
           activeDraftThread,
           activeThread: activeThread ?? undefined,
           defaultProjectRef,
@@ -148,11 +158,70 @@ function ChatRouteGlobalShortcuts() {
   return null;
 }
 
+function useChatWorkspaceRouteTarget(): ChatWorkspaceRouteTarget | null {
+  const routeTarget = useParams({
+    strict: false,
+    select: (params) => resolveThreadRouteTarget(params),
+  });
+  const serverRef = routeTarget?.kind === "server" ? routeTarget.threadRef : null;
+  const shell = useEnvironmentQuery(
+    serverRef === null ? null : environmentShell.stateAtom(serverRef.environmentId),
+  );
+  const serverShell = useThreadShell(serverRef);
+  const serverDetail = useThreadDetail(serverRef);
+  const draftId = routeTarget?.kind === "draft" ? DraftId.make(routeTarget.draftId) : null;
+  const draftSession = useComposerDraftStore((store) =>
+    draftId ? store.getDraftSession(draftId) : null,
+  );
+  const serverDraft = useComposerDraftStore((store) =>
+    serverRef ? store.getDraftThreadByRef(serverRef) : null,
+  );
+
+  if (routeTarget?.kind === "server" && serverRef) {
+    const bootstrapComplete = shell.data?.snapshot._tag === "Some";
+    if (!bootstrapComplete || (!serverShell && !serverDetail && !serverDraft)) return null;
+    return { target: { kind: "thread", ref: serverRef } };
+  }
+
+  if (routeTarget?.kind === "draft" && draftId && draftSession) {
+    return {
+      target: {
+        kind: "draft",
+        draftId,
+        ref: {
+          environmentId: draftSession.environmentId,
+          threadId: draftSession.threadId,
+        },
+      },
+    };
+  }
+
+  return null;
+}
+
 function ChatRouteLayout() {
+  const routeTarget = useChatWorkspaceRouteTarget();
+  const { authGateState } = Route.useRouteContext();
+  const pathname = useLocation({ select: (location) => location.pathname });
+  const { environments } = useEnvironments();
+  const showHostedStaticOnboarding =
+    authGateState.status === "hosted-static" && environments.length === 0 && pathname === "/";
+
+  if (showHostedStaticOnboarding) {
+    return (
+      <>
+        <ChatRouteGlobalShortcuts />
+        <Outlet />
+      </>
+    );
+  }
+
   return (
     <>
       <ChatRouteGlobalShortcuts />
-      <Outlet />
+      <ChatWorkspace routeTarget={routeTarget}>
+        <Outlet />
+      </ChatWorkspace>
     </>
   );
 }

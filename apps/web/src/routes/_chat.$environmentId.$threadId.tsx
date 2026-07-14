@@ -1,11 +1,9 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 
-import ChatView from "../components/ChatView";
 import { threadHasStarted } from "../components/ChatView.logic";
 import { finalizePromotedDraftThreadByRef, useComposerDraftStore } from "../composerDraftStore";
 import { resolveThreadRouteRef } from "../threadRoutes";
-import { SidebarInset } from "~/components/ui/sidebar";
 import { useEnvironmentThreadRefs, useThreadDetail, useThreadShell } from "../state/entities";
 import { useEnvironmentQuery } from "../state/query";
 import { environmentShell } from "../state/shell";
@@ -61,15 +59,7 @@ function ChatThreadRouteView() {
     return null;
   }
 
-  return (
-    <SidebarInset className="h-svh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground md:h-dvh">
-      <ChatView
-        environmentId={threadRef.environmentId}
-        threadId={threadRef.threadId}
-        routeKind="server"
-      />
-    </SidebarInset>
-  );
+  return null;
 }
 
 export const Route = createFileRoute("/_chat/$environmentId/$threadId")({

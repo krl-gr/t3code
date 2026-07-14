@@ -1,6 +1,7 @@
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import type { EnvironmentId, ProjectId, ScopedProjectRef } from "@t3tools/contracts";
 import type { DraftThreadEnvMode } from "../composerDraftStore";
+import { createChatWorkspaceDraftThread } from "../workspace/chatWorkspaceController";
 
 interface ThreadContextLike {
   environmentId: EnvironmentId;
@@ -22,8 +23,27 @@ interface NewThreadHandler {
       worktreePath?: string | null;
       envMode?: DraftThreadEnvMode;
       startFromOrigin?: boolean;
+      forceNewDraft?: boolean;
     },
   ): Promise<void>;
+}
+
+async function startNewThreadInWorkspacePanel(
+  context: ChatThreadActionContext,
+  options: NewThreadOptions,
+): Promise<boolean> {
+  const projectRef = resolveThreadActionProjectRef(context);
+  if (!projectRef) return false;
+
+  const created = createChatWorkspaceDraftThread({
+    projectRef,
+    disposition: "new-panel",
+    options,
+  });
+  if (created) return true;
+
+  await context.handleNewThread(projectRef, { ...options, forceNewDraft: true });
+  return true;
 }
 
 type NewThreadOptions = NonNullable<Parameters<NewThreadHandler>[1]>;
@@ -88,6 +108,18 @@ export async function startNewThreadFromContext(
 
   await startNewThreadInProjectFromContext(context, projectRef);
   return true;
+}
+
+export function startNewThreadInWorkspacePanelFromContext(
+  context: ChatThreadActionContext,
+): Promise<boolean> {
+  return startNewThreadInWorkspacePanel(context, buildContextualThreadOptions(context));
+}
+
+export function startNewLocalThreadInWorkspacePanelFromContext(
+  context: ChatThreadActionContext,
+): Promise<boolean> {
+  return startNewThreadInWorkspacePanel(context, {});
 }
 
 export async function startNewLocalThreadFromContext(

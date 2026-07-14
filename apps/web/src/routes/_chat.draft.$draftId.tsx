@@ -1,13 +1,11 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
-import ChatView from "../components/ChatView";
 import { threadHasStarted } from "../components/ChatView.logic";
 import {
   DraftId,
   markPromotedDraftThreadByRef,
   useComposerDraftStore,
 } from "../composerDraftStore";
-import { SidebarInset } from "../components/ui/sidebar";
 import { buildThreadRouteParams } from "../threadRoutes";
 import { useThread, useThreadRefs } from "../state/entities";
 
@@ -55,31 +53,14 @@ function DraftChatThreadRouteView() {
   }, [canonicalThreadRef, draftSession, navigate]);
 
   if (canonicalThreadRef) {
-    return (
-      <SidebarInset className="h-svh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground md:h-dvh">
-        <ChatView
-          environmentId={canonicalThreadRef.environmentId}
-          threadId={canonicalThreadRef.threadId}
-          routeKind="server"
-        />
-      </SidebarInset>
-    );
+    return null;
   }
 
   if (!draftSession) {
     return null;
   }
 
-  return (
-    <SidebarInset className="h-svh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground md:h-dvh">
-      <ChatView
-        draftId={draftId}
-        environmentId={draftSession.environmentId}
-        threadId={draftSession.threadId}
-        routeKind="draft"
-      />
-    </SidebarInset>
-  );
+  return null;
 }
 
 export const Route = createFileRoute("/_chat/draft/$draftId")({

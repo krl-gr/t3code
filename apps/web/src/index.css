@@ -1,8 +1,10 @@
+@import "dockview/dist/styles/dockview.css";
 @import "tailwindcss";
 
 @custom-variant dark (&:is(.dark, .dark *));
 /* Window Controls Overlay: active when Electron exposes native titlebar control geometry. */
 @custom-variant wco (&:is(.wco, .wco *));
+@custom-variant wco-windows (&:is(.wco-windows, .wco-windows *));
 
 :root {
   --app-scrollbar-width: 6px;
@@ -346,6 +348,168 @@ body {
 body {
   height: 100%;
   overflow: hidden;
+}
+
+.t3code-dockview-theme {
+  --dv-active-sash-color: color-mix(in srgb, var(--ring) 55%, transparent);
+  --dv-active-sash-transition-delay: 0s;
+  --dv-active-sash-transition-duration: 0.08s;
+  --dv-drag-over-background-color: color-mix(in srgb, var(--primary) 18%, transparent);
+  --dv-drag-over-border-color: color-mix(in srgb, var(--primary) 42%, transparent);
+  --dv-group-view-background-color: transparent;
+  --dv-icon-hover-background-color: var(--accent);
+  --dv-inactivegroup-hiddenpanel-tab-background-color: transparent;
+  --dv-inactivegroup-hiddenpanel-tab-color: #bab9ba;
+  --dv-inactivegroup-visiblepanel-tab-background-color: transparent;
+  --dv-inactivegroup-visiblepanel-tab-color: #bab9ba;
+  --dv-paneview-active-outline-color: color-mix(in srgb, var(--ring) 55%, transparent);
+  --dv-paneview-header-border-color: transparent;
+  --dv-sash-color: transparent;
+  --dv-scrollbar-background-color: color-mix(in srgb, var(--foreground) 28%, transparent);
+  --dv-separator-border: var(--border);
+  --dv-tab-border-radius: 0;
+  --dv-tab-divider-color: #2b2b2c;
+  --dv-tab-font-size: 14px;
+  --dv-tab-margin: 0;
+  --dv-tabs-and-actions-container-background-color: transparent;
+  --dv-tabs-and-actions-container-font-size: 14px;
+  --dv-tabs-and-actions-container-height: 48px;
+  --dv-tabs-container-scrollbar-color: var(--border);
+  --dv-activegroup-hiddenpanel-tab-background-color: transparent;
+  --dv-activegroup-hiddenpanel-tab-color: #bab9ba;
+  --dv-activegroup-visiblepanel-tab-background-color: transparent;
+  --dv-activegroup-visiblepanel-tab-color: #bab9ba;
+  background: transparent;
+  color: var(--foreground);
+  font-family: inherit;
+}
+
+.t3code-dockview-theme .dv-tabs-and-actions-container {
+  border-bottom: 0;
+}
+
+.wco-windows .t3code-dockview-theme {
+  --dv-tabs-and-actions-container-height: env(titlebar-area-height);
+}
+
+.electron .t3code-dockview-theme .dv-tabs-and-actions-container {
+  -webkit-app-region: drag;
+}
+
+.t3code-dockview-theme .dv-pre-actions-container,
+.t3code-dockview-theme .dv-left-actions-container,
+.t3code-dockview-theme .dv-right-actions-container {
+  display: flex;
+  flex-shrink: 0;
+}
+
+.electron .t3code-dockview-theme .dv-tab,
+.electron .t3code-dockview-theme button {
+  -webkit-app-region: no-drag;
+}
+
+.t3code-dockview-theme .dv-scrollable {
+  box-sizing: border-box;
+  flex-shrink: 1;
+  min-width: 0;
+  padding-left: 8px;
+}
+
+.t3code-dockview-theme .dv-scrollable .dv-scrollbar-horizontal {
+  display: none;
+}
+
+.t3code-dockview-theme .dv-tabs-container {
+  align-items: flex-start;
+  gap: 2px;
+  overflow: hidden;
+  scrollbar-width: none;
+}
+
+.t3code-dockview-theme .dv-tabs-container::-webkit-scrollbar {
+  display: none;
+}
+
+.t3code-dockview-theme .dv-tab {
+  box-sizing: border-box;
+  flex: 0 0 auto;
+  height: 48px;
+  letter-spacing: 0;
+  max-width: none;
+  min-width: 96px;
+  overflow: visible;
+  padding: 8px 0;
+  width: max-content;
+}
+
+.wco-windows .t3code-dockview-theme .dv-tab {
+  height: env(titlebar-area-height);
+  padding: 4px 0;
+}
+
+.t3code-dockview-theme .dv-tabs-container[data-tab-sizing="fill"] .dv-tab {
+  flex: 1 1 0;
+  width: auto;
+}
+
+.t3code-dockview-theme .dv-tab.dv-active-tab {
+  box-shadow: none;
+}
+
+.t3code-dockview-theme .dv-tabs-and-actions-container.dv-single-tab .t3-workspace-tab {
+  background: transparent;
+  border-color: transparent;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.t3code-dockview-theme .dv-tabs-and-actions-container.dv-single-tab .dv-tab {
+  flex: 1 1 auto;
+  max-width: none;
+  width: auto;
+}
+
+.t3code-dockview-theme .dv-tabs-and-actions-container.dv-single-tab .dv-tab:focus::after,
+.t3code-dockview-theme .dv-tabs-and-actions-container.dv-single-tab .dv-tab:focus-within::after {
+  display: none;
+}
+
+.t3code-dockview-theme .dv-tabs-and-actions-container.dv-single-tab .t3-workspace-tab-close {
+  display: none;
+}
+
+.t3code-dockview-theme .dv-tab:focus::after,
+.t3code-dockview-theme .dv-tab:focus-within::after {
+  border-radius: 8px;
+  height: 32px;
+  top: 8px;
+}
+
+.t3code-dockview-theme .dv-tabs-container.dv-horizontal .dv-tab:not(:first-child)::before {
+  background-color: #2b2b2c;
+  height: 12px;
+  top: 18px;
+}
+
+.t3code-dockview-theme .dv-tabs-container.dv-horizontal .dv-tab.dv-active-tab::before,
+.t3code-dockview-theme .dv-tabs-container.dv-horizontal .dv-tab.dv-active-tab + .dv-tab::before {
+  display: none;
+}
+
+.t3code-dockview-theme .dv-void-container {
+  min-width: 12px;
+}
+
+.electron .t3code-dockview-theme .dv-void-container {
+  pointer-events: none;
+}
+
+.t3code-dockview-theme .t3-workspace-tab {
+  font-family: Inter, sans-serif;
+}
+
+.t3code-dockview-theme .dv-view {
+  background: transparent;
 }
 
 .electron,

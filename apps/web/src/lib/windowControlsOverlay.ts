@@ -1,4 +1,5 @@
 const WCO_CLASS_NAME = "wco";
+const WCO_WINDOWS_CLASS_NAME = "wco-windows";
 
 interface WindowControlsOverlayLike {
   readonly visible: boolean;
@@ -24,8 +25,11 @@ export function syncDocumentWindowControlsOverlayClass(): () => void {
   }
 
   const overlay = getWindowControlsOverlay();
+  const isWindows = /^win(dows)?/i.test(navigator.platform);
   const update = () => {
-    document.documentElement.classList.toggle(WCO_CLASS_NAME, overlay !== null && overlay.visible);
+    const visible = overlay !== null && overlay.visible;
+    document.documentElement.classList.toggle(WCO_CLASS_NAME, visible);
+    document.documentElement.classList.toggle(WCO_WINDOWS_CLASS_NAME, visible && isWindows);
   };
 
   update();

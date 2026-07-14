@@ -566,6 +566,9 @@ importers:
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
+      dockview:
+        specifier: 6.6.1
+        version: 6.6.1(react@19.2.6)
       effect:
         specifier: 4.0.0-beta.78
         version: 4.0.0-beta.78(patch_hash=c502bc684210b707dfceb87d8fe6ad6843395af6e19cfc02cd65854898bde2c5)
@@ -6151,6 +6154,14 @@ packages:
 
   dnssd-advertise@1.1.4:
     resolution: {integrity: sha512-AmGyK9WpNf06WeP5TjHZq/wNzP76OuEeaiTlKr9E/EEelYLczywUKoqRz+DPRq/ErssjT4lU+/W7wzJW+7K/ZA==}
+
+  dockview-core@6.6.1:
+    resolution: {integrity: sha512-WuNoO2wl3rGI8MaTuvmfgViek4WafHLD9Kf//Hw69g8TgAHSpAWr6RW15kU6U9vwtQxIi/YBxQNcIA5RzQ46Fw==}
+
+  dockview@6.6.1:
+    resolution: {integrity: sha512-vBnxWVk0f665z1Zyx598l/BMUjHD3SK5V4XorxpYGjaSREM8lLc8O6ylgKTtw+ZnCOMYOhcwov9x0ubfFazvMw==}
+    peerDependencies:
+      react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
 
   dom-accessibility-api@0.5.16:
     resolution: {integrity: sha512-X7BJ2yElsnOJ30pZF4uIIDfBEVgF4XEBxL9Bxhy6dnrm5hkzqmsWHGTiHqRiITNhMyFLyAiWndIJP7Z1NTteDg==}
@@ -16319,6 +16330,13 @@ snapshots:
       - supports-color
 
   dnssd-advertise@1.1.4: {}
+
+  dockview-core@6.6.1: {}
+
+  dockview@6.6.1(react@19.2.6):
+    dependencies:
+      dockview-core: 6.6.1
+      react: 19.2.6
 
   dom-accessibility-api@0.5.16: {}
 
