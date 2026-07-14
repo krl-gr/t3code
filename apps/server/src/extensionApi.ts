@@ -2,11 +2,12 @@
  * Experimental public build-time server product API.
  *
  * This B3 boundary exposes product composition, server CLI assembly, feature
- * runtime layers, feature migrations, feature interaction modes, and selected
- * service tags needed by first-party private products. HTTP routes and dynamic
- * tools are intentionally deferred.
+ * runtime layers, feature migrations, feature interaction modes, HTTP routes,
+ * dynamic tools, and selected service tags needed by first-party private products.
  */
+export * from "./product/DynamicToolRegistry.ts";
 export * from "./product/FeatureMigrations.ts";
+export * from "./product/HttpRouteContribution.ts";
 export * from "./product/InteractionModeRegistryService.ts";
 export * from "./product/ProviderRuntimeEvents.ts";
 export * from "./product/RpcContribution.ts";

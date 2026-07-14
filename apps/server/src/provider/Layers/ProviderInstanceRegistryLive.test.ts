@@ -40,14 +40,31 @@ import { HttpClient, HttpClientResponse } from "effect/unstable/http";
 
 import { ServerConfig } from "../../config.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
-import { ClaudeDriver } from "../Drivers/ClaudeDriver.ts";
-import { CodexDriver } from "../Drivers/CodexDriver.ts";
-import { CursorDriver } from "../Drivers/CursorDriver.ts";
-import { GrokDriver } from "../Drivers/GrokDriver.ts";
-import { OpenCodeDriver } from "../Drivers/OpenCodeDriver.ts";
+import { ClaudeDriver, type ClaudeDriverEnv } from "../Drivers/ClaudeDriver.ts";
+import { CodexDriver, type CodexDriverEnv } from "../Drivers/CodexDriver.ts";
+import { CursorDriver, type CursorDriverEnv } from "../Drivers/CursorDriver.ts";
+import { GrokDriver, type GrokDriverEnv } from "../Drivers/GrokDriver.ts";
+import { OpenCodeDriver, type OpenCodeDriverEnv } from "../Drivers/OpenCodeDriver.ts";
 import { OpenCodeRuntimeLive } from "../opencodeRuntime.ts";
+import { ExperimentalDynamicToolRegistryEmpty } from "../../product/DynamicToolRegistry.ts";
 import { NoOpProviderEventLoggers, ProviderEventLoggers } from "./ProviderEventLoggers.ts";
 import { makeProviderInstanceRegistry } from "./ProviderInstanceRegistryLive.ts";
+import type { AnyProviderDriver } from "../ProviderDriver.ts";
+
+type AllDriverEnv =
+  | ClaudeDriverEnv
+  | CodexDriverEnv
+  | CursorDriverEnv
+  | GrokDriverEnv
+  | OpenCodeDriverEnv;
+
+const ALL_DRIVERS = [
+  CodexDriver,
+  ClaudeDriver,
+  CursorDriver,
+  GrokDriver,
+  OpenCodeDriver,
+] as ReadonlyArray<AnyProviderDriver<AllDriverEnv>>;
 
 const TestHttpClientLive = Layer.succeed(
   HttpClient.HttpClient,
@@ -109,6 +126,7 @@ describe("ProviderInstanceRegistryLive — multi-instance codex slice", () => {
   }).pipe(
     Layer.provideMerge(NodeServices.layer),
     Layer.provideMerge(ServerSettingsService.layerTest()),
+    Layer.provideMerge(ExperimentalDynamicToolRegistryEmpty),
     Layer.provideMerge(TestHttpClientLive),
     Layer.provideMerge(Layer.succeed(ProviderEventLoggers, NoOpProviderEventLoggers)),
   );
@@ -247,6 +265,7 @@ describe("ProviderInstanceRegistryLive — all drivers slice", () => {
   }).pipe(
     Layer.provideMerge(infraLayer),
     Layer.provideMerge(ServerSettingsService.layerTest()),
+    Layer.provideMerge(ExperimentalDynamicToolRegistryEmpty),
     Layer.provideMerge(TestHttpClientLive),
     Layer.provideMerge(Layer.succeed(ProviderEventLoggers, NoOpProviderEventLoggers)),
   );
@@ -302,7 +321,7 @@ describe("ProviderInstanceRegistryLive — all drivers slice", () => {
       };
 
       const { registry } = yield* makeProviderInstanceRegistry({
-        drivers: [CodexDriver, ClaudeDriver, CursorDriver, GrokDriver, OpenCodeDriver],
+        drivers: ALL_DRIVERS,
         configMap,
       });
 

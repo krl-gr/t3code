@@ -38,10 +38,21 @@ import * as EffectCodexSchema from "effect-codex-app-server/schema";
 
 import { buildCodexInitializeParams } from "./CodexProvider.ts";
 import { expandHomePath } from "../../pathExpansion.ts";
+import type {
+  ExperimentalDynamicToolLease,
+  ExperimentalDynamicToolRegistry,
+  ExperimentalDynamicToolSpec,
+} from "../../product/DynamicToolRegistry.ts";
 import {
   CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS,
   CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS,
 } from "../CodexDeveloperInstructions.ts";
+const decodeV2ThreadResumeResponse = Schema.decodeUnknownEffect(
+  EffectCodexSchema.V2ThreadResumeResponse,
+);
+const decodeV2ThreadStartResponse = Schema.decodeUnknownEffect(
+  EffectCodexSchema.V2ThreadStartResponse,
+);
 const decodeV2TurnStartResponse = Schema.decodeUnknownEffect(EffectCodexSchema.V2TurnStartResponse);
 
 const PROVIDER = ProviderDriverKind.make("codex");
@@ -92,6 +103,13 @@ export type CodexTurnStartParamsWithCollaborationMode =
 
 export type CodexResumeCursor = typeof CodexResumeCursorSchema.Type;
 type CodexServiceTier = NonNullable<EffectCodexSchema.V2ThreadStartParams["serviceTier"]>;
+type CodexDynamicToolSpec = ExperimentalDynamicToolSpec;
+type CodexThreadStartParamsWithDynamicTools = EffectCodexSchema.V2ThreadStartParams & {
+  readonly dynamicTools?: ReadonlyArray<CodexDynamicToolSpec>;
+};
+type CodexThreadResumeParamsWithDynamicTools = EffectCodexSchema.V2ThreadResumeParams & {
+  readonly dynamicTools?: ReadonlyArray<CodexDynamicToolSpec>;
+};
 type CodexThreadItem =
   | EffectCodexSchema.V2ThreadReadResponse["thread"]["turns"][number]["items"][number]
   | EffectCodexSchema.V2ThreadRollbackResponse["thread"]["turns"][number]["items"][number];
@@ -108,6 +126,7 @@ export interface CodexSessionRuntimeOptions {
   readonly serviceTier?: CodexServiceTier | undefined;
   readonly resumeCursor?: CodexResumeCursor;
   readonly appServerArgs?: ReadonlyArray<string>;
+  readonly dynamicToolRegistry?: ExperimentalDynamicToolRegistry<never, never>;
 }
 
 export interface CodexSessionRuntimeSendTurnInput {
@@ -121,6 +140,7 @@ export interface CodexSessionRuntimeSendTurnInput {
   readonly effort?: EffectCodexSchema.V2TurnStartParams__ReasoningEffort | undefined;
   readonly interactionMode?: ProviderInteractionMode;
   readonly interactionModeSandbox?: InteractionModeSandboxPolicy;
+  readonly mutationPolicy?: "allow" | "deny";
   readonly collaborationMode?: CodexSessionRuntimeCollaborationModeInput;
 }
 
@@ -236,6 +256,11 @@ interface PendingUserInput {
   readonly answers: Deferred.Deferred<ProviderUserInputAnswers>;
 }
 
+interface TurnDynamicToolPolicy {
+  readonly mutationPolicy: "allow" | "deny";
+  readonly interactionMode?: ProviderInteractionMode;
+}
+
 type CodexServerNotification = {
   readonly [M in CodexRpc.ServerNotificationMethod]: {
     readonly method: M;
@@ -248,6 +273,10 @@ function makeCodexServerNotification<M extends CodexRpc.ServerNotificationMethod
   params: CodexRpc.ServerNotificationParamsByMethod[M],
 ): CodexServerNotification {
   return { method, params } as CodexServerNotification;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 function normalizeCodexModelSlug(
@@ -299,7 +328,8 @@ function buildThreadStartParams(input: {
   readonly runtimeMode: RuntimeMode;
   readonly model: string | undefined;
   readonly serviceTier: CodexServiceTier | undefined;
-}): EffectCodexSchema.V2ThreadStartParams {
+  readonly dynamicTools?: ReadonlyArray<CodexDynamicToolSpec>;
+}): CodexThreadStartParamsWithDynamicTools {
   const config = runtimeModeToThreadConfig(input.runtimeMode);
   return {
     cwd: input.cwd,
@@ -307,6 +337,9 @@ function buildThreadStartParams(input: {
     sandbox: config.sandbox,
     ...(input.model ? { model: input.model } : {}),
     ...(input.serviceTier ? { serviceTier: input.serviceTier } : {}),
+    ...(input.dynamicTools && input.dynamicTools.length > 0
+      ? { dynamicTools: input.dynamicTools }
+      : {}),
   };
 }
 
@@ -473,6 +506,12 @@ interface CodexThreadOpenClient {
     method: M,
     payload: CodexRpc.ClientRequestParamsByMethod[M],
   ) => Effect.Effect<CodexRpc.ClientRequestResponsesByMethod[M], CodexErrors.CodexAppServerError>;
+  readonly raw?: {
+    readonly request: (
+      method: CodexThreadOpenMethod,
+      payload: CodexThreadStartParamsWithDynamicTools | CodexThreadResumeParamsWithDynamicTools,
+    ) => Effect.Effect<unknown, CodexErrors.CodexAppServerError>;
+  };
 }
 
 export const openCodexThread = (input: {
@@ -483,35 +522,75 @@ export const openCodexThread = (input: {
   readonly requestedModel: string | undefined;
   readonly serviceTier: CodexServiceTier | undefined;
   readonly resumeThreadId: string | undefined;
+  readonly dynamicTools?: ReadonlyArray<CodexDynamicToolSpec>;
 }): Effect.Effect<CodexThreadOpenResponse, CodexErrors.CodexAppServerError> => {
   const resumeThreadId = input.resumeThreadId;
+  const hasDynamicTools = input.dynamicTools !== undefined && input.dynamicTools.length > 0;
   const startParams = buildThreadStartParams({
     cwd: input.cwd,
     runtimeMode: input.runtimeMode,
     model: input.requestedModel,
     serviceTier: input.serviceTier,
+    ...(input.dynamicTools ? { dynamicTools: input.dynamicTools } : {}),
   });
+  const decodeThreadStart = (raw: unknown) =>
+    decodeV2ThreadStartResponse(raw).pipe(
+      Effect.mapError((error) =>
+        CodexErrors.CodexAppServerProtocolParseError.fromSchemaError(
+          "decode-response-payload",
+          error,
+          { method: "thread/start" },
+        ),
+      ),
+    );
+  const decodeThreadResume = (raw: unknown) =>
+    decodeV2ThreadResumeResponse(raw).pipe(
+      Effect.mapError((error) =>
+        CodexErrors.CodexAppServerProtocolParseError.fromSchemaError(
+          "decode-response-payload",
+          error,
+          { method: "thread/resume" },
+        ),
+      ),
+    );
 
   if (resumeThreadId === undefined) {
+    if (hasDynamicTools && input.client.raw !== undefined) {
+      return input.client.raw
+        .request("thread/start", startParams)
+        .pipe(Effect.flatMap(decodeThreadStart));
+    }
     return input.client.request("thread/start", startParams);
   }
 
-  return input.client
-    .request("thread/resume", {
-      threadId: resumeThreadId,
-      ...startParams,
-    })
-    .pipe(
-      Effect.catchIf(isRecoverableThreadResumeError, (error) =>
-        Effect.logWarning("codex app-server thread resume fell back to fresh start", {
-          threadId: input.threadId,
-          requestedRuntimeMode: input.runtimeMode,
-          resumeThreadId,
-          recoverable: true,
-          cause: error,
-        }).pipe(Effect.andThen(input.client.request("thread/start", startParams))),
-      ),
-    );
+  const resumeParams = {
+    threadId: resumeThreadId,
+    ...startParams,
+  } satisfies CodexThreadResumeParamsWithDynamicTools;
+  const resume =
+    hasDynamicTools && input.client.raw !== undefined
+      ? input.client.raw
+          .request("thread/resume", resumeParams)
+          .pipe(Effect.flatMap(decodeThreadResume))
+      : input.client.request("thread/resume", resumeParams);
+  const restart =
+    hasDynamicTools && input.client.raw !== undefined
+      ? input.client.raw
+          .request("thread/start", startParams)
+          .pipe(Effect.flatMap(decodeThreadStart))
+      : input.client.request("thread/start", startParams);
+
+  return resume.pipe(
+    Effect.catchIf(isRecoverableThreadResumeError, (error) =>
+      Effect.logWarning("codex app-server thread resume fell back to fresh start", {
+        threadId: input.threadId,
+        requestedRuntimeMode: input.runtimeMode,
+        resumeThreadId,
+        recoverable: true,
+        cause: error,
+      }).pipe(Effect.andThen(restart)),
+    ),
+  );
 };
 
 function readNotificationThreadId(notification: CodexServerNotification): string | undefined {
@@ -742,6 +821,10 @@ export const makeCodexSessionRuntime = (
     const events = yield* Queue.unbounded<ProviderEvent>();
     const pendingApprovalsRef = yield* Ref.make(new Map<ApprovalRequestId, PendingApproval>());
     const approvalCorrelationsRef = yield* Ref.make(new Map<string, ApprovalCorrelation>());
+    const dynamicToolLease: ExperimentalDynamicToolLease<never, never> | undefined =
+      options.dynamicToolRegistry?.lease();
+    const admittedDynamicToolsRef = yield* Ref.make(new Map<string, string | undefined>());
+    const turnDynamicToolPoliciesRef = yield* Ref.make(new Map<string, TurnDynamicToolPolicy>());
     const pendingUserInputsRef = yield* Ref.make(new Map<ApprovalRequestId, PendingUserInput>());
     const collabReceiverTurnsRef = yield* Ref.make(new Map<string, TurnId>());
     const closedRef = yield* Ref.make(false);
@@ -959,11 +1042,19 @@ export const makeCodexSessionRuntime = (
             payload.turn.status === "failed" && "error" in payload.turn && payload.turn.error
               ? payload.turn.error.message
               : undefined;
-          return updateSession(sessionRef, {
-            status: payload.turn.status === "failed" ? "error" : "ready",
-            activeTurnId: undefined,
-            ...(lastError ? { lastError } : {}),
-          });
+          return Ref.update(turnDynamicToolPoliciesRef, (current) => {
+            const next = new Map(current);
+            next.delete(payload.turn.id);
+            return next;
+          }).pipe(
+            Effect.andThen(
+              updateSession(sessionRef, {
+                status: payload.turn.status === "failed" ? "error" : "ready",
+                activeTurnId: undefined,
+                ...(lastError ? { lastError } : {}),
+              }),
+            ),
+          );
         }),
       ),
     );
@@ -1149,6 +1240,66 @@ export const makeCodexSessionRuntime = (
       }),
     );
 
+    yield* client.handleServerRequest("item/tool/call", (payload) =>
+      Effect.gen(function* () {
+        const args = isRecord(payload.arguments) ? payload.arguments : {};
+        const admittedDynamicTools = yield* Ref.get(admittedDynamicToolsRef);
+        const admittedNamespace = admittedDynamicTools.get(payload.tool);
+        const payloadNamespace = payload.namespace ?? undefined;
+        const registeredSpec = dynamicToolLease?.specs.find(
+          (spec) =>
+            admittedDynamicTools.has(payload.tool) &&
+            spec.name === payload.tool &&
+            spec.namespace === admittedNamespace &&
+            (spec.namespace === undefined || payloadNamespace === spec.namespace),
+        );
+
+        if (registeredSpec === undefined || dynamicToolLease === undefined) {
+          return {
+            success: false,
+            contentItems: [
+              {
+                type: "inputText",
+                text: `Unknown dynamic tool: ${payload.tool}.`,
+              },
+            ],
+          } satisfies EffectCodexSchema.DynamicToolCallResponse;
+        }
+
+        const turnPolicy = (yield* Ref.get(turnDynamicToolPoliciesRef)).get(payload.turnId);
+        const resultExit = yield* Effect.exit(
+          dynamicToolLease.execute(payload.tool, args, {
+            source: "provider",
+            mutationPolicy: turnPolicy?.mutationPolicy ?? "deny",
+            threadId: options.threadId,
+            turnId: TurnId.make(payload.turnId),
+            ...(options.providerInstanceId
+              ? { providerInstanceId: options.providerInstanceId }
+              : {}),
+            runtimeMode: options.runtimeMode,
+            ...(turnPolicy?.interactionMode ? { interactionMode: turnPolicy.interactionMode } : {}),
+          }),
+        );
+
+        if (Exit.isFailure(resultExit)) {
+          yield* Effect.logError("Dynamic tool execution failed", {
+            ownerNamespace: registeredSpec.namespace ?? null,
+            toolName: payload.tool,
+            cause: resultExit.cause,
+          });
+          return {
+            success: false,
+            contentItems: [{ type: "inputText", text: `Dynamic tool '${payload.tool}' failed.` }],
+          } satisfies EffectCodexSchema.DynamicToolCallResponse;
+        }
+
+        return {
+          success: !resultExit.value.isError,
+          contentItems: [{ type: "inputText", text: resultExit.value.text }],
+        } satisfies EffectCodexSchema.DynamicToolCallResponse;
+      }),
+    );
+
     yield* client.handleUnknownServerRequest((method) =>
       Effect.fail(CodexErrors.CodexAppServerRequestError.methodNotFound(method)),
     );
@@ -1239,6 +1390,11 @@ export const makeCodexSessionRuntime = (
       yield* client.notify("initialized", undefined);
 
       const requestedModel = normalizeCodexModelSlug(options.model);
+      const registeredDynamicTools = dynamicToolLease?.specs ?? [];
+      yield* Ref.set(
+        admittedDynamicToolsRef,
+        new Map(registeredDynamicTools.map((spec) => [spec.name, spec.namespace] as const)),
+      );
 
       const opened = yield* openCodexThread({
         client,
@@ -1248,6 +1404,7 @@ export const makeCodexSessionRuntime = (
         requestedModel,
         serviceTier: options.serviceTier,
         resumeThreadId: readResumeCursorThreadId(options.resumeCursor),
+        dynamicTools: registeredDynamicTools,
       });
 
       const providerThreadId = opened.thread.id;
@@ -1338,6 +1495,14 @@ export const makeCodexSessionRuntime = (
             ),
           );
           const turnId = TurnId.make(response.turn.id);
+          yield* Ref.update(turnDynamicToolPoliciesRef, (current) => {
+            const next = new Map(current);
+            next.set(response.turn.id, {
+              mutationPolicy: input.mutationPolicy ?? "deny",
+              ...(input.interactionMode ? { interactionMode: input.interactionMode } : {}),
+            });
+            return next;
+          });
           yield* updateSession(sessionRef, {
             status: "running",
             activeTurnId: turnId,

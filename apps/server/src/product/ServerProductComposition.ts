@@ -1,9 +1,18 @@
 import * as Layer from "effect/Layer";
 
 import {
+  createExperimentalDynamicToolRegistry,
+  type ExperimentalDynamicToolOwner,
+  type ExperimentalDynamicToolRegistry,
+} from "./DynamicToolRegistry.ts";
+import {
   createExperimentalFeatureMigrationPlan,
   type ExperimentalFeatureMigrationContribution,
 } from "./FeatureMigrations.ts";
+import {
+  httpRouteContributionsLayer,
+  type AnyHttpRouteContribution,
+} from "./HttpRouteContribution.ts";
 import { BUILT_IN_INTERACTION_MODE_REGISTRATIONS } from "./BuiltInInteractionModes.ts";
 import { createRpcContributionPlan, type AnyNamespacedRpcContribution } from "./RpcContribution.ts";
 import {
@@ -42,8 +51,10 @@ export interface ExperimentalServerFeatureContribution<
   readonly id: string;
   readonly version: number;
   readonly layers?: ReadonlyArray<ExperimentalServerLayerContribution>;
+  readonly httpRoutes?: ReadonlyArray<AnyHttpRouteContribution>;
   readonly migrations?: ReadonlyArray<ExperimentalFeatureMigrationContribution<Error>>;
   readonly rpc?: RpcContributions;
+  readonly dynamicTools?: ReadonlyArray<ExperimentalDynamicToolOwner<never, never>>;
   readonly interactionModes?: ReadonlyArray<ExperimentalInteractionModeRegistration>;
 }
 
@@ -63,8 +74,10 @@ export interface ExperimentalServerFeatureDiagnostic {
   readonly id: string;
   readonly version: number;
   readonly layers: number;
+  readonly httpRoutes: number;
   readonly migrationNamespaces: number;
   readonly rpcNamespaces: number;
+  readonly dynamicTools: number;
   readonly interactionModes: number;
 }
 
@@ -75,8 +88,10 @@ export interface ExperimentalServerProductComposition<
   readonly features: ReadonlyArray<Features[number]>;
   readonly diagnostics: ReadonlyArray<ExperimentalServerFeatureDiagnostic>;
   readonly featureLayer: ExperimentalOpaqueServerLayer;
+  readonly httpRoutesLayer: ExperimentalOpaqueServerLayer;
   readonly migrations: ReadonlyArray<ExperimentalFeatureMigrationContribution<Error>>;
   readonly rpc: ReadonlyArray<RpcContributionsOfFeatures<Features>>;
+  readonly dynamicToolRegistry: ExperimentalDynamicToolRegistry<never, never>;
   readonly interactionModeRegistry: ExperimentalInteractionModeRegistry;
 }
 
@@ -185,8 +200,10 @@ export function createExperimentalServerProductComposition<
   const featureIds = new Set<string>();
   const layerIds = new Set<string>();
   const layers: ExperimentalServerLayerContribution[] = [];
+  const httpRoutes: AnyHttpRouteContribution[] = [];
   const migrations: ExperimentalFeatureMigrationContribution<Error>[] = [];
   const rpc: AnyNamespacedRpcContribution[] = [];
+  const dynamicTools: ExperimentalDynamicToolOwner<never, never>[] = [];
   const interactionModes: ExperimentalInteractionModeRegistration[] = [];
   const features = [...(input.features ?? [])]
     .map((feature) => defineExperimentalServerFeature(feature))
@@ -216,6 +233,11 @@ export function createExperimentalServerProductComposition<
       layers.push(layer);
     }
 
+    for (const contribution of feature.httpRoutes ?? []) {
+      assertOwner(feature.id, contribution.ownerId, "HTTP route contribution");
+      httpRoutes.push(contribution);
+    }
+
     for (const migration of feature.migrations ?? []) {
       assertOwner(feature.id, migration.ownerId, "Feature migration contribution");
       migrations.push(migration);
@@ -224,6 +246,11 @@ export function createExperimentalServerProductComposition<
     for (const contribution of feature.rpc ?? []) {
       assertOwner(feature.id, contribution.ownerId, "RPC contribution");
       rpc.push(contribution);
+    }
+
+    for (const contribution of feature.dynamicTools ?? []) {
+      assertOwner(feature.id, contribution.ownerId, "Dynamic-tool contribution");
+      dynamicTools.push(contribution);
     }
 
     for (const registration of feature.interactionModes ?? []) {
@@ -235,6 +262,10 @@ export function createExperimentalServerProductComposition<
   const orderedLayers = layers.sort(
     (left, right) => left.ownerId.localeCompare(right.ownerId) || left.id.localeCompare(right.id),
   );
+  const httpRoutesLayer = httpRouteContributionsLayer(
+    httpRoutes,
+  ) as unknown as ExperimentalOpaqueServerLayer;
+  const dynamicToolRegistry = createExperimentalDynamicToolRegistry(dynamicTools);
   createExperimentalFeatureMigrationPlan(migrations);
   const orderedRpc = createRpcContributionPlan(
     rpc as unknown as ReadonlyArray<RpcContributionsOfFeatures<Features>>,
@@ -247,18 +278,24 @@ export function createExperimentalServerProductComposition<
   return Object.freeze({
     features: Object.freeze(features),
     diagnostics: Object.freeze(
-      features.map(({ id, version, layers, migrations, rpc, interactionModes }) => ({
-        id,
-        version,
-        layers: layers?.length ?? 0,
-        migrationNamespaces: migrations?.length ?? 0,
-        rpcNamespaces: rpc?.length ?? 0,
-        interactionModes: interactionModes?.length ?? 0,
-      })),
+      features.map(
+        ({ id, version, layers, httpRoutes, migrations, rpc, dynamicTools, interactionModes }) => ({
+          id,
+          version,
+          layers: layers?.length ?? 0,
+          httpRoutes: httpRoutes?.length ?? 0,
+          migrationNamespaces: migrations?.length ?? 0,
+          rpcNamespaces: rpc?.length ?? 0,
+          dynamicTools: dynamicTools?.reduce((count, owner) => count + owner.tools.length, 0) ?? 0,
+          interactionModes: interactionModes?.length ?? 0,
+        }),
+      ),
     ),
     featureLayer: mergeFeatureLayers(orderedLayers),
+    httpRoutesLayer,
     migrations: Object.freeze([...migrations]),
     rpc: Object.freeze([...orderedRpc]),
+    dynamicToolRegistry,
     interactionModeRegistry,
   });
 }

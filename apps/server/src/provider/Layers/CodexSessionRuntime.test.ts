@@ -47,16 +47,20 @@ function makeThreadOpenResponse(
     modelProvider: "openai",
     approvalPolicy: "never",
     approvalsReviewer: "user",
-    sandbox: { type: "danger-full-access" },
+    sandbox: { type: "dangerFullAccess" },
     thread: {
       id: threadId,
-      createdAt: "2026-04-18T00:00:00.000Z",
-      source: { session: "cli" },
+      cliVersion: "0.0.0-test",
+      createdAt: 1_776_470_400,
+      cwd: "/tmp/project",
+      ephemeral: false,
+      modelProvider: "openai",
+      preview: "",
+      sessionId: "session-1",
+      source: "cli",
       turns: [],
-      status: {
-        state: "idle",
-        activeFlags: [],
-      },
+      status: { type: "idle" },
+      updatedAt: 1_776_470_400,
     },
   } as unknown as CodexRpc.ClientRequestResponsesByMethod["thread/start"];
 }
@@ -345,6 +349,69 @@ describe("openCodexThread", () => {
         calls.map((call) => call.method),
         ["thread/resume", "thread/start"],
       );
+    }),
+  );
+
+  it.effect("sends dynamic tools through raw thread/start", () =>
+    Effect.gen(function* () {
+      const calls: Array<{ kind: "typed" | "raw"; method: string; payload: unknown }> = [];
+      const started = makeThreadOpenResponse("dynamic-thread");
+      const client = {
+        request: <M extends "thread/start" | "thread/resume">(
+          method: M,
+          payload: CodexRpc.ClientRequestParamsByMethod[M],
+        ) => {
+          calls.push({ kind: "typed", method, payload });
+          return Effect.succeed(started as CodexRpc.ClientRequestResponsesByMethod[M]);
+        },
+        raw: {
+          request: (method: "thread/start" | "thread/resume", payload: unknown) => {
+            calls.push({ kind: "raw", method, payload });
+            return Effect.succeed(started);
+          },
+        },
+      };
+
+      const opened = yield* openCodexThread({
+        client,
+        threadId: ThreadId.make("thread-1"),
+        runtimeMode: "full-access",
+        cwd: "/tmp/project",
+        requestedModel: "gpt-5.3-codex",
+        serviceTier: undefined,
+        resumeThreadId: undefined,
+        dynamicTools: [
+          {
+            type: "function",
+            namespace: "upcomputer.tasks",
+            name: "task_context",
+            description: "Resolve task context.",
+            inputSchema: { type: "object" },
+          },
+        ],
+      });
+
+      NodeAssert.equal(opened.thread.id, "dynamic-thread");
+      NodeAssert.equal(calls.length, 1);
+      NodeAssert.deepStrictEqual(calls[0], {
+        kind: "raw",
+        method: "thread/start",
+        payload: {
+          cwd: "/tmp/project",
+          approvalPolicy: "never",
+          sandbox: "danger-full-access",
+          model: "gpt-5.3-codex",
+          dynamicTools: [
+            {
+              type: "function",
+              namespace: "upcomputer.tasks",
+              name: "task_context",
+              description: "Resolve task context.",
+              inputSchema: { type: "object" },
+            },
+          ],
+        },
+      });
     }),
   );
 

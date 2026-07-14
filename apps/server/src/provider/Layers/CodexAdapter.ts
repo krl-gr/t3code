@@ -44,6 +44,7 @@ import {
 } from "@t3tools/shared/interactionMode";
 import { getCodexServiceTierOptionValue } from "../../codexModelOptions.ts";
 import * as McpProviderSession from "../../mcp/McpProviderSession.ts";
+import type { ExperimentalDynamicToolRegistry } from "../../product/DynamicToolRegistry.ts";
 
 import {
   ProviderAdapterRequestError,
@@ -78,6 +79,7 @@ const PROVIDER = ProviderDriverKind.make("codex");
 export interface CodexAdapterLiveOptions {
   readonly instanceId?: ProviderInstanceId;
   readonly environment?: NodeJS.ProcessEnv;
+  readonly dynamicToolRegistry?: ExperimentalDynamicToolRegistry<never, never>;
   readonly makeRuntime?: (
     options: CodexSessionRuntimeOptions,
   ) => Effect.Effect<
@@ -1473,6 +1475,9 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
                 ],
               }
             : {}),
+          ...(options?.dynamicToolRegistry
+            ? { dynamicToolRegistry: options.dynamicToolRegistry }
+            : {}),
         };
         const sessionScope = yield* Scope.make("sequential");
         let sessionScopeTransferred = false;
@@ -1609,6 +1614,9 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
         ...(input.interactionMode !== undefined ? { interactionMode: input.interactionMode } : {}),
         ...(input.resolvedInteractionMode !== undefined
           ? { interactionModeSandbox: input.resolvedInteractionMode.provider.sandbox }
+          : {}),
+        ...(input.resolvedInteractionMode !== undefined
+          ? { mutationPolicy: input.resolvedInteractionMode.safety.mutations }
           : {}),
         ...(collaborationMode !== undefined ? { collaborationMode } : {}),
         ...(codexAttachments.length > 0 ? { attachments: codexAttachments } : {}),

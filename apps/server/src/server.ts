@@ -87,6 +87,7 @@ import { CORE_SERVER_PRODUCT_ENTRY } from "./product/defaultProductEntry.ts";
 import type { ExperimentalServerProductComposition } from "./product/ServerProductComposition.ts";
 import type { ExperimentalServerProductEntry } from "./product/ServerProductEntry.ts";
 import { runExperimentalFeatureMigrations } from "./product/FeatureMigrations.ts";
+import * as DynamicToolRegistry from "./product/DynamicToolRegistry.ts";
 import * as InteractionModeRegistryService from "./product/InteractionModeRegistryService.ts";
 import { ExperimentalProviderRuntimeEventsLive } from "./product/ProviderRuntimeEvents.ts";
 import {
@@ -298,19 +299,30 @@ const ProviderRuntimeWithEventsLayerLive = ExperimentalProviderRuntimeEventsLive
   Layer.provideMerge(ProviderRuntimeLayerLive),
 );
 
+const makeDynamicToolRegistryLayer = (composition: ExperimentalServerProductComposition) =>
+  Layer.succeed(
+    DynamicToolRegistry.ExperimentalDynamicToolRegistryService,
+    composition.dynamicToolRegistry,
+  );
+
 const makeRuntimeCoreDependenciesLive = <const ProductEntry extends ExperimentalServerProductEntry>(
   productEntry: ProductEntry,
 ) => {
   const persistenceLayer = makePersistenceLayerLive(productEntry.composition);
   const authLayer = makeAuthLayerLive(persistenceLayer);
+  const dynamicToolRegistryLayer = makeDynamicToolRegistryLayer(productEntry.composition);
   const interactionModeRegistryLayer = InteractionModeRegistryService.layer(
     productEntry.composition.interactionModeRegistry,
   );
+  const providerInstanceRegistryHydrationLayer = ProviderInstanceRegistryHydrationLive.pipe(
+    Layer.provideMerge(dynamicToolRegistryLayer),
+  );
   const providerRuntimeWithInteractionModesLayer = ProviderRuntimeWithEventsLayerLive.pipe(
     Layer.provide(interactionModeRegistryLayer),
+    Layer.provide(dynamicToolRegistryLayer),
   );
 
-  return ReactorLayerLive.pipe(
+  const runtimeFoundation = ReactorLayerLive.pipe(
     // Core Services
     Layer.provideMerge(CheckpointingLayerLive),
     Layer.provideMerge(SourceControlProviderRegistryLayerLive),
@@ -326,7 +338,7 @@ const makeRuntimeCoreDependenciesLive = <const ProductEntry extends Experimental
     // through this layer. Built-in drivers come from `BUILT_IN_DRIVERS`;
     // `providerInstances` hydration merges `settings.providers.<kind>`
     // with explicit `providerInstances` entries on boot.
-    Layer.provideMerge(ProviderInstanceRegistryHydrationLive),
+    Layer.provideMerge(providerInstanceRegistryHydrationLayer),
     // Shared native/canonical NDJSON writers used by both the per-instance
     // drivers (native stream, written from inside each `<X>Adapter`) and
     // `ProviderService` (canonical stream, written after event normalization).
@@ -339,6 +351,9 @@ const makeRuntimeCoreDependenciesLive = <const ProductEntry extends Experimental
     // no longer transitively provides it. Exposing it at the runtime level
     // keeps a single Live for all opencode consumers.
     Layer.provideMerge(OpenCodeRuntime.OpenCodeRuntimeLive),
+  );
+
+  return runtimeFoundation.pipe(
     Layer.provideMerge(ServerSettings.layer.pipe(Layer.provide(ServerSecretStore.layer))),
     Layer.provideMerge(WorkspaceLayerLive),
     Layer.provideMerge(ProjectFaviconResolverLayerLive),
@@ -394,6 +409,7 @@ export const makeRoutesLayerForProduct = <
       otlpTracesProxyRouteLayer,
       assetRouteLayer,
       staticAndDevRouteLayer,
+      composition.httpRoutesLayer,
       websocketRpcRouteLayer(composition.rpc),
     ),
     McpHttpServer.layer.pipe(Layer.provide(McpSessionRegistry.layer)),
