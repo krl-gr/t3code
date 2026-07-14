@@ -23,6 +23,14 @@
       "types": "./src/rpc/index.ts",
       "default": "./src/rpc/index.ts"
     },
+    "./ws-rpc-protocol": {
+      "types": "./src/wsRpcProtocol.ts",
+      "default": "./src/wsRpcProtocol.ts"
+    },
+    "./ws-transport": {
+      "types": "./src/wsTransport.ts",
+      "default": "./src/wsTransport.ts"
+    },
     "./operations": {
       "types": "./src/operations/index.ts",
       "default": "./src/operations/index.ts"
