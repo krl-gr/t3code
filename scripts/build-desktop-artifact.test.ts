@@ -592,6 +592,8 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
         arch: Option.none(),
         buildVersion: Option.none(),
         outputDir: Option.none(),
+        serverDist: Option.none(),
+        sourceBom: Option.none(),
         skipBuild: Option.none(),
         keepStage: Option.none(),
         signed: Option.none(),
@@ -630,6 +632,8 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
         arch: Option.some("arm64"),
         buildVersion: Option.none(),
         outputDir: Option.some("release-test"),
+        serverDist: Option.none(),
+        sourceBom: Option.none(),
         skipBuild: Option.some(false),
         keepStage: Option.some(false),
         signed: Option.some(false),
@@ -658,6 +662,41 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
       assert.equal(resolved.signed, false);
       assert.equal(resolved.verbose, false);
       assert.equal(resolved.mockUpdates, false);
+    }),
+  );
+
+  it.effect("resolves external server dist and source BOM packaging inputs", () =>
+    Effect.gen(function* () {
+      const resolved = yield* resolveBuildOptions({
+        platform: Option.some("mac"),
+        target: Option.none(),
+        arch: Option.some("arm64"),
+        buildVersion: Option.none(),
+        outputDir: Option.none(),
+        serverDist: Option.some("../upcomputer-pro/build/server"),
+        sourceBom: Option.none(),
+        skipBuild: Option.none(),
+        keepStage: Option.none(),
+        signed: Option.none(),
+        verbose: Option.none(),
+        mockUpdates: Option.none(),
+        mockUpdateServerPort: Option.none(),
+        wslPrebuild: Option.none(),
+      }).pipe(
+        Effect.provide(
+          ConfigProvider.layer(
+            ConfigProvider.fromEnv({
+              env: {
+                UPCOMPUTER_SERVER_DIST: "ignored-server-dist",
+                UPCOMPUTER_SOURCE_BOM: "../upcomputer-pro/build/source-bom.json",
+              },
+            }),
+          ),
+        ),
+      );
+
+      assert.equal(resolved.serverDist.endsWith("upcomputer-pro/build/server"), true);
+      assert.equal(resolved.sourceBom?.endsWith("upcomputer-pro/build/source-bom.json"), true);
     }),
   );
 });

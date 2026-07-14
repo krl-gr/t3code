@@ -113,6 +113,8 @@ interface BuildCliInput {
   readonly arch: Option.Option<typeof BuildArch.Type>;
   readonly buildVersion: Option.Option<string>;
   readonly outputDir: Option.Option<string>;
+  readonly serverDist: Option.Option<string>;
+  readonly sourceBom: Option.Option<string>;
   readonly skipBuild: Option.Option<boolean>;
   readonly keepStage: Option.Option<boolean>;
   readonly signed: Option.Option<boolean>;
@@ -336,6 +338,17 @@ export class MissingDesktopBuildInputError extends Schema.TaggedErrorClass<Missi
   }
 }
 
+export class SourceBomNotFoundError extends Schema.TaggedErrorClass<SourceBomNotFoundError>()(
+  "SourceBomNotFoundError",
+  {
+    sourceBomPath: Schema.String,
+  },
+) {
+  override get message(): string {
+    return `Missing source bill of materials at ${this.sourceBomPath}.`;
+  }
+}
+
 export class MacProvisioningProfileNotFoundError extends Schema.TaggedErrorClass<MacProvisioningProfileNotFoundError>()(
   "MacProvisioningProfileNotFoundError",
   {
@@ -547,6 +560,8 @@ interface ResolvedBuildOptions {
   readonly arch: typeof BuildArch.Type;
   readonly version: string | undefined;
   readonly outputDir: string;
+  readonly serverDist: string;
+  readonly sourceBom: string | undefined;
   readonly skipBuild: boolean;
   readonly keepStage: boolean;
   readonly signed: boolean;
@@ -561,6 +576,7 @@ interface StagePackageJson {
   readonly version: string;
   readonly buildVersion: string;
   readonly t3codeCommitHash: string;
+  readonly upcomputerSourceBom?: string;
   readonly private: true;
   readonly packageManager: string;
   readonly description: string;
@@ -958,6 +974,8 @@ const BuildEnvConfig = Config.all({
   arch: Config.schema(BuildArch, "T3CODE_DESKTOP_ARCH").pipe(Config.option),
   version: Config.string("T3CODE_DESKTOP_VERSION").pipe(Config.option),
   outputDir: Config.string("T3CODE_DESKTOP_OUTPUT_DIR").pipe(Config.option),
+  serverDist: Config.string("UPCOMPUTER_SERVER_DIST").pipe(Config.option),
+  sourceBom: Config.string("UPCOMPUTER_SOURCE_BOM").pipe(Config.option),
   skipBuild: Config.boolean("T3CODE_DESKTOP_SKIP_BUILD").pipe(Config.withDefault(false)),
   keepStage: Config.boolean("T3CODE_DESKTOP_KEEP_STAGE").pipe(Config.withDefault(false)),
   signed: Config.boolean("T3CODE_DESKTOP_SIGNED").pipe(Config.withDefault(false)),
@@ -1034,6 +1052,12 @@ export const resolveBuildOptions = Effect.fn("resolveBuildOptions")(function* (
     repoRoot,
     mergeOptions(input.outputDir, env.outputDir, releaseDir),
   );
+  const serverDist = path.resolve(
+    repoRoot,
+    mergeOptions(input.serverDist, env.serverDist, "apps/server/dist"),
+  );
+  const sourceBomRaw = mergeOptions(input.sourceBom, env.sourceBom, undefined);
+  const sourceBom = sourceBomRaw === undefined ? undefined : path.resolve(repoRoot, sourceBomRaw);
 
   const skipBuild = resolveBooleanFlag(input.skipBuild, env.skipBuild);
   const keepStage = resolveBooleanFlag(input.keepStage, env.keepStage);
@@ -1061,6 +1085,8 @@ export const resolveBuildOptions = Effect.fn("resolveBuildOptions")(function* (
     arch,
     version,
     outputDir,
+    serverDist,
+    sourceBom,
     skipBuild,
     keepStage,
     signed,
@@ -1627,7 +1653,7 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
   const distDirs = {
     desktopDist: path.join(repoRoot, "apps/desktop/dist-electron"),
     desktopResources: path.join(repoRoot, "apps/desktop/resources"),
-    serverDist: path.join(repoRoot, "apps/server/dist"),
+    serverDist: options.serverDist,
   };
   const bundledClientEntry = path.join(distDirs.serverDist, "client/index.html");
 
@@ -1669,6 +1695,15 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
 
   yield* fs.makeDirectory(path.join(stageAppDir, "apps/desktop"), { recursive: true });
   yield* fs.makeDirectory(path.join(stageAppDir, "apps/server"), { recursive: true });
+
+  if (options.sourceBom !== undefined) {
+    if (!(yield* fs.exists(options.sourceBom))) {
+      return yield* new SourceBomNotFoundError({
+        sourceBomPath: options.sourceBom,
+      });
+    }
+    yield* fs.copyFile(options.sourceBom, path.join(stageAppDir, "source-bom.json"));
+  }
 
   yield* Effect.log("[desktop-artifact] Staging release app...");
   yield* fs.copy(distDirs.desktopDist, path.join(stageAppDir, "apps/desktop/dist-electron"));
@@ -1746,6 +1781,7 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
     version: appVersion,
     buildVersion: appVersion,
     t3codeCommitHash: commitHash,
+    ...(options.sourceBom !== undefined ? { upcomputerSourceBom: "source-bom.json" } : {}),
     private: true,
     packageManager: rootPackageJson.packageManager,
     description: "Up.computer desktop build",
@@ -1934,6 +1970,16 @@ const buildDesktopArtifactCli = Command.make("build-desktop-artifact", {
   ),
   outputDir: Flag.string("output-dir").pipe(
     Flag.withDescription("Output directory for artifacts (env: T3CODE_DESKTOP_OUTPUT_DIR)."),
+    Flag.optional,
+  ),
+  serverDist: Flag.string("server-dist").pipe(
+    Flag.withDescription("Prebuilt server distribution to package (env: UPCOMPUTER_SERVER_DIST)."),
+    Flag.optional,
+  ),
+  sourceBom: Flag.string("source-bom").pipe(
+    Flag.withDescription(
+      "Source revision bill of materials to include (env: UPCOMPUTER_SOURCE_BOM).",
+    ),
     Flag.optional,
   ),
   skipBuild: Flag.boolean("skip-build").pipe(
