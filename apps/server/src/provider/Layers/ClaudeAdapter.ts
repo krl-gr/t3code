@@ -34,7 +34,6 @@ import {
   ProviderItemId,
   type ProviderRuntimeEvent,
   type ProviderRuntimeTurnStatus,
-  type ProviderSendTurnInput,
   type ProviderSession,
   type ThreadTokenUsageSnapshot,
   type ProviderUserInputAnswers,
@@ -53,6 +52,7 @@ import {
   getProviderOptionDescriptors,
   resolvePromptInjectedEffort,
 } from "@t3tools/shared/model";
+import { applyResolvedInteractionModePrompt } from "@t3tools/shared/interactionMode";
 import * as Cause from "effect/Cause";
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
@@ -87,6 +87,7 @@ import {
   type ProviderAdapterError,
 } from "../Errors.ts";
 import { type ClaudeAdapterShape } from "../Services/ClaudeAdapter.ts";
+import type { ProviderAdapterSendTurnInput } from "../Services/ProviderAdapter.ts";
 import { type EventNdjsonLogger, makeEventNdjsonLogger } from "./EventNdjsonLogger.ts";
 const encodeUnknownJsonStringExit = Schema.encodeUnknownExit(Schema.UnknownFromJsonString);
 const decodeUnknownJsonStringExit = Schema.decodeUnknownExit(Schema.UnknownFromJsonString);
@@ -892,7 +893,7 @@ const CLAUDE_SETTING_SOURCES = [
 ] as const satisfies ReadonlyArray<SettingSource>;
 
 function buildPromptText(
-  input: ProviderSendTurnInput,
+  input: ProviderAdapterSendTurnInput,
   boundInstanceId: ProviderInstanceId,
 ): string {
   const rawEffort =
@@ -904,7 +905,10 @@ function buildPromptText(
   const caps = getClaudeModelCapabilities(claudeModel);
 
   const promptEffort = resolvePromptInjectedEffort(caps, rawEffort);
-  return applyClaudePromptEffortPrefix(input.input?.trim() ?? "", promptEffort);
+  const text = applyClaudePromptEffortPrefix(input.input?.trim() ?? "", promptEffort);
+  return input.resolvedInteractionMode === undefined
+    ? text
+    : applyResolvedInteractionModePrompt(text, input.resolvedInteractionMode);
 }
 
 function buildUserMessage(input: {
@@ -936,7 +940,7 @@ function buildClaudeImageContentBlock(input: {
 }
 
 const buildUserMessageEffect = Effect.fn("buildUserMessageEffect")(function* (
-  input: ProviderSendTurnInput,
+  input: ProviderAdapterSendTurnInput,
   dependencies: {
     readonly fileSystem: FileSystem.FileSystem;
     readonly attachmentsDir: string;
@@ -996,6 +1000,50 @@ const buildUserMessageEffect = Effect.fn("buildUserMessageEffect")(function* (
   }
 
   return buildUserMessage({ sdkContent });
+});
+
+const resolveClaudePermissionMode = Effect.fn("resolveClaudePermissionMode")(function* (
+  context: ClaudeSessionContext,
+  input: ProviderAdapterSendTurnInput,
+): Effect.fn.Return<PermissionMode | undefined, ProviderAdapterValidationError> {
+  const resolvedMode = input.resolvedInteractionMode;
+  if (resolvedMode !== undefined) {
+    if (resolvedMode.provider.providerId !== PROVIDER) {
+      return yield* new ProviderAdapterValidationError({
+        provider: PROVIDER,
+        operation: "sendTurn",
+        issue: `Expected resolved interaction mode for provider '${PROVIDER}' but received '${resolvedMode.provider.providerId}'.`,
+      });
+    }
+    const permissionMode = resolvedMode.provider.permissionMode;
+    if (permissionMode === undefined) {
+      return undefined;
+    }
+    if (permissionMode === "session-default") {
+      return context.basePermissionMode ?? "default";
+    }
+    if (
+      permissionMode === "default" ||
+      permissionMode === "acceptEdits" ||
+      permissionMode === "bypassPermissions" ||
+      permissionMode === "plan"
+    ) {
+      return permissionMode;
+    }
+    return yield* new ProviderAdapterValidationError({
+      provider: PROVIDER,
+      operation: "sendTurn",
+      issue: `Unsupported Claude permission mode '${permissionMode}' for interaction mode '${resolvedMode.id}'.`,
+    });
+  }
+
+  if (input.interactionMode === "plan") {
+    return "plan";
+  }
+  if (input.interactionMode === "default") {
+    return context.basePermissionMode ?? "default";
+  }
+  return undefined;
 });
 
 function turnStatusFromResult(result: SDKResultMessage): ProviderRuntimeTurnStatus {
@@ -3671,18 +3719,13 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
       };
     }
 
-    // Apply interaction mode by switching the SDK's permission mode.
-    // "plan" maps directly to the SDK's "plan" permission mode;
-    // "default" restores the session's original permission mode.
-    // When interactionMode is absent we leave the current mode unchanged.
-    if (input.interactionMode === "plan") {
+    // Apply resolved interaction mode by switching the SDK's permission mode.
+    // Direct `interactionMode` handling remains for tests and older callers
+    // that bypass ProviderService's registry resolution.
+    const permissionMode = yield* resolveClaudePermissionMode(context, input);
+    if (permissionMode !== undefined) {
       yield* Effect.tryPromise({
-        try: () => context.query.setPermissionMode("plan"),
-        catch: (cause) => toRequestError(input.threadId, "turn/setPermissionMode", cause),
-      });
-    } else if (input.interactionMode === "default") {
-      yield* Effect.tryPromise({
-        try: () => context.query.setPermissionMode(context.basePermissionMode ?? "default"),
+        try: () => context.query.setPermissionMode(permissionMode),
         catch: (cause) => toRequestError(input.threadId, "turn/setPermissionMode", cause),
       });
     }

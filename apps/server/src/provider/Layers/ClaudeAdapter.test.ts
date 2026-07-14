@@ -34,7 +34,9 @@ import * as TestClock from "effect/testing/TestClock";
 
 import { attachmentRelativePath } from "../../attachmentStore.ts";
 import { ServerConfig } from "../../config.ts";
+import { BUILT_IN_INTERACTION_MODE_REGISTRY } from "../../product/BuiltInInteractionModes.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
+import { ASK_MODE_PROMPT_PREFIX } from "../AskModeInstructions.ts";
 import { ProviderAdapterProcessError, ProviderAdapterValidationError } from "../Errors.ts";
 import type { ClaudeAdapterShape } from "../Services/ClaudeAdapter.ts";
 import { makeClaudeAdapter, type ClaudeAdapterLiveOptions } from "./ClaudeAdapter.ts";
@@ -3172,6 +3174,38 @@ describe("ClaudeAdapterLive", () => {
       });
 
       assert.deepEqual(harness.query.setPermissionModeCalls, ["plan"]);
+    }).pipe(
+      Effect.provideService(Random.Random, makeDeterministicRandomService()),
+      Effect.provide(harness.layer),
+    );
+  });
+
+  it.effect("maps resolved ask mode to prompt prefix and session default permissions", () => {
+    const harness = makeHarness();
+    return Effect.gen(function* () {
+      const adapter = yield* ClaudeAdapter;
+
+      const session = yield* adapter.startSession({
+        threadId: THREAD_ID,
+        provider: ProviderDriverKind.make("claudeAgent"),
+        runtimeMode: "full-access",
+      });
+      yield* adapter.sendTurn({
+        threadId: session.threadId,
+        input: "Explain this file",
+        interactionMode: "ask",
+        resolvedInteractionMode: BUILT_IN_INTERACTION_MODE_REGISTRY.resolveOrThrow(
+          "ask",
+          "claudeAgent",
+        ),
+        attachments: [],
+      });
+
+      assert.deepEqual(harness.query.setPermissionModeCalls, ["bypassPermissions"]);
+      const promptText = yield* Effect.promise(() =>
+        readFirstPromptText(harness.getLastCreateQueryInput()),
+      );
+      assert.equal(promptText, `${ASK_MODE_PROMPT_PREFIX}\n\nUser question:\nExplain this file`);
     }).pipe(
       Effect.provideService(Random.Random, makeDeterministicRandomService()),
       Effect.provide(harness.layer),
