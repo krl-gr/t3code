@@ -24,7 +24,6 @@ import { ProjectFavicon } from "./ProjectFavicon";
 import { useAtomValue } from "@effect/atom-react";
 import { autoAnimate } from "@formkit/auto-animate";
 import React, { useCallback, useEffect, memo, useMemo, useRef, useState } from "react";
-import { useShallow } from "zustand/react/shallow";
 import {
   DndContext,
   type DragCancelEvent,
@@ -157,7 +156,6 @@ import {
   SidebarMenuSub,
   SidebarMenuSubButton,
   SidebarMenuSubItem,
-  SidebarSeparator,
   SidebarTrigger,
   useSidebar,
 } from "./ui/sidebar";
@@ -169,7 +167,6 @@ import {
   resolveAdjacentThreadId,
   isContextMenuPointerDown,
   isTrailingDoubleClick,
-  resolveProjectStatusIndicator,
   resolveSidebarNewThreadSeedContext,
   resolveSidebarNewThreadEnvMode,
   resolveThreadRowClassName,
@@ -178,7 +175,6 @@ import {
   shouldClearThreadSelectionOnMouseDown,
   sortProjectsForSidebar,
   useThreadJumpHintVisibility,
-  ThreadStatusPill,
 } from "./Sidebar.logic";
 import { sortThreads } from "../lib/threadSort";
 import { SidebarUpdatePill } from "./sidebar/SidebarUpdatePill";
@@ -217,9 +213,6 @@ const PROJECT_GROUPING_MODE_LABELS: Record<SidebarProjectGroupingMode, string> =
   repository_path: "Group by repository path",
   separate: "Keep separate",
 };
-const SIDEBAR_ICON_ACTION_BUTTON_CLASS =
-  "inline-flex h-6 min-w-6 cursor-pointer items-center justify-center rounded-md px-[calc(--spacing(1)-1px)] text-muted-foreground/60 hover:text-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring";
-
 function SidebarThreadDetailPrewarmer({ threadRef }: { readonly threadRef: ScopedThreadRef }) {
   useEnvironmentThread(threadRef.environmentId, threadRef.threadId);
   return null;
@@ -652,11 +645,11 @@ export const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThr
               <TooltipPopup side="top">{prStatus.tooltip}</TooltipPopup>
             </Tooltip>
           )}
-          {threadStatus && <ThreadStatusLabel status={threadStatus} />}
+          {threadStatus && <ThreadStatusLabel status={threadStatus} showDot={false} />}
           {renamingThreadKey === threadKey ? (
             <input
               ref={handleRenameInputRef}
-              className="min-w-0 flex-1 truncate text-base sm:text-xs bg-transparent outline-none border border-ring rounded px-0.5"
+              className="min-w-0 flex-1 truncate rounded border border-ring bg-transparent px-0.5 text-sm outline-none"
               value={renamingTitle}
               onChange={handleRenameInputChange}
               onKeyDown={handleRenameInputKeyDown}
@@ -715,7 +708,7 @@ export const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThr
                 data-thread-selection-safe
                 data-testid={`thread-archive-confirm-${thread.id}`}
                 aria-label={`Confirm archive ${thread.title}`}
-                className="absolute inset-y-0 right-2 my-auto flex h-5 cursor-pointer items-center rounded-full bg-destructive/12 px-2 text-[10px] font-medium text-destructive transition-colors hover:bg-destructive/18 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-destructive/40"
+                className="absolute inset-y-0 right-2 my-auto flex h-6 cursor-pointer items-center rounded-full bg-destructive/12 px-2 text-sm font-medium text-destructive transition-colors hover:bg-destructive/18 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-destructive/40"
                 onPointerDown={stopPropagationOnPointerDown}
                 onClick={handleConfirmArchiveClick}
               >
@@ -788,7 +781,7 @@ export const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThr
                       render={
                         <span
                           aria-label={jumpLabel}
-                          className="inline-flex h-5 items-center rounded-full border border-border/80 bg-background/90 px-1.5 font-mono text-[10px] font-medium tracking-tight text-foreground shadow-sm"
+                          className="inline-flex h-6 items-center rounded-full border border-border/80 bg-background/90 px-1.5 font-mono text-sm font-medium tracking-tight text-foreground shadow-sm"
                         />
                       }
                     >
@@ -816,7 +809,6 @@ interface SidebarProjectThreadListProps {
   projectKey: string;
   projectExpanded: boolean;
   hasOverflowingThreads: boolean;
-  hiddenThreadStatus: ThreadStatusPill | null;
   orderedProjectThreadKeys: readonly string[];
   renderedThreads: readonly SidebarThreadSummary[];
   showEmptyThreadState: boolean;
@@ -868,7 +860,6 @@ const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
     projectKey,
     projectExpanded,
     hasOverflowingThreads,
-    hiddenThreadStatus,
     orderedProjectThreadKeys,
     renderedThreads,
     showEmptyThreadState,
@@ -910,7 +901,11 @@ const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
         <SidebarMenuSubItem className="w-full" data-thread-selection-safe>
           <div
             data-thread-selection-safe
-            className="flex h-6 w-full translate-x-0 items-center px-2 text-left text-[10px] text-muted-foreground/60"
+            className={cn(
+              "flex h-8 w-full translate-x-0 items-center px-2 text-left",
+              SIDEBAR_MUTED_TEXT_CLASS,
+              SIDEBAR_LABEL_TEXT_CLASS,
+            )}
           >
             <span>No threads yet</span>
           </div>
@@ -957,15 +952,16 @@ const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
             render={showMoreButtonRender}
             data-thread-selection-safe
             size="sm"
-            className="h-6 w-full translate-x-0 justify-start px-2 text-left text-[10px] text-muted-foreground/60 hover:bg-accent hover:text-muted-foreground/80"
+            className={cn(
+              "h-8 w-full translate-x-0 justify-start px-2 text-left hover:bg-accent hover:text-foreground",
+              SIDEBAR_MUTED_TEXT_CLASS,
+              SIDEBAR_LABEL_TEXT_CLASS,
+            )}
             onClick={() => {
               expandThreadListForProject(projectKey);
             }}
           >
-            <span className="flex min-w-0 flex-1 items-center gap-2">
-              {hiddenThreadStatus && <ThreadStatusLabel status={hiddenThreadStatus} compact />}
-              <span>Show more</span>
-            </span>
+            <span>Show more</span>
           </SidebarMenuSubButton>
         </SidebarMenuSubItem>
       )}
@@ -975,7 +971,11 @@ const SidebarProjectThreadList = memo(function SidebarProjectThreadList(
             render={showLessButtonRender}
             data-thread-selection-safe
             size="sm"
-            className="h-6 w-full translate-x-0 justify-start px-2 text-left text-[10px] text-muted-foreground/60 hover:bg-accent hover:text-muted-foreground/80"
+            className={cn(
+              "h-8 w-full translate-x-0 justify-start px-2 text-left hover:bg-accent hover:text-foreground",
+              SIDEBAR_MUTED_TEXT_CLASS,
+              SIDEBAR_LABEL_TEXT_CLASS,
+            )}
             onClick={() => {
               collapseThreadListForProject(projectKey);
             }}
@@ -1130,16 +1130,6 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
     resolveProjectExpanded(state.projectExpandedById, projectPreferenceKeys),
   );
   const projectExpanded = projectExpandedOverride ?? storedProjectExpanded;
-  const threadLastVisitedAts = useUiStateStore(
-    useShallow((state) =>
-      projectThreads.map(
-        (thread) =>
-          state.threadLastVisitedAtById[
-            scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))
-          ] ?? null,
-      ),
-    ),
-  );
   const [renamingThreadKey, setRenamingThreadKey] = useState<string | null>(null);
   const [renamingTitle, setRenamingTitle] = useState("");
   const [confirmingArchiveThreadKey, setConfirmingArchiveThreadKey] = useState<string | null>(null);
@@ -1181,39 +1171,18 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
     return counts;
   }, [memberProjectByScopedKey, project.memberProjects, projectThreads]);
 
-  const { projectStatus, visibleProjectThreads, orderedProjectThreadKeys } = useMemo(() => {
-    const lastVisitedAtByThreadKey = new Map(
-      projectThreads.map((thread, index) => [
-        scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
-        threadLastVisitedAts[index] ?? null,
-      ]),
-    );
-    const resolveProjectThreadStatus = (thread: SidebarThreadSummary) => {
-      const lastVisitedAt = lastVisitedAtByThreadKey.get(
-        scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
-      );
-      return resolveThreadStatusPill({
-        thread: {
-          ...thread,
-          ...(lastVisitedAt !== null && lastVisitedAt !== undefined ? { lastVisitedAt } : {}),
-        },
-      });
-    };
+  const { visibleProjectThreads, orderedProjectThreadKeys } = useMemo(() => {
     const visibleProjectThreads = sortThreads(
       projectThreads.filter((thread) => thread.archivedAt === null),
       threadSortOrder,
-    );
-    const projectStatus = resolveProjectStatusIndicator(
-      visibleProjectThreads.map((thread) => resolveProjectThreadStatus(thread)),
     );
     return {
       orderedProjectThreadKeys: visibleProjectThreads.map((thread) =>
         scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
       ),
-      projectStatus,
       visibleProjectThreads,
     };
-  }, [projectThreads, threadLastVisitedAts, threadSortOrder]);
+  }, [projectThreads, threadSortOrder]);
   const pinnedCollapsedThread = useMemo(() => {
     const activeThreadKey = activeRouteThreadKey ?? undefined;
     if (!activeThreadKey || projectExpanded) {
@@ -1227,69 +1196,38 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
     );
   }, [activeRouteThreadKey, projectExpanded, visibleProjectThreads]);
 
-  const {
-    hasOverflowingThreads,
-    hiddenThreadStatus,
-    renderedThreads,
-    showEmptyThreadState,
-    shouldShowThreadPanel,
-  } = useMemo(() => {
-    const lastVisitedAtByThreadKey = new Map(
-      projectThreads.map((thread, index) => [
-        scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
-        threadLastVisitedAts[index] ?? null,
-      ]),
-    );
-    const resolveProjectThreadStatus = (thread: SidebarThreadSummary) => {
-      const lastVisitedAt = lastVisitedAtByThreadKey.get(
-        scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
+  const { hasOverflowingThreads, renderedThreads, showEmptyThreadState, shouldShowThreadPanel } =
+    useMemo(() => {
+      const resolvedThreadPreviewCount = threadPreviewLimit ?? sidebarThreadPreviewCount;
+      const hasOverflowingThreads = visibleProjectThreads.length > resolvedThreadPreviewCount;
+      const previewThreads =
+        isThreadListExpanded || !hasOverflowingThreads
+          ? visibleProjectThreads
+          : visibleProjectThreads.slice(0, resolvedThreadPreviewCount);
+      const visibleThreadKeys = new Set(
+        [...previewThreads, ...(pinnedCollapsedThread ? [pinnedCollapsedThread] : [])].map(
+          (thread) => scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
+        ),
       );
-      return resolveThreadStatusPill({
-        thread: {
-          ...thread,
-          ...(lastVisitedAt !== null && lastVisitedAt !== undefined ? { lastVisitedAt } : {}),
-        },
-      });
-    };
-    const resolvedThreadPreviewCount = threadPreviewLimit ?? sidebarThreadPreviewCount;
-    const hasOverflowingThreads = visibleProjectThreads.length > resolvedThreadPreviewCount;
-    const previewThreads =
-      isThreadListExpanded || !hasOverflowingThreads
-        ? visibleProjectThreads
-        : visibleProjectThreads.slice(0, resolvedThreadPreviewCount);
-    const visibleThreadKeys = new Set(
-      [...previewThreads, ...(pinnedCollapsedThread ? [pinnedCollapsedThread] : [])].map((thread) =>
-        scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
-      ),
-    );
-    const renderedThreads = pinnedCollapsedThread
-      ? [pinnedCollapsedThread]
-      : visibleProjectThreads.filter((thread) =>
-          visibleThreadKeys.has(scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))),
-        );
-    const hiddenThreads = visibleProjectThreads.filter(
-      (thread) =>
-        !visibleThreadKeys.has(scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))),
-    );
-    return {
-      hasOverflowingThreads,
-      hiddenThreadStatus: resolveProjectStatusIndicator(
-        hiddenThreads.map((thread) => resolveProjectThreadStatus(thread)),
-      ),
-      renderedThreads,
-      showEmptyThreadState: projectExpanded && visibleProjectThreads.length === 0,
-      shouldShowThreadPanel: projectExpanded || pinnedCollapsedThread !== null,
-    };
-  }, [
-    isThreadListExpanded,
-    pinnedCollapsedThread,
-    projectExpanded,
-    projectThreads,
-    sidebarThreadPreviewCount,
-    threadPreviewLimit,
-    threadLastVisitedAts,
-    visibleProjectThreads,
-  ]);
+      const renderedThreads = pinnedCollapsedThread
+        ? [pinnedCollapsedThread]
+        : visibleProjectThreads.filter((thread) =>
+            visibleThreadKeys.has(scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id))),
+          );
+      return {
+        hasOverflowingThreads,
+        renderedThreads,
+        showEmptyThreadState: projectExpanded && visibleProjectThreads.length === 0,
+        shouldShowThreadPanel: projectExpanded || pinnedCollapsedThread !== null,
+      };
+    }, [
+      isThreadListExpanded,
+      pinnedCollapsedThread,
+      projectExpanded,
+      sidebarThreadPreviewCount,
+      threadPreviewLimit,
+      visibleProjectThreads,
+    ]);
 
   const handleProjectButtonClick = useCallback(
     (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -2154,34 +2092,6 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
             onKeyDown={handleProjectButtonKeyDown}
             onContextMenu={handleProjectButtonContextMenu}
           >
-            {!projectExpanded && projectStatus ? (
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <span
-                      aria-label={projectStatus.label}
-                      className={`-ml-0.5 relative inline-flex size-3.5 shrink-0 items-center justify-center ${projectStatus.colorClass}`}
-                    />
-                  }
-                >
-                  <span className="absolute inset-0 flex items-center justify-center transition-opacity duration-150 group-hover/project-header:opacity-0">
-                    <span
-                      className={`size-[9px] rounded-full ${projectStatus.dotClass} ${
-                        projectStatus.pulse ? "animate-pulse" : ""
-                      }`}
-                    />
-                  </span>
-                  <ChevronRightIcon className="absolute inset-0 m-auto size-3.5 text-muted-foreground/70 opacity-0 transition-opacity duration-150 group-hover/project-header:opacity-100" />
-                </TooltipTrigger>
-                <TooltipPopup side="top">{projectStatus.label}</TooltipPopup>
-              </Tooltip>
-            ) : (
-              <ChevronRightIcon
-                className={`-ml-0.5 size-3.5 shrink-0 text-muted-foreground/70 transition-transform duration-150 ${
-                  projectExpanded ? "rotate-90" : ""
-                }`}
-              />
-            )}
             <ProjectFavicon
               environmentId={project.environmentId}
               cwd={project.workspaceRoot}
@@ -2193,11 +2103,13 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
               <span className={cn("truncate", SIDEBAR_LABEL_COLOR_CLASS, SIDEBAR_LABEL_TEXT_CLASS)}>
                 {project.displayName}
               </span>
-              {project.groupedProjectCount > 1 ? (
-                <span className="shrink-0 text-[10px] text-muted-foreground/60">
-                  {project.groupedProjectCount} projects
-                </span>
-              ) : null}
+              <ChevronRightIcon
+                className={cn(
+                  "size-4 shrink-0 transition-transform duration-150",
+                  SIDEBAR_MUTED_TEXT_CLASS,
+                  projectExpanded && "rotate-90",
+                )}
+              />
             </span>
           </SidebarMenuButton>
           {/* Environment badge – visible by default, crossfades with the
@@ -2213,7 +2125,10 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
                         ? "Local sandbox project"
                         : "Remote project"
                     }
-                    className="pointer-events-none absolute top-1 right-1.5 inline-flex size-5 items-center justify-center rounded-md text-muted-foreground/60 transition-opacity duration-150 max-sm:right-7 group-hover/project-header:opacity-0 group-focus-within/project-header:opacity-0 max-sm:group-hover/project-header:opacity-100 max-sm:group-focus-within/project-header:opacity-100"
+                    className={cn(
+                      "pointer-events-none absolute inset-y-0 right-2 my-auto flex size-5 items-center justify-center rounded-md transition-opacity duration-150 max-sm:right-8 group-hover/project-header:opacity-0 group-focus-within/project-header:opacity-0 max-sm:group-hover/project-header:opacity-100 max-sm:group-focus-within/project-header:opacity-100",
+                      SIDEBAR_MUTED_TEXT_CLASS,
+                    )}
                   />
                 }
               >
@@ -2233,15 +2148,18 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
           <Tooltip>
             <TooltipTrigger
               render={
-                <div className="pointer-events-none absolute top-[calc(50%+1px)] right-0.5 -translate-y-1/2 opacity-0 transition-opacity duration-150 max-sm:pointer-events-auto max-sm:opacity-100 group-hover/project-header:pointer-events-auto group-hover/project-header:opacity-100 group-focus-within/project-header:pointer-events-auto group-focus-within/project-header:opacity-100">
+                <div className="pointer-events-none absolute inset-y-0 right-2 my-auto flex size-5 items-center justify-center opacity-0 transition-opacity duration-150 max-sm:pointer-events-auto max-sm:opacity-100 group-hover/project-header:pointer-events-auto group-hover/project-header:opacity-100 group-focus-within/project-header:pointer-events-auto group-focus-within/project-header:opacity-100">
                   <button
                     type="button"
                     aria-label={`Create new thread in ${project.displayName}`}
                     data-testid="new-thread-button"
-                    className={SIDEBAR_ICON_ACTION_BUTTON_CLASS}
+                    className={cn(
+                      "flex size-5 cursor-pointer items-center justify-center rounded-md hover:bg-secondary hover:text-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring dark:hover:text-white/86",
+                      SIDEBAR_MUTED_TEXT_CLASS,
+                    )}
                     onClick={handleCreateThreadClick}
                   >
-                    <SquarePenIcon className="size-3.5" />
+                    <SquarePenIcon className="block size-4" />
                   </button>
                 </div>
               }
@@ -2257,7 +2175,6 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         projectKey={project.projectKey}
         projectExpanded={projectExpanded}
         hasOverflowingThreads={hasOverflowingThreads}
-        hiddenThreadStatus={hiddenThreadStatus}
         orderedProjectThreadKeys={orderedProjectThreadKeys}
         renderedThreads={renderedThreads}
         showEmptyThreadState={showEmptyThreadState}
@@ -2310,7 +2227,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
           </DialogHeader>
           <DialogPanel className="space-y-4">
             <div className="grid gap-1.5">
-              <span className="text-xs font-medium text-foreground">Project title</span>
+              <span className="text-sm font-medium text-foreground">Project title</span>
               <Input
                 aria-label="Project title"
                 value={projectRenameTitle}
@@ -2324,7 +2241,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
               />
             </div>
             {projectRenameTarget?.environmentLabel ? (
-              <p className="text-xs text-muted-foreground">
+              <p className="text-sm text-muted-foreground">
                 Environment: {projectRenameTarget.environmentLabel}
               </p>
             ) : null}
@@ -2357,7 +2274,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
           </DialogHeader>
           <DialogPanel className="space-y-4">
             <div className="grid gap-1.5">
-              <span className="text-xs font-medium text-foreground">Grouping rule</span>
+              <span className="text-sm font-medium text-foreground">Grouping rule</span>
               <Select
                 value={projectGroupingSelection}
                 onValueChange={(value) => {
@@ -2394,7 +2311,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
                 </SelectPopup>
               </Select>
             </div>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               {projectGroupingSelection === "inherit"
                 ? projectGroupingModeDescription(projectGroupingSettings.sidebarProjectGroupingMode)
                 : projectGroupingModeDescription(projectGroupingSelection)}
@@ -2474,7 +2391,7 @@ function LocalSecondaryStatus() {
           className="rounded-2xl border-border/40 bg-accent/40 text-muted-foreground"
         >
           <LoaderIcon className="animate-spin" />
-          <AlertTitle className="text-xs font-medium text-foreground">
+          <AlertTitle className="text-sm font-medium text-foreground">
             Connecting {connecting.join(", ")}
           </AlertTitle>
         </Alert>
@@ -3044,7 +2961,7 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
               {commandPaletteShortcutLabel ? (
                 <Kbd
                   className={cn(
-                    "min-w-0 rounded-sm p-2 pb-2.5 text-xs font-semibold",
+                    "min-w-0 rounded-sm p-2 pb-2.5 text-sm font-semibold",
                     SIDEBAR_MUTED_TEXT_CLASS,
                   )}
                 >
@@ -3139,7 +3056,7 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
             onDragEnd={handleProjectDragEnd}
             onDragCancel={handleProjectDragCancel}
           >
-            <SidebarMenu>
+            <SidebarMenu className="gap-0.5">
               <SortableContext
                 items={sortedProjects.map((project) => project.projectKey)}
                 strategy={verticalListSortingStrategy}
@@ -3176,7 +3093,7 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
             </SidebarMenu>
           </DndContext>
         ) : (
-          <SidebarMenu ref={attachProjectListAutoAnimateRef}>
+          <SidebarMenu ref={attachProjectListAutoAnimateRef} className="gap-0.5">
             {sortedProjects.map((project) => (
               <SidebarProjectListRow
                 key={project.projectKey}
@@ -3204,7 +3121,13 @@ const SidebarProjectsContent = memo(function SidebarProjectsContent(
         )}
 
         {sidebarViewMode !== "focused" && projectsLength === 0 && (
-          <div className="px-2 pt-4 text-center text-xs text-muted-foreground/60">
+          <div
+            className={cn(
+              "px-2 pt-4 text-center",
+              SIDEBAR_MUTED_TEXT_CLASS,
+              SIDEBAR_LABEL_TEXT_CLASS,
+            )}
+          >
             No projects yet
           </div>
         )}
@@ -3929,7 +3852,6 @@ export default function Sidebar() {
             projectsLength={projects.length}
           />
 
-          <SidebarSeparator />
           <SidebarChromeFooter />
         </>
       )}

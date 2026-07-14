@@ -2,7 +2,27 @@ import { ThreadId } from "@t3tools/contracts";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 
-import { ThreadWorktreeIndicator } from "./ThreadStatusIndicators";
+import { ThreadStatusLabel, ThreadWorktreeIndicator } from "./ThreadStatusIndicators";
+
+describe("ThreadStatusLabel", () => {
+  it("can preserve the status label while hiding its sidebar dot", () => {
+    const markup = renderToStaticMarkup(
+      <ThreadStatusLabel
+        status={{
+          label: "Completed",
+          colorClass: "text-success",
+          dotClass: "bg-success",
+          pulse: false,
+        }}
+        showDot={false}
+      />,
+    );
+
+    expect(markup).toContain("Completed");
+    expect(markup).not.toContain("rounded-full");
+    expect(markup).not.toContain("bg-success");
+  });
+});
 
 describe("ThreadWorktreeIndicator", () => {
   it("renders the worktree folder and branch in an accessible label", () => {

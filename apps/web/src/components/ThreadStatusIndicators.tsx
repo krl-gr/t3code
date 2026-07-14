@@ -133,9 +133,11 @@ export function ThreadWorktreeIndicator({
 export function ThreadStatusLabel({
   status,
   compact = false,
+  showDot = true,
 }: {
   status: ThreadStatusPill;
   compact?: boolean;
+  showDot?: boolean;
 }) {
   if (compact) {
     return (
@@ -143,11 +145,13 @@ export function ThreadStatusLabel({
         title={status.label}
         className={`inline-flex size-3.5 shrink-0 items-center justify-center ${status.colorClass}`}
       >
-        <span
-          className={`size-[9px] rounded-full ${status.dotClass} ${
-            status.pulse ? "animate-pulse" : ""
-          }`}
-        />
+        {showDot ? (
+          <span
+            className={`size-[9px] rounded-full ${status.dotClass} ${
+              status.pulse ? "animate-pulse" : ""
+            }`}
+          />
+        ) : null}
         <span className="sr-only">{status.label}</span>
       </span>
     );
@@ -158,11 +162,13 @@ export function ThreadStatusLabel({
       title={status.label}
       className={`inline-flex items-center gap-1 ${SIDEBAR_LABEL_TEXT_CLASS} ${status.colorClass}`}
     >
-      <span
-        className={`h-1.5 w-1.5 rounded-full ${status.dotClass} ${
-          status.pulse ? "animate-pulse" : ""
-        }`}
-      />
+      {showDot ? (
+        <span
+          className={`h-1.5 w-1.5 rounded-full ${status.dotClass} ${
+            status.pulse ? "animate-pulse" : ""
+          }`}
+        />
+      ) : null}
       <span className="hidden md:inline">{status.label}</span>
     </span>
   );

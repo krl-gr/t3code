@@ -105,7 +105,7 @@ export function SidebarUpdatePill() {
   return (
     <div className="flex flex-col gap-1">
       {showArm64Warning && arm64Description && (
-        <Alert variant="warning" className="rounded-2xl border-warning/40 bg-warning/8 text-xs">
+        <Alert variant="warning" className="rounded-2xl border-warning/40 bg-warning/8 text-sm">
           <TriangleAlertIcon />
           <AlertTitle>Intel build on Apple Silicon</AlertTitle>
           <AlertDescription>{arm64Description}</AlertDescription>
