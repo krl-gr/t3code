@@ -17,6 +17,9 @@ Object.assign(process.env, repoEnv);
 const publicWebRoot = NodeURL.fileURLToPath(new URL(".", import.meta.url));
 const publicRepositoryRoot = NodeURL.fileURLToPath(new URL("../..", import.meta.url));
 const publicWebNodeModules = NodeURL.fileURLToPath(new URL("./node_modules", import.meta.url));
+const publicReactCompilerPlugin = NodeURL.fileURLToPath(
+  new URL("./node_modules/babel-plugin-react-compiler/dist/index.js", import.meta.url),
+);
 const publicRoutesDirectory = NodeURL.fileURLToPath(new URL("./src/routes", import.meta.url));
 const publicRouteTree = NodeURL.fileURLToPath(new URL("./src/routeTree.gen.ts", import.meta.url));
 const port = Number(process.env.PORT ?? 5733);
@@ -107,6 +110,14 @@ export interface WebViteConfigOptions {
   readonly additionalFsAllow?: ReadonlyArray<string>;
 }
 
+function createReactCompilerPreset() {
+  const preset = reactCompilerPreset();
+  return {
+    ...preset,
+    preset: () => ({ plugins: [[publicReactCompilerPlugin, {}]] }),
+  };
+}
+
 export function createWebViteConfig(options: WebViteConfigOptions = {}): ViteUserConfig {
   return {
     root: publicWebRoot,
@@ -123,7 +134,7 @@ export function createWebViteConfig(options: WebViteConfigOptions = {}): ViteUse
         // whereas the previous version of the plugin parsed all files with a .ts extension.
         // This is causing our packages/ directory to fail to parse, as they are not relative to the CWD.
         parserOpts: { plugins: ["typescript", "jsx"] },
-        presets: [reactCompilerPreset()],
+        presets: [createReactCompilerPreset()],
       }),
       tailwindcss(),
     ],
