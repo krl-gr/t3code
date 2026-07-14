@@ -17,10 +17,9 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarSeparator,
   useSidebar,
 } from "../ui/sidebar";
-import { T3ConnectSidebarAvatar, T3ConnectSidebarSignIn } from "../clerk/T3ConnectSidebarSignIn";
+import { SIDEBAR_LABEL_TEXT_CLASS, SIDEBAR_MUTED_TEXT_CLASS } from "../sidebar/sidebarTextStyles";
 
 export type SettingsSectionPath =
   | "/settings/general"
@@ -70,8 +69,8 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
   return (
     <>
       <SidebarContent className="overflow-x-hidden">
-        <SidebarGroup className="px-2 py-3">
-          <SidebarMenu>
+        <SidebarGroup className="px-2 pt-2 pb-2">
+          <SidebarMenu className="gap-0.5">
             {SETTINGS_NAV_ITEMS.map((item) => {
               const Icon = item.icon;
               const isActive = pathname === item.to;
@@ -82,19 +81,19 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
                     isActive={isActive}
                     className={
                       isActive
-                        ? "gap-2.5 px-2.5 py-2 text-left text-[13px] font-medium text-foreground"
-                        : "gap-2.5 px-2.5 py-2 text-left text-[13px] text-muted-foreground/70 hover:text-foreground/80"
+                        ? "h-8 gap-2 px-2 text-left hover:bg-accent data-[active=true]:bg-accent data-[active=true]:text-foreground dark:hover:text-white/86 dark:data-[active=true]:bg-white/[0.06] dark:data-[active=true]:text-white/82"
+                        : `h-8 gap-2 px-2 text-left hover:bg-accent hover:text-foreground dark:hover:text-white/86 ${SIDEBAR_MUTED_TEXT_CLASS}`
                     }
                     onClick={() => handleSectionClick(item.to)}
                   >
-                    <Icon
+                    <Icon className="size-4 shrink-0" />
+                    <span
                       className={
-                        isActive
-                          ? "size-4 shrink-0 text-foreground"
-                          : "size-4 shrink-0 text-muted-foreground/60"
+                        SIDEBAR_LABEL_TEXT_CLASS + " truncate text-foreground/72 dark:text-white/82"
                       }
-                    />
-                    <span className="truncate">{item.label}</span>
+                    >
+                      {item.label}
+                    </span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               );
@@ -103,24 +102,21 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarSeparator />
       <SidebarFooter className="p-2">
-        <T3ConnectSidebarSignIn />
-        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1">
-          <SidebarMenu className="min-w-0">
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                size="sm"
-                className="gap-2 px-2 py-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
-                onClick={handleBackClick}
-              >
-                <ArrowLeftIcon className="size-4" />
-                <span>Back</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          </SidebarMenu>
-          <T3ConnectSidebarAvatar />
-        </div>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              size="sm"
+              className={`h-8 gap-2 px-2 hover:bg-accent hover:text-foreground dark:hover:text-white/86 ${SIDEBAR_MUTED_TEXT_CLASS}`}
+              onClick={handleBackClick}
+            >
+              <ArrowLeftIcon className="size-4" />
+              <span className={SIDEBAR_LABEL_TEXT_CLASS + " text-foreground/72 dark:text-white/82"}>
+                Back
+              </span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
       </SidebarFooter>
     </>
   );

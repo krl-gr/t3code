@@ -161,7 +161,7 @@ export function isRetryableDevelopmentRendererLoadFailure(input: {
   );
 }
 
-function getWindowTitleBarOptions(
+export function resolveWindowTitleBarOptions(
   shouldUseDarkColors: boolean,
   platform: NodeJS.Platform,
 ): WindowTitleBarOptions {
@@ -195,7 +195,7 @@ function syncWindowAppearance(
     window.setBackgroundColor(
       getWindowTransparencyOptions(shouldUseDarkColors, platform).backgroundColor,
     );
-    const { titleBarOverlay } = getWindowTitleBarOptions(shouldUseDarkColors, platform);
+    const { titleBarOverlay } = resolveWindowTitleBarOptions(shouldUseDarkColors, platform);
     if (typeof titleBarOverlay === "object") {
       window.setTitleBarOverlay(titleBarOverlay);
     }
@@ -286,7 +286,7 @@ export const make = Effect.gen(function* () {
       ...getWindowTransparencyOptions(shouldUseDarkColors, environment.platform),
       ...iconOption,
       title: environment.displayName,
-      ...getWindowTitleBarOptions(shouldUseDarkColors, environment.platform),
+      ...resolveWindowTitleBarOptions(shouldUseDarkColors, environment.platform),
       webPreferences: {
         preload: environment.preloadPath,
         contextIsolation: true,

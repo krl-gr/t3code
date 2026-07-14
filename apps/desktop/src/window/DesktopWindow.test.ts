@@ -33,6 +33,26 @@ import * as DesktopServerExposure from "../backend/DesktopServerExposure.ts";
 import * as DesktopWindow from "./DesktopWindow.ts";
 import * as PreviewManager from "../preview/Manager.ts";
 
+describe("resolveWindowTitleBarOptions", () => {
+  it("uses the 52px renderer header around inset macOS traffic lights", () => {
+    assert.deepStrictEqual(DesktopWindow.resolveWindowTitleBarOptions(true, "darwin"), {
+      titleBarStyle: "hiddenInset",
+      trafficLightPosition: { x: 16, y: 18 },
+    });
+  });
+
+  it("exposes a 40px native controls overlay on Windows", () => {
+    assert.deepStrictEqual(DesktopWindow.resolveWindowTitleBarOptions(true, "win32"), {
+      titleBarStyle: "hidden",
+      titleBarOverlay: {
+        color: "#01000000",
+        height: 40,
+        symbolColor: "#f8fafc",
+      },
+    });
+  });
+});
+
 const environmentInput = {
   dirname: "/repo/apps/desktop/dist-electron",
   homeDirectory: "/Users/alice",

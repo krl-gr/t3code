@@ -178,6 +178,7 @@ import {
 } from "./Sidebar.logic";
 import { sortThreads } from "../lib/threadSort";
 import { SidebarUpdatePill } from "./sidebar/SidebarUpdatePill";
+import { resolveSidebarChromeHeaderLayout } from "./sidebar/sidebarChrome";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 import { useIsMobile } from "~/hooks/useMediaQuery";
 import { CommandDialogTrigger } from "./ui/command";
@@ -2767,11 +2768,11 @@ const SidebarChromeHeader = memo(function SidebarChromeHeader({
   isElectron: boolean;
 }) {
   const platform = typeof navigator === "undefined" ? "" : navigator.platform;
-  const hideBrand = isElectron && isMacPlatform(platform);
+  const layout = resolveSidebarChromeHeaderLayout({ isElectron, platform });
   const headerContent = (
     <div className="flex items-center gap-2">
       <SidebarTrigger className="shrink-0 sm:hidden" />
-      {hideBrand ? null : (
+      {layout.hideBrand ? null : (
         <Tooltip>
           <TooltipTrigger
             render={
@@ -2792,23 +2793,7 @@ const SidebarChromeHeader = memo(function SidebarChromeHeader({
     </div>
   );
 
-  if (hideBrand) {
-    return (
-      <SidebarHeader className="drag-region h-[52px] flex-row items-center px-4 py-0 pl-[90px] wco:h-[env(titlebar-area-height)] wco:pl-[calc(env(titlebar-area-x)+1em)]">
-        {headerContent}
-      </SidebarHeader>
-    );
-  }
-
-  return isElectron ? (
-    <SidebarHeader className="drag-region h-[52px] flex-row items-center gap-2 px-4 py-0 pl-[90px] wco:h-[env(titlebar-area-height)] wco:pl-[calc(env(titlebar-area-x)+1em)]">
-      {headerContent}
-    </SidebarHeader>
-  ) : (
-    <SidebarHeader className="gap-3 px-3 py-2 sm:gap-2.5 sm:px-4 sm:py-3">
-      {headerContent}
-    </SidebarHeader>
-  );
+  return <SidebarHeader className={layout.className}>{headerContent}</SidebarHeader>;
 });
 
 const SidebarChromeFooter = memo(function SidebarChromeFooter() {
