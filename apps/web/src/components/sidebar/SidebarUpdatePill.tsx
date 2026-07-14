@@ -1,6 +1,7 @@
 import { DownloadIcon, RotateCwIcon, TriangleAlertIcon, XIcon } from "lucide-react";
 import { useCallback, useState } from "react";
 import { isElectron } from "../../env";
+import { cn } from "../../lib/utils";
 import { useDesktopUpdateState } from "../../state/desktopUpdate";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import {
@@ -16,6 +17,7 @@ import {
 } from "../desktopUpdate.logic";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { SIDEBAR_LABEL_TEXT_CLASS } from "./sidebarTextStyles";
 
 export function SidebarUpdatePill() {
   const state = useDesktopUpdateState();
@@ -111,9 +113,11 @@ export function SidebarUpdatePill() {
       )}
       {visible && (
         <div
-          className={`group/update relative flex h-7 w-full items-center rounded-lg bg-primary/15 text-xs font-medium text-primary ${
-            disabled ? " cursor-not-allowed opacity-60" : ""
-          }`}
+          className={cn(
+            "group/update relative flex h-7 w-full items-center rounded-lg bg-primary/15 text-primary",
+            SIDEBAR_LABEL_TEXT_CLASS,
+            disabled && "cursor-not-allowed opacity-60",
+          )}
         >
           <div className="pointer-events-none absolute inset-0 rounded-lg transition-colors group-has-[button.update-main:hover]/update:bg-primary/22" />
           <Tooltip>

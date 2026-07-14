@@ -36,9 +36,7 @@
 
 @theme inline {
   --animate-skeleton: skeleton 2s -1s infinite linear;
-  --font-sans:
-    "DM Sans Variable", "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui,
-    sans-serif;
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   --font-mono:
     "SF Mono", "SFMono-Regular", "JetBrains Mono", Consolas, "Liberation Mono", Menlo, monospace;
   --color-warning-foreground: var(--warning-foreground);
@@ -65,7 +63,13 @@
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
   --color-foreground: var(--foreground);
+  --color-app-content-background: var(--app-content-background);
   --color-background: var(--background);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -229,6 +233,7 @@
   --radius: 0.625rem;
   --background: var(--color-white);
   --app-chrome-background: var(--background);
+  --app-content-background: --alpha(var(--color-white) / 80%);
   --foreground: var(--color-neutral-800);
   --card: var(--color-white);
   --card-foreground: var(--color-neutral-800);
@@ -253,11 +258,29 @@
   --success-foreground: var(--color-emerald-700);
   --warning: var(--color-amber-500);
   --warning-foreground: var(--color-amber-700);
+  --sidebar: --alpha(var(--color-white) / 25%);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-accent: --alpha(var(--color-black) / 5%);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: --alpha(var(--color-black) / 10%);
+  --project-avatar-background-pink: #feeef8;
+  --project-avatar-background-mint: #e1fbf4;
+  --project-avatar-background-orange: #fff1e7;
+  --project-avatar-background-purple: #f9f1fe;
+  --project-avatar-background-cyan: #e7f9fb;
+  --project-avatar-background-lime: #eefadc;
+  --project-avatar-text-pink: #cd1d8d;
+  --project-avatar-text-mint: #147d6f;
+  --project-avatar-text-orange: #ed5f00;
+  --project-avatar-text-purple: #8445bc;
+  --project-avatar-text-cyan: #0894b3;
+  --project-avatar-text-lime: #5d770d;
 
   @variant dark {
     color-scheme: dark;
-    --background: color-mix(in srgb, var(--color-neutral-950) 95%, var(--color-white));
+    --background: #131313fa;
     --app-chrome-background: var(--background);
+    --app-content-background: #131313fa;
     --foreground: var(--color-neutral-100);
     --card: color-mix(in srgb, var(--background) 98%, var(--color-white));
     --card-foreground: var(--color-neutral-100);
@@ -282,13 +305,29 @@
     --success-foreground: var(--color-emerald-400);
     --warning: var(--color-amber-500);
     --warning-foreground: var(--color-amber-400);
+    --sidebar: color-mix(in srgb, var(--background) 34%, transparent);
+    --sidebar-foreground: var(--foreground);
+    --sidebar-accent: --alpha(var(--color-white) / 7%);
+    --sidebar-accent-foreground: var(--foreground);
+    --sidebar-border: --alpha(var(--color-white) / 10%);
+    --project-avatar-background-pink: #501b3f;
+    --project-avatar-background-mint: #033a34;
+    --project-avatar-background-orange: #5f2a06;
+    --project-avatar-background-purple: #432155;
+    --project-avatar-background-cyan: #0f3058;
+    --project-avatar-background-lime: #2b3711;
+    --project-avatar-text-pink: #e34ba9;
+    --project-avatar-text-mint: #95f3d9;
+    --project-avatar-text-orange: #ff802b;
+    --project-avatar-text-purple: #9d5bd2;
+    --project-avatar-text-cyan: #369eff;
+    --project-avatar-text-lime: #c4f042;
   }
 }
 
 body {
   font-family:
-    "DM Sans Variable",
-    "DM Sans",
+    "Inter",
     -apple-system,
     BlinkMacSystemFont,
     "Segoe UI",
@@ -307,6 +346,12 @@ body {
 body {
   height: 100%;
   overflow: hidden;
+}
+
+.electron,
+.electron body,
+.electron #root {
+  background: transparent !important;
 }
 
 #root {
@@ -329,6 +374,12 @@ body::after {
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   background-repeat: repeat;
   background-size: 256px 256px;
+}
+
+.t3-sidebar-glass {
+  background: var(--sidebar);
+  -webkit-backdrop-filter: blur(28px) saturate(1.25);
+  backdrop-filter: blur(28px) saturate(1.25);
 }
 
 pre,

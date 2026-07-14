@@ -13,6 +13,11 @@ import type {
 import { useConnectedWebFeatureAvailability } from "../../product/environmentProduct";
 import { cn } from "../../lib/utils";
 import {
+  SIDEBAR_LABEL_COLOR_CLASS,
+  SIDEBAR_LABEL_TEXT_CLASS,
+  SIDEBAR_MUTED_TEXT_CLASS,
+} from "../sidebar/sidebarTextStyles";
+import {
   SidebarGroup,
   SidebarMenu,
   SidebarMenuButton,
@@ -46,13 +51,22 @@ function WebFeatureNavigationItem({
         size="sm"
         isActive={pathname === item.path || pathname.startsWith(`${item.path}/`)}
         className={cn(
-          "h-8 w-full justify-start gap-2 px-2 text-muted-foreground/70 hover:bg-accent hover:text-foreground focus-visible:ring-1 focus-visible:ring-inset data-[active=true]:bg-accent data-[active=true]:text-foreground",
+          "h-8 w-full justify-start gap-2 px-2 hover:bg-accent hover:text-foreground focus-visible:ring-1 focus-visible:ring-inset data-[active=true]:bg-accent data-[active=true]:text-foreground dark:hover:text-white/86",
+          SIDEBAR_MUTED_TEXT_CLASS,
         )}
         data-testid={`sidebar-${item.id}-tab`}
         onClick={handleClick}
       >
         {Icon ? <Icon className="size-4 shrink-0" /> : null}
-        <span className="flex-1 truncate text-left text-xs">{item.label}</span>
+        <span
+          className={cn(
+            "flex-1 truncate text-left",
+            SIDEBAR_LABEL_COLOR_CLASS,
+            SIDEBAR_LABEL_TEXT_CLASS,
+          )}
+        >
+          {item.label}
+        </span>
       </SidebarMenuButton>
     </SidebarMenuItem>
   );

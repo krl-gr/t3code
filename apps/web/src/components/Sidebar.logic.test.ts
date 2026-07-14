@@ -104,7 +104,7 @@ describe("hasUnseenCompletion", () => {
     ).toBe(true);
   });
 
-  it("treats a missing client visit marker as read", () => {
+  it("treats a missing client visit marker as unseen", () => {
     expect(
       hasUnseenCompletion({
         hasActionableProposedPlan: false,
@@ -115,7 +115,7 @@ describe("hasUnseenCompletion", () => {
         lastVisitedAt: undefined,
         session: null,
       }),
-    ).toBe(false);
+    ).toBe(true);
   });
 });
 
@@ -632,7 +632,7 @@ describe("resolveThreadStatusPill", () => {
     ).toMatchObject({ label: "Plan Ready", pulse: false });
   });
 
-  it("does not manufacture completed state without a client visit marker", () => {
+  it("shows completed when no client visit marker exists yet", () => {
     expect(
       resolveThreadStatusPill({
         thread: {
@@ -645,7 +645,7 @@ describe("resolveThreadStatusPill", () => {
           },
         },
       }),
-    ).toBeNull();
+    ).toMatchObject({ label: "Completed", pulse: false });
   });
 
   it("shows completed when there is an unseen completion and no active blocker", () => {

@@ -22,6 +22,7 @@ const TITLEBAR_HEIGHT = 40;
 const TITLEBAR_COLOR = "#01000000"; // #00000000 does not work correctly on Linux
 const TITLEBAR_LIGHT_SYMBOL_COLOR = "#1f2937";
 const TITLEBAR_DARK_SYMBOL_COLOR = "#f8fafc";
+const TRANSPARENT_WINDOW_BACKGROUND = "#00000000";
 const DEVELOPMENT_LOAD_RETRY_DELAYS_MS = [100, 250, 500, 1_000, 2_000] as const;
 const DEVELOPMENT_RETRYABLE_LOAD_ERROR_CODES = new Set([
   -2, // ERR_FAILED
@@ -37,6 +38,12 @@ type WindowTitleBarOptions = Pick<
   Electron.BrowserWindowConstructorOptions,
   "titleBarOverlay" | "titleBarStyle" | "trafficLightPosition"
 >;
+type WindowTransparencyOptions = Pick<
+  Electron.BrowserWindowConstructorOptions,
+  "transparent" | "vibrancy" | "visualEffectState"
+> & {
+  readonly backgroundColor: string;
+};
 
 type DesktopWindowRuntimeServices =
   | DesktopEnvironment.DesktopEnvironment
@@ -97,6 +104,22 @@ function getIconOption(
 
 function getInitialWindowBackgroundColor(shouldUseDarkColors: boolean): string {
   return shouldUseDarkColors ? "#0a0a0a" : "#ffffff";
+}
+
+function getWindowTransparencyOptions(
+  shouldUseDarkColors: boolean,
+  platform: NodeJS.Platform,
+): WindowTransparencyOptions {
+  if (platform !== "darwin") {
+    return { backgroundColor: getInitialWindowBackgroundColor(shouldUseDarkColors) };
+  }
+
+  return {
+    backgroundColor: TRANSPARENT_WINDOW_BACKGROUND,
+    transparent: true,
+    vibrancy: "sidebar",
+    visualEffectState: "active",
+  };
 }
 
 // A self-contained "Connecting to WSL" splash, shown immediately in wsl-only
@@ -169,7 +192,9 @@ function syncWindowAppearance(
       return;
     }
 
-    window.setBackgroundColor(getInitialWindowBackgroundColor(shouldUseDarkColors));
+    window.setBackgroundColor(
+      getWindowTransparencyOptions(shouldUseDarkColors, platform).backgroundColor,
+    );
     const { titleBarOverlay } = getWindowTitleBarOptions(shouldUseDarkColors, platform);
     if (typeof titleBarOverlay === "object") {
       window.setTitleBarOverlay(titleBarOverlay);
@@ -253,12 +278,12 @@ export const make = Effect.gen(function* () {
     const window = yield* electronWindow.create({
       width: 1100,
       height: 780,
-      minWidth: 840,
+      minWidth: 400,
       minHeight: 620,
       show: false,
       autoHideMenuBar: true,
       ...(environment.platform === "darwin" ? { disableAutoHideCursor: true } : {}),
-      backgroundColor: getInitialWindowBackgroundColor(shouldUseDarkColors),
+      ...getWindowTransparencyOptions(shouldUseDarkColors, environment.platform),
       ...iconOption,
       title: environment.displayName,
       ...getWindowTitleBarOptions(shouldUseDarkColors, environment.platform),

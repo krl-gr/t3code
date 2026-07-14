@@ -156,7 +156,7 @@ export function hasUnseenCompletion(thread: ThreadStatusInput): boolean {
   if (!thread.latestTurn?.completedAt) return false;
   const completedAt = Date.parse(thread.latestTurn.completedAt);
   if (Number.isNaN(completedAt)) return false;
-  if (!thread.lastVisitedAt) return false;
+  if (!thread.lastVisitedAt) return true;
 
   const lastVisitedAt = Date.parse(thread.lastVisitedAt);
   if (Number.isNaN(lastVisitedAt)) return true;
@@ -331,30 +331,30 @@ export function resolveThreadRowClassName(input: {
   isSelected: boolean;
 }): string {
   const baseClassName =
-    "h-6 w-full translate-x-0 cursor-pointer justify-start px-2 text-left select-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring sm:h-7";
+    "h-8 w-full translate-x-0 cursor-pointer justify-start px-2 text-left text-foreground/72 select-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring dark:text-white/82";
 
   if (input.isSelected && input.isActive) {
     return cn(
       baseClassName,
-      "bg-primary/22 text-foreground font-medium hover:bg-primary/26 hover:text-foreground dark:bg-primary/30 dark:hover:bg-primary/36",
+      "bg-primary/22 text-foreground hover:bg-primary/26 dark:bg-primary/30 dark:text-white/92 dark:hover:bg-primary/36",
     );
   }
 
   if (input.isSelected) {
     return cn(
       baseClassName,
-      "bg-primary/15 text-foreground hover:bg-primary/19 hover:text-foreground dark:bg-primary/22 dark:hover:bg-primary/28",
+      "bg-primary/15 text-foreground hover:bg-primary/19 dark:bg-primary/22 dark:text-white/92 dark:hover:bg-primary/28",
     );
   }
 
   if (input.isActive) {
     return cn(
       baseClassName,
-      "bg-accent/85 text-foreground font-medium hover:bg-accent hover:text-foreground dark:bg-accent/55 dark:hover:bg-accent/70",
+      "bg-accent/85 text-foreground hover:bg-accent dark:bg-white/[0.06] dark:text-white/92 dark:hover:bg-white/[0.06]",
     );
   }
 
-  return cn(baseClassName, "text-muted-foreground hover:bg-accent hover:text-foreground");
+  return cn(baseClassName, "hover:bg-accent hover:text-foreground dark:hover:text-white/92");
 }
 
 export function resolveThreadStatusPill(input: {

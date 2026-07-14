@@ -5,11 +5,13 @@ import { CircleCheckIcon, DownloadIcon, LoaderIcon, TriangleAlertIcon, XIcon } f
 import { useCallback, useEffect, useState, type CSSProperties } from "react";
 
 import { primaryServerProvidersAtom } from "../../state/server";
+import { cn } from "../../lib/utils";
 import {
   getProviderUpdateSidebarPillView,
   type ProviderUpdateSidebarPillView,
 } from "../ProviderUpdateLaunchNotification.logic";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { SIDEBAR_LABEL_TEXT_CLASS } from "./sidebarTextStyles";
 
 const PROVIDER_UPDATE_PILL_STYLES = {
   loading:
@@ -124,13 +126,14 @@ export function SidebarProviderUpdatePill() {
 
   return (
     <div
-      className={`group/provider-update relative flex h-7 w-full items-center overflow-hidden rounded-lg text-xs font-medium transform-gpu transition-all duration-180 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform ${
-        PROVIDER_UPDATE_PILL_STYLES[displayedView.tone]
-      } ${
+      className={cn(
+        "group/provider-update relative flex h-7 w-full items-center overflow-hidden rounded-lg transform-gpu transition-all duration-180 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform",
+        SIDEBAR_LABEL_TEXT_CLASS,
+        PROVIDER_UPDATE_PILL_STYLES[displayedView.tone],
         exitingKey === displayedView.key
           ? "pointer-events-none translate-y-1.5 opacity-0"
-          : "translate-y-0 opacity-100"
-      }`}
+          : "translate-y-0 opacity-100",
+      )}
       onTransitionEnd={(event) => {
         if (event.target !== event.currentTarget) {
           return;
