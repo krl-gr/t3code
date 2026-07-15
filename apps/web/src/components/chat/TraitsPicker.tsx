@@ -425,12 +425,20 @@ export const TraitsPicker = memo(function TraitsPicker({
         {isCodexStyle ? (
           <span className="flex min-w-0 w-full items-center gap-2 overflow-hidden">
             {triggerLabel}
-            <ChevronDownIcon aria-hidden="true" className="size-3 shrink-0 opacity-60" />
+            <ChevronDownIcon
+              aria-hidden="true"
+              className="size-3 shrink-0 opacity-60"
+              data-composer-control-chevron
+            />
           </span>
         ) : (
           <>
             <span>{triggerLabel}</span>
-            <ChevronDownIcon aria-hidden="true" className="size-3 opacity-60" />
+            <ChevronDownIcon
+              aria-hidden="true"
+              className="size-3 opacity-60"
+              data-composer-control-chevron
+            />
           </>
         )}
       </MenuTrigger>

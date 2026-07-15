@@ -181,7 +181,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
             <TooltipPopup side="top">{triggerLabel}</TooltipPopup>
           </Tooltip>
         </span>
-        <span aria-hidden="true" className="flex items-center">
+        <span aria-hidden="true" className="flex items-center" data-composer-control-chevron>
           <ChevronDownIcon aria-hidden="true" className="!ms-0 !-me-1 size-3 shrink-0 opacity-60" />
         </span>
       </PopoverTrigger>
