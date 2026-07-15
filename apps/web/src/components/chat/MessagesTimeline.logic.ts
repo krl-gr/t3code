@@ -1,6 +1,7 @@
 import * as Equal from "effect/Equal";
 import {
   formatDuration,
+  workEntryIndicatesToolFailure,
   workEntryIndicatesToolNeutralStatus,
   workLogEntryIsToolLike,
   type TimelineEntry,
@@ -9,7 +10,6 @@ import {
 import { type ChatMessage, type ProposedPlan, type TurnDiffSummary } from "../../types";
 import { type MessageId, type OrchestrationLatestTurn, type TurnId } from "@t3tools/contracts";
 
-export const MAX_VISIBLE_WORK_LOG_ENTRIES = 1;
 export const TIMELINE_MINIMAP_ITEM_SPACING = 8;
 export const TIMELINE_MINIMAP_MIN_ITEMS = 2;
 export const TIMELINE_MINIMAP_MAX_HEIGHT_CSS = "calc(100vh - 18rem)";
@@ -106,7 +106,7 @@ export type MessagesTimelineRow =
       id: string;
       createdAt: string;
       groupId: string;
-      hiddenCount: number;
+      entryCount: number;
       expanded: boolean;
       onlyToolEntries: boolean;
     }
@@ -440,38 +440,33 @@ export function deriveMessagesTimelineRows(input: {
         (entry) => !workEntryIndicatesToolNeutralStatus(entry),
       );
       if (visibleGroupedEntries.length > 0) {
-        if (visibleGroupedEntries.length <= MAX_VISIBLE_WORK_LOG_ENTRIES) {
-          nextRows.push({
-            kind: "work",
-            id: timelineEntry.id,
-            createdAt: timelineEntry.createdAt,
-            groupedEntries: visibleGroupedEntries,
-          });
-        } else {
-          const groupId = `work-group:${timelineEntry.id}`;
-          const expanded = input.expandedWorkGroupIds?.has(groupId) ?? false;
-          const hiddenEntries = visibleGroupedEntries.slice(0, -MAX_VISIBLE_WORK_LOG_ENTRIES);
-          const visibleEntries = visibleGroupedEntries.slice(-MAX_VISIBLE_WORK_LOG_ENTRIES);
-          const renderedEntries = expanded ? [...hiddenEntries, ...visibleEntries] : visibleEntries;
+        const groupId = `work-group:${timelineEntry.id}`;
+        const isActiveGroup =
+          unsettledTurnId !== null &&
+          visibleGroupedEntries.some((entry) => entry.turnId === unsettledTurnId);
+        const hasFailure = visibleGroupedEntries.some(workEntryIndicatesToolFailure);
+        const expanded =
+          isActiveGroup || hasFailure || (input.expandedWorkGroupIds?.has(groupId) ?? false);
 
-          for (const workEntry of renderedEntries) {
+        nextRows.push({
+          kind: "work-toggle",
+          id: `work-toggle:${timelineEntry.id}`,
+          createdAt: timelineEntry.createdAt,
+          groupId,
+          entryCount: visibleGroupedEntries.length,
+          expanded,
+          onlyToolEntries: visibleGroupedEntries.every((entry) => workLogEntryIsToolLike(entry)),
+        });
+
+        if (expanded) {
+          for (const workEntry of visibleGroupedEntries) {
             nextRows.push({
               kind: "work",
-              id: workEntry.id,
+              id: visibleGroupedEntries.length === 1 ? timelineEntry.id : workEntry.id,
               createdAt: workEntry.createdAt,
               groupedEntries: [workEntry],
             });
           }
-
-          nextRows.push({
-            kind: "work-toggle",
-            id: `work-toggle:${timelineEntry.id}`,
-            createdAt: timelineEntry.createdAt,
-            groupId,
-            hiddenCount: hiddenEntries.length,
-            expanded,
-            onlyToolEntries: visibleGroupedEntries.every((entry) => workLogEntryIsToolLike(entry)),
-          });
         }
       }
       index = cursor - 1;
@@ -579,7 +574,7 @@ function isRowUnchanged(a: MessagesTimelineRow, b: MessagesTimelineRow): boolean
       return (
         a.createdAt === bw.createdAt &&
         a.groupId === bw.groupId &&
-        a.hiddenCount === bw.hiddenCount &&
+        a.entryCount === bw.entryCount &&
         a.expanded === bw.expanded &&
         a.onlyToolEntries === bw.onlyToolEntries
       );

@@ -190,6 +190,7 @@ function buildProps() {
     onAnchorReady: () => {},
     onAnchorSizeChanged: () => {},
     contentInsetEndAdjustment: 0,
+    preserveVisibleContentPositionOnResize: false,
     onIsAtEndChange: () => {},
     onManualNavigation: () => {},
   };
@@ -325,6 +326,19 @@ describe("MessagesTimeline", () => {
     expect(markup).toContain('data-user-message-footer="true"');
   });
 
+  it("preserves the visible row while the right panel is resizing", async () => {
+    const { MessagesTimeline } = await import("./MessagesTimeline");
+    const markup = renderToStaticMarkup(
+      <MessagesTimeline
+        {...buildProps()}
+        preserveVisibleContentPositionOnResize
+        timelineEntries={[buildUserTimelineEntry("Resize anchor prompt.")]}
+      />,
+    );
+
+    expect(markup).toContain('data-maintain-visible-content-position-size="true"');
+  });
+
   it("does not render collapse controls for short user messages", async () => {
     const { MessagesTimeline } = await import("./MessagesTimeline");
     const markup = renderToStaticMarkup(
@@ -412,6 +426,8 @@ describe("MessagesTimeline", () => {
     const markup = renderToStaticMarkup(
       <MessagesTimeline
         {...buildProps()}
+        isWorking
+        runningTurnId={"turn-1" as never}
         timelineEntries={[
           {
             id: "entry-1",
@@ -420,6 +436,7 @@ describe("MessagesTimeline", () => {
             entry: {
               id: "work-1",
               createdAt: "2026-03-17T19:12:28.000Z",
+              turnId: "turn-1" as never,
               label: "Context compacted",
               tone: "info",
             },
@@ -429,7 +446,7 @@ describe("MessagesTimeline", () => {
     );
 
     expect(markup).toContain("Context compacted");
-    expect(markup).toContain("Work Log");
+    expect(markup).toContain("Work log");
   });
 
   it("formats changed file paths from the workspace root", async () => {
@@ -437,6 +454,8 @@ describe("MessagesTimeline", () => {
     const markup = renderToStaticMarkup(
       <MessagesTimeline
         {...buildProps()}
+        isWorking
+        runningTurnId={"turn-1" as never}
         timelineEntries={[
           {
             id: "entry-1",
@@ -445,6 +464,7 @@ describe("MessagesTimeline", () => {
             entry: {
               id: "work-1",
               createdAt: "2026-03-17T19:12:28.000Z",
+              turnId: "turn-1" as never,
               label: "Updated files",
               tone: "tool",
               changedFiles: ["C:/Users/mike/dev-stuff/t3code/apps/web/src/session-logic.ts"],

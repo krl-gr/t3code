@@ -533,7 +533,7 @@ describe("deriveMessagesTimelineRows", () => {
       "user-entry",
       "turn-fold:turn-1",
       "assistant-thought-entry",
-      "work-entry-1",
+      "work-toggle:work-entry-1",
       "assistant-final-entry",
     ]);
     expect(
@@ -789,6 +789,7 @@ describe("deriveMessagesTimelineRows", () => {
     expect(rows.some((row) => row.kind === "turn-fold")).toBe(false);
     expect(rows.map((row) => row.id)).toEqual([
       "assistant-thought-entry",
+      "work-toggle:work-entry-1",
       "work-entry-1",
       "working-indicator-row",
     ]);
@@ -994,18 +995,18 @@ describe("deriveMessagesTimelineRows", () => {
       expandedWorkGroupIds: new Set(["work-group:work-entry-1"]),
     });
 
-    expect(collapsedRows.map((row) => row.id)).toEqual(["work-3", "work-toggle:work-entry-1"]);
+    expect(collapsedRows.map((row) => row.id)).toEqual(["work-toggle:work-entry-1"]);
     expect(collapsedRows.find((row) => row.kind === "work-toggle")).toMatchObject({
       groupId: "work-group:work-entry-1",
-      hiddenCount: 2,
+      entryCount: 3,
       expanded: false,
       onlyToolEntries: true,
     });
     expect(expandedRows.map((row) => row.id)).toEqual([
+      "work-toggle:work-entry-1",
       "work-1",
       "work-2",
       "work-3",
-      "work-toggle:work-entry-1",
     ]);
     expect(expandedRows.find((row) => row.kind === "work-toggle")).toMatchObject({
       expanded: true,

@@ -45,7 +45,7 @@ export const MessageCopyButton = memo(function MessageCopyButton({
   className,
 }: {
   text: string;
-  size?: "xs" | "icon-xs";
+  size?: "xs" | "icon-xs" | "icon-sm";
   variant?: "outline" | "ghost";
   className?: string;
 }) {
@@ -72,7 +72,11 @@ export const MessageCopyButton = memo(function MessageCopyButton({
           />
         }
       >
-        {isCopied ? <CheckIcon className="size-3 text-primary" /> : <CopyIcon className="size-3" />}
+        {isCopied ? (
+          <CheckIcon className={cn(size === "icon-sm" ? "size-4" : "size-3", "text-primary")} />
+        ) : (
+          <CopyIcon className={size === "icon-sm" ? "size-4" : "size-3"} />
+        )}
       </TooltipTrigger>
       <TooltipPopup>
         <p>Copy to clipboard</p>

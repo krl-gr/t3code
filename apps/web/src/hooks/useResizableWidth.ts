@@ -1,5 +1,11 @@
 import * as Schema from "effect/Schema";
-import { type PointerEvent as ReactPointerEvent, useCallback, useRef, useState } from "react";
+import {
+  type PointerEvent as ReactPointerEvent,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
 import { getLocalStorageItem, setLocalStorageItem } from "./useLocalStorage";
 
@@ -11,6 +17,8 @@ export interface UseResizableWidthOptions {
   readonly defaultWidth: number;
   readonly minWidth: number;
   readonly maxWidth: number;
+  /** Notifies layout owners while live pointer resizing is in progress. */
+  readonly onResizeStateChange?: (resizing: boolean) => void;
   /**
    * Which edge of the host element carries the drag handle:
    *   - "left"  → panel grows leftward (right-anchored panels)
@@ -39,7 +47,7 @@ export function useResizableWidth(options: UseResizableWidthOptions): {
   readonly width: number;
   readonly handlers: ResizableWidthHandlers;
 } {
-  const { storageKey, defaultWidth, minWidth, maxWidth, edge } = options;
+  const { storageKey, defaultWidth, minWidth, maxWidth, edge, onResizeStateChange } = options;
 
   const clamp = useCallback(
     (value: number): number => {
@@ -71,24 +79,57 @@ export function useResizableWidth(options: UseResizableWidthOptions): {
     rafId: number | null;
     target: HTMLElement;
   } | null>(null);
+  const resizeEndFrameRef = useRef<number | null>(null);
 
-  const releasePointer = useCallback((pointerId: number) => {
-    const state = dragStateRef.current;
-    if (!state) return;
-    if (state.rafId !== null) {
-      cancelAnimationFrame(state.rafId);
+  const scheduleResizeEnd = useCallback(() => {
+    if (resizeEndFrameRef.current !== null) {
+      cancelAnimationFrame(resizeEndFrameRef.current);
     }
-    try {
-      if (state.target.hasPointerCapture(pointerId)) {
-        state.target.releasePointerCapture(pointerId);
+    resizeEndFrameRef.current = requestAnimationFrame(() => {
+      resizeEndFrameRef.current = null;
+      if (dragStateRef.current === null) {
+        onResizeStateChange?.(false);
       }
-    } catch {
-      // pointer may already be released; harmless.
-    }
-    document.body.style.removeProperty("cursor");
-    document.body.style.removeProperty("user-select");
-    dragStateRef.current = null;
-  }, []);
+    });
+  }, [onResizeStateChange]);
+
+  const releasePointer = useCallback(
+    (pointerId: number) => {
+      const state = dragStateRef.current;
+      if (!state) return;
+      if (state.rafId !== null) {
+        cancelAnimationFrame(state.rafId);
+      }
+      try {
+        if (state.target.hasPointerCapture(pointerId)) {
+          state.target.releasePointerCapture(pointerId);
+        }
+      } catch {
+        // pointer may already be released; harmless.
+      }
+      document.body.style.removeProperty("cursor");
+      document.body.style.removeProperty("user-select");
+      dragStateRef.current = null;
+      // Keep resize anchoring active through the final committed width/layout.
+      scheduleResizeEnd();
+    },
+    [scheduleResizeEnd],
+  );
+
+  useEffect(
+    () => () => {
+      const state = dragStateRef.current;
+      if (state) {
+        releasePointer(state.pointerId);
+      }
+      if (resizeEndFrameRef.current !== null) {
+        cancelAnimationFrame(resizeEndFrameRef.current);
+        resizeEndFrameRef.current = null;
+      }
+      onResizeStateChange?.(false);
+    },
+    [onResizeStateChange, releasePointer],
+  );
 
   const onPointerDown = useCallback(
     (event: ReactPointerEvent<HTMLElement>) => {
@@ -101,6 +142,10 @@ export function useResizableWidth(options: UseResizableWidthOptions): {
       } catch {
         return;
       }
+      if (resizeEndFrameRef.current !== null) {
+        cancelAnimationFrame(resizeEndFrameRef.current);
+        resizeEndFrameRef.current = null;
+      }
       document.body.style.cursor = "col-resize";
       document.body.style.userSelect = "none";
       dragStateRef.current = {
@@ -111,8 +156,9 @@ export function useResizableWidth(options: UseResizableWidthOptions): {
         rafId: null,
         target,
       };
+      onResizeStateChange?.(true);
     },
-    [clampedWidth],
+    [clampedWidth, onResizeStateChange],
   );
 
   const onPointerMove = useCallback(

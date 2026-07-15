@@ -24,6 +24,7 @@ const PREVIEW_PANEL_DEFAULT_WIDTH = 540;
 export function PreviewPanelShell(props: {
   mode: PreviewPanelMode;
   maximized?: boolean;
+  onResizeStateChange?: (resizing: boolean) => void;
   children: ReactNode;
 }) {
   const useDragRegion = isElectron && props.mode !== "sheet" && props.mode !== "embedded";
@@ -35,6 +36,7 @@ export function PreviewPanelShell(props: {
     minWidth: PREVIEW_PANEL_MIN_WIDTH,
     maxWidth,
     edge: "left",
+    ...(props.onResizeStateChange ? { onResizeStateChange: props.onResizeStateChange } : {}),
   });
 
   return (
