@@ -97,10 +97,7 @@ import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { toastManager } from "../ui/toast";
 import {
-  BotIcon,
   CircleAlertIcon,
-  ListTodoIcon,
-  PencilRulerIcon,
   type LucideIcon,
   LockIcon,
   LockOpenIcon,
@@ -129,6 +126,11 @@ import { formatProviderSkillDisplayName } from "../../providerSkillPresentation"
 import { searchProviderSkills } from "../../providerSkillSearch";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import type { ReviewCommentContext } from "../../reviewCommentContext";
+import {
+  resolveInteractionModePresentation,
+  type InteractionModePresentation,
+} from "../../interactionModes";
+import { useInteractionModePresentations } from "../../product/interactionModePresentation";
 
 const IMAGE_SIZE_LIMIT_LABEL = `${Math.round(PROVIDER_SEND_TURN_MAX_IMAGE_BYTES / (1024 * 1024))}MB`;
 
@@ -198,62 +200,68 @@ function ComposerToolbarSeparator() {
   return <div aria-hidden="true" className={COMPOSER_CONTROL_SEPARATOR_CLASS} />;
 }
 
-const ComposerFooterModeControls = memo(function ComposerFooterModeControls(props: {
-  showInteractionModeToggle: boolean;
+const ComposerInteractionModeControl = memo(function ComposerInteractionModeControl(props: {
   interactionMode: ProviderInteractionMode;
+  interactionModes: ReadonlyArray<InteractionModePresentation>;
+  onInteractionModeChange: (mode: ProviderInteractionMode) => void;
+}) {
+  const selectedMode = resolveInteractionModePresentation(
+    props.interactionMode,
+    props.interactionModes,
+  );
+
+  return (
+    <Tooltip>
+      <Select
+        value={props.interactionMode}
+        onValueChange={(value) => {
+          if (!value) return;
+          props.onInteractionModeChange(value as ProviderInteractionMode);
+        }}
+      >
+        <TooltipTrigger
+          render={
+            <SelectTrigger
+              variant="ghost"
+              size="sm"
+              className={cn(
+                COMPOSER_CONTROL_TEXT_TRIGGER_CLASS,
+                "max-w-28 [&_[data-slot=select-icon]]:hidden",
+              )}
+              aria-label="Interaction mode"
+            />
+          }
+        >
+          <SelectValue>{selectedMode.label}</SelectValue>
+        </TooltipTrigger>
+        <SelectPopup alignItemWithTrigger={false}>
+          {props.interactionModes.map((mode) => (
+            <SelectItem key={mode.id} value={mode.id} className="min-w-56 py-2">
+              <div className="grid min-w-0 gap-0.5">
+                <span className="font-medium text-foreground">{mode.label}</span>
+                <span className="text-muted-foreground text-xs leading-4">{mode.description}</span>
+              </div>
+            </SelectItem>
+          ))}
+        </SelectPopup>
+      </Select>
+      <TooltipPopup side="top">{selectedMode.description}</TooltipPopup>
+    </Tooltip>
+  );
+});
+
+const ComposerFooterModeControls = memo(function ComposerFooterModeControls(props: {
   runtimeMode: RuntimeMode;
   showPlanToggle: boolean;
   planSidebarLabel: string;
   planSidebarOpen: boolean;
-  onToggleInteractionMode: () => void;
   onRuntimeModeChange: (mode: RuntimeMode) => void;
   onTogglePlanSidebar: () => void;
 }) {
   const runtimeModeOption = runtimeModeConfig[props.runtimeMode];
-  const RuntimeModeIcon = runtimeModeOption.icon;
-  const interactionModeTooltip =
-    props.interactionMode === "plan"
-      ? "Plan mode — click to return to normal build mode"
-      : "Default mode — click to enter plan mode";
   const planSidebarTooltip = props.planSidebarOpen
     ? `Hide ${props.planSidebarLabel.toLowerCase()} sidebar`
     : `Show ${props.planSidebarLabel.toLowerCase()} sidebar`;
-
-  const interactionModeToggle = props.showInteractionModeToggle ? (
-    <>
-      <ComposerToolbarSeparator />
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <Button
-              variant="ghost"
-              className={cn(
-                COMPOSER_CONTROL_TEXT_TRIGGER_CLASS,
-                "whitespace-nowrap",
-                props.interactionMode === "plan"
-                  ? "bg-blue-500/10 text-blue-400 hover:bg-blue-500/15 hover:text-blue-300"
-                  : "text-muted-foreground/70 hover:text-foreground/80",
-              )}
-              size="sm"
-              type="button"
-              onClick={props.onToggleInteractionMode}
-              aria-label={interactionModeTooltip}
-            />
-          }
-        >
-          {props.interactionMode === "plan" ? (
-            <PencilRulerIcon className="text-current opacity-100" />
-          ) : (
-            <BotIcon />
-          )}
-          <span className="sr-only sm:not-sr-only">
-            {props.interactionMode === "plan" ? "Plan" : "Build"}
-          </span>
-        </TooltipTrigger>
-        <TooltipPopup side="top">{interactionModeTooltip}</TooltipPopup>
-      </Tooltip>
-    </>
-  ) : null;
 
   return (
     <>
@@ -277,7 +285,6 @@ const ComposerFooterModeControls = memo(function ComposerFooterModeControls(prop
               />
             }
           >
-            <RuntimeModeIcon className="size-4" />
             <SelectValue>{runtimeModeOption.label}</SelectValue>
           </TooltipTrigger>
           <SelectPopup alignItemWithTrigger={false}>
@@ -302,9 +309,6 @@ const ComposerFooterModeControls = memo(function ComposerFooterModeControls(prop
         </Select>
         <TooltipPopup side="top">{runtimeModeOption.description}</TooltipPopup>
       </Tooltip>
-
-      {interactionModeToggle}
-
       {props.showPlanToggle ? (
         <>
           <ComposerToolbarSeparator />
@@ -327,9 +331,6 @@ const ComposerFooterModeControls = memo(function ComposerFooterModeControls(prop
                 />
               }
             >
-              <ListTodoIcon
-                className={props.planSidebarOpen ? "text-current opacity-100" : undefined}
-              />
               <span className="sr-only sm:not-sr-only">{props.planSidebarLabel}</span>
             </TooltipTrigger>
             <TooltipPopup side="top">{planSidebarTooltip}</TooltipPopup>
@@ -832,6 +833,10 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       ),
     }),
     [providerStatuses, selectedProvider],
+  );
+  const interactionModePresentations = useInteractionModePresentations(
+    environmentId,
+    selectedProvider,
   );
   const selectedModelSelection = useMemo<ModelSelection>(
     () => createModelSelection(selectedInstanceId, selectedModel, selectedModelOptionsForDispatch),
@@ -2485,6 +2490,17 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
               )}
             >
               <div className={COMPOSER_CONTROL_ROW_CLASS}>
+                {composerProviderControls.showInteractionModeToggle ? (
+                  <>
+                    <ComposerInteractionModeControl
+                      interactionMode={interactionMode}
+                      interactionModes={interactionModePresentations}
+                      onInteractionModeChange={handleInteractionModeChange}
+                    />
+                    <ComposerToolbarSeparator />
+                  </>
+                ) : null}
+
                 <ProviderModelPicker
                   compact={isComposerFooterCompact}
                   activeInstanceId={selectedInstanceId}
@@ -2497,6 +2513,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   terminalOpen={terminalOpen}
                   open={isComposerModelPickerOpen}
                   triggerClassName={cn(COMPOSER_CONTROL_TEXT_TRIGGER_CLASS, "max-w-52 sm:max-w-60")}
+                  showProviderIcon={false}
+                  showProviderLabel
                   {...(composerProviderState.modelPickerIconClassName
                     ? {
                         activeProviderIconClassName: composerProviderState.modelPickerIconClassName,
@@ -2516,9 +2534,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     planSidebarLabel={planSidebarLabel}
                     planSidebarOpen={planSidebarOpen}
                     runtimeMode={runtimeMode}
-                    showInteractionModeToggle={composerProviderControls.showInteractionModeToggle}
+                    showInteractionModeToggle={false}
                     traitsMenuContent={providerTraitsMenuContent}
-                    onToggleInteractionMode={toggleInteractionMode}
+                    onInteractionModeChange={handleInteractionModeChange}
                     onTogglePlanSidebar={togglePlanSidebar}
                     onRuntimeModeChange={handleRuntimeModeChange}
                   />
@@ -2531,13 +2549,10 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                       </>
                     ) : null}
                     <ComposerFooterModeControls
-                      showInteractionModeToggle={composerProviderControls.showInteractionModeToggle}
-                      interactionMode={interactionMode}
                       runtimeMode={runtimeMode}
                       showPlanToggle={showPlanSidebarToggle}
                       planSidebarLabel={planSidebarLabel}
                       planSidebarOpen={planSidebarOpen}
-                      onToggleInteractionMode={toggleInteractionMode}
                       onRuntimeModeChange={handleRuntimeModeChange}
                       onTogglePlanSidebar={togglePlanSidebar}
                     />

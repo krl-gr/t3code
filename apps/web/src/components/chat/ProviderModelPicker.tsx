@@ -39,6 +39,8 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
   open?: boolean;
   triggerVariant?: VariantProps<typeof buttonVariants>["variant"];
   triggerClassName?: string;
+  showProviderIcon?: boolean;
+  showProviderLabel?: boolean;
   onOpenChange?: (open: boolean) => void;
   getModelDisabledReason?: (instanceId: ProviderInstanceId, model: string) => string | null;
   onInstanceModelChange: (instanceId: ProviderInstanceId, model: string) => void;
@@ -159,7 +161,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
         }
       >
         <span className="flex min-w-0 flex-1 items-center gap-2">
-          {activeEntry ? (
+          {activeEntry && props.showProviderIcon !== false ? (
             <ProviderInstanceIcon
               driverKind={activeEntry.driverKind}
               displayName={activeEntry.displayName}
@@ -176,9 +178,14 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
           ) : null}
           <Tooltip>
             <TooltipTrigger render={<span className="min-w-0 flex-1 overflow-hidden truncate" />}>
+              {props.showProviderLabel && activeEntry ? `${activeEntry.displayName} · ` : null}
               {triggerTitle}
             </TooltipTrigger>
-            <TooltipPopup side="top">{triggerLabel}</TooltipPopup>
+            <TooltipPopup side="top">
+              {props.showProviderLabel && activeEntry
+                ? `${activeEntry.displayName} · ${triggerLabel}`
+                : triggerLabel}
+            </TooltipPopup>
           </Tooltip>
         </span>
         <span aria-hidden="true" className="flex items-center" data-composer-control-chevron>
