@@ -19,6 +19,7 @@ export const ChatWorkspacePanel = memo(function ChatWorkspacePanel(props: {
           environmentId={target.ref.environmentId}
           threadId={target.ref.threadId}
           routeKind="server"
+          showHeaderControls={false}
         />
       ) : (
         <ChatView
@@ -26,6 +27,7 @@ export const ChatWorkspacePanel = memo(function ChatWorkspacePanel(props: {
           environmentId={target.ref.environmentId}
           threadId={target.ref.threadId}
           routeKind="draft"
+          showHeaderControls={false}
         />
       )}
     </div>

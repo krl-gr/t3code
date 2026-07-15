@@ -42,6 +42,7 @@ import {
   AlertDialogTitle,
 } from "./ui/alert-dialog";
 import { Button } from "./ui/button";
+import { ActionMenuPinControl } from "./ContextActionMenuItem";
 import {
   Dialog,
   DialogDescription,
@@ -54,7 +55,15 @@ import {
 import { Group, GroupSeparator } from "./ui/group";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
-import { Menu, MenuItem, MenuPopup, MenuShortcut, MenuTrigger } from "./ui/menu";
+import {
+  Menu,
+  MenuGroup,
+  MenuGroupLabel,
+  MenuItem,
+  MenuPopup,
+  MenuShortcut,
+  MenuTrigger,
+} from "./ui/menu";
 import { Popover, PopoverPopup, PopoverTrigger } from "./ui/popover";
 import { Switch } from "./ui/switch";
 import { Textarea } from "./ui/textarea";
@@ -102,6 +111,10 @@ interface ProjectScriptsControlProps {
   scripts: ReadonlyArray<ProjectScript>;
   keybindings: ResolvedKeybindingsConfig;
   preferredScriptId?: string | null;
+  presentation?: "header" | "context-menu";
+  pinnedScriptIds?: ReadonlySet<string>;
+  onRequestMenuClose?: () => void;
+  onScriptPinnedChange?: (scriptId: string, pinned: boolean) => void;
   onRunScript: (script: ProjectScript) => void;
   onAddScript: (input: NewProjectScriptInput) => Promise<ProjectScriptActionResult>;
   onUpdateScript: (
@@ -115,6 +128,10 @@ export default function ProjectScriptsControl({
   scripts,
   keybindings,
   preferredScriptId = null,
+  presentation = "header",
+  pinnedScriptIds,
+  onRequestMenuClose,
+  onScriptPinnedChange,
   onRunScript,
   onAddScript,
   onUpdateScript,
@@ -247,9 +264,77 @@ export default function ProjectScriptsControl({
     void onDeleteScript(editingScriptId);
   }, [editingScriptId, onDeleteScript]);
 
+  const openAfterMenuClose = useCallback(
+    (openDialog: () => void) => {
+      if (!onRequestMenuClose) {
+        openDialog();
+        return;
+      }
+      onRequestMenuClose();
+      window.requestAnimationFrame(openDialog);
+    },
+    [onRequestMenuClose],
+  );
+
   return (
     <>
-      {primaryScript ? (
+      {presentation === "context-menu" ? (
+        <>
+          <MenuGroup>
+            <MenuGroupLabel>Actions</MenuGroupLabel>
+            {scripts.map((script) => {
+              const shortcutLabel = shortcutLabelForCommand(
+                keybindings,
+                commandForProjectScript(script.id),
+              );
+              const pinned = pinnedScriptIds?.has(script.id) ?? false;
+              return (
+                <MenuItem
+                  key={script.id}
+                  className={`group ${dropdownItemClassName}`}
+                  onClick={() => onRunScript(script)}
+                >
+                  <ScriptIcon icon={script.icon} className="size-4" />
+                  <span className="truncate">
+                    {script.runOnWorktreeCreate ? `${script.name} (setup)` : script.name}
+                  </span>
+                  <span className="relative ms-auto flex h-6 min-w-6 items-center justify-end gap-2">
+                    {shortcutLabel ? (
+                      <MenuShortcut className="ms-0">{shortcutLabel}</MenuShortcut>
+                    ) : null}
+                    <Button
+                      aria-label={`Edit ${script.name}`}
+                      className="size-6"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        openAfterMenuClose(() => openEditDialog(script));
+                      }}
+                      onPointerDown={(event) => event.stopPropagation()}
+                      size="icon-xs"
+                      type="button"
+                      variant="ghost"
+                    >
+                      <SettingsIcon className="size-3.5" />
+                    </Button>
+                    {onScriptPinnedChange ? (
+                      <ActionMenuPinControl
+                        checked={pinned}
+                        label={`Show ${script.name} in quick access`}
+                        onToggle={() => onScriptPinnedChange(script.id, !pinned)}
+                      />
+                    ) : null}
+                  </span>
+                </MenuItem>
+              );
+            })}
+          </MenuGroup>
+          <MenuItem onClick={() => openAfterMenuClose(openAddDialog)}>
+            <PlusIcon className="size-4" />
+            Add action
+          </MenuItem>
+        </>
+      ) : primaryScript ? (
         <Group aria-label="Project scripts">
           <Tooltip>
             <TooltipTrigger

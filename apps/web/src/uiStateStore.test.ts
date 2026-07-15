@@ -12,6 +12,8 @@ import {
   reorderProjects,
   resolveProjectExpanded,
   setDefaultAdvertisedEndpointKey,
+  setContextQuickActionPinned,
+  setProjectQuickActionPinned,
   setProjectExpanded,
   setThreadChangedFilesExpanded,
   type UiState,
@@ -24,11 +26,38 @@ function makeUiState(overrides: Partial<UiState> = {}): UiState {
     threadLastVisitedAtById: {},
     threadChangedFilesExpandedById: {},
     defaultAdvertisedEndpointKey: null,
+    contextQuickActionIds: [],
+    projectQuickActionIdsByProjectKey: {},
     ...overrides,
   };
 }
 
 describe("uiStateStore pure functions", () => {
+  it("parses and updates persisted context-bar quick actions", () => {
+    const parsed = parsePersistedState({
+      contextQuickActionIds: ["git.push", "invalid", "rightPanel.toggle"],
+      projectQuickActionIdsByProjectKey: {
+        project: ["script-a", "script-a", ""],
+      },
+    });
+
+    expect(parsed.contextQuickActionIds).toEqual(["git.push", "rightPanel.toggle"]);
+    expect(parsed.projectQuickActionIdsByProjectKey).toEqual({ project: ["script-a"] });
+
+    const withDiff = setContextQuickActionPinned(parsed, "diff.toggle", true);
+    expect(withDiff.contextQuickActionIds).toEqual([
+      "git.push",
+      "rightPanel.toggle",
+      "diff.toggle",
+    ]);
+    const withScript = setProjectQuickActionPinned(withDiff, "project", "script-b", true);
+    expect(withScript.projectQuickActionIdsByProjectKey.project).toEqual(["script-a", "script-b"]);
+    expect(
+      setProjectQuickActionPinned(withScript, "project", "script-a", false)
+        .projectQuickActionIdsByProjectKey.project,
+    ).toEqual(["script-b"]);
+  });
+
   it("stores server timestamps without moving visit state backwards", () => {
     const threadId = ThreadId.make("thread-1");
     const initialState = makeUiState();
@@ -172,6 +201,14 @@ describe("parsePersistedState", () => {
         "environment:thread-1": "2026-02-25T12:35:00.000Z",
       },
       defaultAdvertisedEndpointKey: "desktop-core:lan:http",
+      contextQuickActionIds: [
+        "git.quick",
+        "open.preferred",
+        "terminal.toggle",
+        "diff.toggle",
+        "rightPanel.toggle",
+      ],
+      projectQuickActionIdsByProjectKey: {},
       threadChangedFilesExpandedById: {
         "environment:thread-1": {
           "turn-1": false,
@@ -278,6 +315,8 @@ describe("uiStateStore persistence", () => {
         "environment:thread-1": "2026-02-25T12:35:00.000Z",
       },
       defaultAdvertisedEndpointKey: "desktop-core:lan:http",
+      contextQuickActionIds: [],
+      projectQuickActionIdsByProjectKey: {},
       threadChangedFilesExpandedById: {
         "environment:thread-1": {
           "turn-1": false,

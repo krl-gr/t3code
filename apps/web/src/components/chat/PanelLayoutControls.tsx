@@ -52,29 +52,50 @@ export const PanelLayoutControls = memo(function PanelLayoutControls({
             : "Terminal drawer is unavailable"}
         </TooltipPopup>
       </Tooltip>
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <Toggle
-              className="shrink-0 [-webkit-app-region:no-drag]"
-              pressed={rightPanelOpen}
-              onPressedChange={onToggleRightPanel}
-              aria-label="Toggle right panel"
-              variant="ghost"
-              size="sm"
-              disabled={!rightPanelAvailable}
-            >
-              <PanelRightIcon className="size-3.5" />
-            </Toggle>
-          }
-        />
-        <TooltipPopup side="bottom">
-          {rightPanelAvailable
-            ? `Toggle right panel${rightPanelShortcutLabel ? ` (${rightPanelShortcutLabel})` : ""}`
-            : "Right panel is unavailable"}
-        </TooltipPopup>
-      </Tooltip>
+      <RightPanelVisibilityControl
+        available={rightPanelAvailable}
+        open={rightPanelOpen}
+        shortcutLabel={rightPanelShortcutLabel}
+        onToggle={onToggleRightPanel}
+      />
     </div>
+  );
+});
+
+export const RightPanelVisibilityControl = memo(function RightPanelVisibilityControl({
+  available,
+  open,
+  shortcutLabel,
+  onToggle,
+}: {
+  available: boolean;
+  open: boolean;
+  shortcutLabel: string | null;
+  onToggle: () => void;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Toggle
+            className="shrink-0 [-webkit-app-region:no-drag]"
+            pressed={open}
+            onPressedChange={onToggle}
+            aria-label="Toggle right panel"
+            variant="ghost"
+            size="sm"
+            disabled={!available}
+          >
+            <PanelRightIcon className="size-3.5" />
+          </Toggle>
+        }
+      />
+      <TooltipPopup side="bottom">
+        {available
+          ? `Toggle right panel${shortcutLabel ? ` (${shortcutLabel})` : ""}`
+          : "Right panel is unavailable"}
+      </TooltipPopup>
+    </Tooltip>
   );
 });
 
