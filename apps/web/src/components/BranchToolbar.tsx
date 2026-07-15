@@ -11,6 +11,11 @@ import {
 import { memo, useMemo, type ReactNode } from "react";
 
 import { useComposerDraftStore, type DraftId } from "../composerDraftStore";
+import { useClientSettings } from "../hooks/useSettings";
+import {
+  deriveLogicalProjectKeyFromSettings,
+  selectProjectGroupingSettings,
+} from "../logicalProject";
 import { useProject, useThread } from "../state/entities";
 import { useIsMobile } from "../hooks/useMediaQuery";
 import {
@@ -246,6 +251,14 @@ export const BranchToolbar = memo(function BranchToolbar({
       ? scopeProjectRef(draftThread.environmentId, draftThread.projectId)
       : null;
   const activeProject = useProject(activeProjectRef);
+  const projectGroupingSettings = useClientSettings(selectProjectGroupingSettings);
+  const activeProjectFaviconKey = useMemo(
+    () =>
+      activeProject
+        ? deriveLogicalProjectKeyFromSettings(activeProject, projectGroupingSettings)
+        : null,
+    [activeProject, projectGroupingSettings],
+  );
   const hasActiveThread = serverThread !== null || draftThread !== null;
   const activeWorktreePath = serverThread?.worktreePath ?? draftThread?.worktreePath ?? null;
   const effectiveEnvMode =
@@ -280,7 +293,7 @@ export const BranchToolbar = memo(function BranchToolbar({
               environmentId={activeProject.environmentId}
               cwd={activeProject.workspaceRoot}
               label={activeProject.title}
-              projectKey={activeProject.id}
+              projectKey={activeProjectFaviconKey ?? activeProject.id}
               className="size-4 dark:text-white/[0.175]"
             />
             <span
@@ -328,7 +341,7 @@ export const BranchToolbar = memo(function BranchToolbar({
                   environmentId={activeProject.environmentId}
                   cwd={activeProject.workspaceRoot}
                   label={activeProject.title}
-                  projectKey={activeProject.id}
+                  projectKey={activeProjectFaviconKey ?? activeProject.id}
                   className="size-4"
                 />
               </span>
