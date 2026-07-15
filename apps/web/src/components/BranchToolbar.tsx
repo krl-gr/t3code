@@ -318,7 +318,7 @@ export const BranchToolbar = memo(function BranchToolbar({
 
   return (
     <div
-      className="mx-auto flex w-full max-w-208 min-w-0 items-center justify-between gap-2 pb-2 pl-3 pr-4 pt-1 dark:drop-shadow-[0_4px_2px_rgba(0,0,0,0.25)]"
+      className="mx-auto flex w-full max-w-208 min-w-0 items-center justify-between gap-2 pb-1 pl-3 pr-4 pt-1 dark:drop-shadow-[0_4px_2px_rgba(0,0,0,0.25)]"
       data-chat-context-bar="true"
     >
       <div className="flex min-w-0 flex-1 items-center gap-0 overflow-hidden">
