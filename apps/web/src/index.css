@@ -157,50 +157,10 @@
     padding-inline-end: calc(env(safe-area-inset-right) + 0.75rem);
   }
 
-  .chat-composer-glass,
-  .chat-composer-lower-chrome {
-    background: color-mix(in srgb, var(--card) 20%, transparent);
-  }
-
-  .chat-composer-glass {
-    box-shadow:
-      0 18px 48px -20px rgb(0 0 0 / 28%),
-      0 4px 14px -7px rgb(0 0 0 / 22%);
-  }
-
-  .chat-composer-shared-blur {
-    -webkit-backdrop-filter: blur(16px);
-    backdrop-filter: blur(16px);
-  }
-
-  .dark .chat-composer-glass,
-  .dark .chat-composer-lower-chrome {
-    background: color-mix(in srgb, var(--card) 45%, transparent);
-  }
-
-  .dark .chat-composer-glass {
-    box-shadow:
-      0 18px 48px -20px rgb(0 0 0 / 60%),
-      0 4px 14px -7px rgb(0 0 0 / 40%);
-  }
-
-  .chat-composer-lower-chrome {
-    margin-top: -1px;
-    margin-inline-end: var(--app-scrollbar-width);
-    padding-top: 1px;
-  }
-
   @media (min-width: 40rem) {
     .chat-composer-horizontal-inset {
       padding-inline-start: calc(env(safe-area-inset-left) + 1.25rem);
       padding-inline-end: calc(env(safe-area-inset-right) + 1.25rem);
-    }
-  }
-
-  @supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
-    .chat-composer-glass,
-    .chat-composer-lower-chrome {
-      background: var(--card);
     }
   }
 }

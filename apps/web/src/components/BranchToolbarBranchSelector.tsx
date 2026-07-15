@@ -5,7 +5,7 @@ import {
 } from "@t3tools/client-runtime/state/runtime";
 import type { EnvironmentId, VcsRef, ThreadId } from "@t3tools/contracts";
 import { LegendList, type LegendListRef } from "@legendapp/list/react";
-import { ChevronDownIcon, GitBranchIcon, RefreshCwIcon, SearchIcon } from "lucide-react";
+import { RefreshCwIcon, SearchIcon } from "lucide-react";
 import {
   useCallback,
   useDeferredValue,
@@ -28,6 +28,7 @@ import { threadEnvironment } from "../state/threads";
 import { useAtomCommand } from "../state/use-atom-command";
 import { vcsEnvironment } from "../state/vcs";
 import { cn } from "../lib/utils";
+import { CONTEXT_BAR_TEXT_TRIGGER_CLASS } from "./BranchToolbar.styles";
 import { parsePullRequestReference } from "../pullRequestReference";
 import { getSourceControlPresentation } from "../sourceControlPresentation";
 import {
@@ -661,12 +662,10 @@ export function BranchToolbarBranchSelector({
         ) : null}
         <ComboboxTrigger
           render={<Button variant="ghost" size="xs" />}
-          className="min-w-0 text-muted-foreground/70 hover:text-foreground/80"
+          className={CONTEXT_BAR_TEXT_TRIGGER_CLASS}
           disabled={isInitialBranchesLoadPending || isBranchActionPending}
         >
-          <GitBranchIcon className="size-3 shrink-0 opacity-70" />
-          <span className="min-w-0 max-w-[240px] truncate">{triggerLabel}</span>
-          <ChevronDownIcon className="size-3 shrink-0 opacity-50" />
+          <span className="min-w-0 max-w-full truncate">{triggerLabel}</span>
         </ComboboxTrigger>
       </div>
       <ComboboxPopup align="end" side="top" className="flex w-80 flex-col">

@@ -45,6 +45,7 @@ type TraitsRenderInput = {
   models: ReadonlyArray<ServerProviderModel>;
   modelOptions: ReadonlyArray<ProviderOptionSelection> | undefined;
   prompt: string;
+  triggerClassName?: string;
   onPromptChange: (prompt: string) => void;
 };
 
@@ -93,6 +94,7 @@ function renderTraitsControl(
     models,
     modelOptions,
     prompt,
+    triggerClassName,
     onPromptChange,
   } = input;
   const hasTarget = threadRef !== undefined || draftId !== undefined;
@@ -112,6 +114,7 @@ function renderTraitsControl(
       model={model}
       modelOptions={modelOptions}
       prompt={prompt}
+      {...(triggerClassName ? { triggerClassName } : {})}
       onPromptChange={onPromptChange}
     />
   );

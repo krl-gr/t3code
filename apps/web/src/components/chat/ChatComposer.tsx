@@ -71,6 +71,11 @@ import { ProviderModelPicker } from "./ProviderModelPicker";
 import { type ComposerCommandItem, ComposerCommandMenu } from "./ComposerCommandMenu";
 import { ComposerPendingApprovalActions } from "./ComposerPendingApprovalActions";
 import { CompactComposerControlsMenu } from "./CompactComposerControlsMenu";
+import {
+  COMPOSER_CONTROL_ROW_CLASS,
+  COMPOSER_CONTROL_SEPARATOR_CLASS,
+  COMPOSER_CONTROL_TEXT_TRIGGER_CLASS,
+} from "./composerControlStyles";
 import { ComposerPrimaryActions } from "./ComposerPrimaryActions";
 import { ComposerPendingApprovalPanel } from "./ComposerPendingApprovalPanel";
 import { ComposerPendingUserInputPanel } from "./ComposerPendingUserInputPanel";
@@ -87,7 +92,6 @@ import { ContextWindowMeter } from "./ContextWindowMeter";
 import { buildExpandedImagePreview, type ExpandedImagePreview } from "./ExpandedImagePreview";
 import { basenameOfPath } from "../../pierre-icons";
 import { cn, randomUUID } from "~/lib/utils";
-import { Separator } from "../ui/separator";
 import { Button } from "../ui/button";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
@@ -190,6 +194,10 @@ function isInsideComposerFloatingLayer(element: Element): boolean {
   return element.closest(COMPOSER_FLOATING_LAYER_SELECTOR) !== null;
 }
 
+function ComposerToolbarSeparator() {
+  return <div aria-hidden="true" className={COMPOSER_CONTROL_SEPARATOR_CLASS} />;
+}
+
 const ComposerFooterModeControls = memo(function ComposerFooterModeControls(props: {
   showInteractionModeToggle: boolean;
   interactionMode: ProviderInteractionMode;
@@ -213,14 +221,15 @@ const ComposerFooterModeControls = memo(function ComposerFooterModeControls(prop
 
   const interactionModeToggle = props.showInteractionModeToggle ? (
     <>
-      <Separator orientation="vertical" className="mx-0.5 hidden h-4 sm:block" />
+      <ComposerToolbarSeparator />
       <Tooltip>
         <TooltipTrigger
           render={
             <Button
               variant="ghost"
               className={cn(
-                "shrink-0 whitespace-nowrap px-2 sm:px-3",
+                COMPOSER_CONTROL_TEXT_TRIGGER_CLASS,
+                "whitespace-nowrap",
                 props.interactionMode === "plan"
                   ? "bg-blue-500/10 text-blue-400 hover:bg-blue-500/15 hover:text-blue-300"
                   : "text-muted-foreground/70 hover:text-foreground/80",
@@ -248,7 +257,7 @@ const ComposerFooterModeControls = memo(function ComposerFooterModeControls(prop
 
   return (
     <>
-      <Separator orientation="vertical" className="mx-0.5 hidden h-4 sm:block" />
+      <ComposerToolbarSeparator />
 
       <Tooltip>
         <Select
@@ -260,7 +269,10 @@ const ComposerFooterModeControls = memo(function ComposerFooterModeControls(prop
               <SelectTrigger
                 variant="ghost"
                 size="sm"
-                className="font-medium"
+                className={cn(
+                  COMPOSER_CONTROL_TEXT_TRIGGER_CLASS,
+                  "[&_[data-slot=select-icon]]:hidden",
+                )}
                 aria-label="Runtime mode"
               />
             }
@@ -295,14 +307,15 @@ const ComposerFooterModeControls = memo(function ComposerFooterModeControls(prop
 
       {props.showPlanToggle ? (
         <>
-          <Separator orientation="vertical" className="mx-0.5 hidden h-4 sm:block" />
+          <ComposerToolbarSeparator />
           <Tooltip>
             <TooltipTrigger
               render={
                 <Button
                   variant="ghost"
                   className={cn(
-                    "shrink-0 whitespace-nowrap px-2 sm:px-3",
+                    COMPOSER_CONTROL_TEXT_TRIGGER_CLASS,
+                    "whitespace-nowrap",
                     props.planSidebarOpen
                       ? "bg-blue-500/10 text-blue-400 hover:bg-blue-500/15 hover:text-blue-300"
                       : "text-muted-foreground/70 hover:text-foreground/80",
@@ -1119,6 +1132,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     models: selectedProviderModels,
     modelOptions: composerModelOptions?.[selectedInstanceId],
     prompt,
+    triggerClassName: COMPOSER_CONTROL_TEXT_TRIGGER_CLASS,
     onPromptChange: setPromptFromTraits,
   });
   const pendingPrimaryAction = useMemo(
@@ -2044,12 +2058,13 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     <form
       ref={composerFormRef}
       onSubmit={submitComposer}
-      className="mx-auto w-full min-w-0 max-w-3xl"
+      className="mx-auto w-full min-w-0 max-w-208"
       data-chat-composer-form="true"
     >
       <div
         className={cn(
-          "group rounded-[22px] p-px transition-colors duration-200",
+          "group rounded-[32px] transition-colors duration-200",
+          composerProviderState.composerFrameClassName && "p-px",
           composerProviderState.composerFrameClassName,
         )}
         onDragEnter={onComposerDragEnter}
@@ -2061,8 +2076,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           ref={composerSurfaceRef}
           data-chat-composer-mobile-collapsed={isComposerCollapsedMobile ? "true" : "false"}
           className={cn(
-            "chat-composer-glass rounded-[20px] border transition-colors duration-200 has-focus-visible:border-ring/45",
-            isDragOverComposer ? "border-primary/70 bg-accent/45" : "border-border",
+            "flex min-h-24 flex-col rounded-[32px] bg-card shadow-[0_4px_14.4px_rgba(9,9,9,0.035)] transition-colors duration-200 not-dark:border not-dark:border-border dark:bg-[#1e1e1e] dark:shadow-[inset_-1px_-1px_1px_rgba(255,255,255,0.06),inset_1px_1px_1px_rgba(255,255,255,0.12),0_4px_14.4px_rgba(9,9,9,0.08)]",
+            isDragOverComposer && "ring-1 ring-primary/70",
             environmentUnavailable ? "opacity-75" : null,
             composerProviderState.composerSurfaceClassName,
           )}
@@ -2087,14 +2102,14 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         >
           {!isComposerCollapsedMobile &&
             (activePendingApproval ? (
-              <div className="rounded-t-[19px] border-b border-border/65 bg-muted/20">
+              <div className="rounded-t-[32px] border-b border-border/65 bg-muted/20">
                 <ComposerPendingApprovalPanel
                   approval={activePendingApproval}
                   pendingCount={pendingApprovals.length}
                 />
               </div>
             ) : pendingUserInputs.length > 0 ? (
-              <div className="rounded-t-[19px] border-b border-border/65 bg-muted/20">
+              <div className="rounded-t-[32px] border-b border-border/65 bg-muted/20">
                 <ComposerPendingUserInputPanel
                   pendingUserInputs={pendingUserInputs}
                   respondingRequestIds={respondingRequestIds}
@@ -2105,7 +2120,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                 />
               </div>
             ) : showPlanFollowUpPrompt && activeProposedPlan ? (
-              <div className="rounded-t-[19px] border-b border-border/65 bg-muted/20">
+              <div className="rounded-t-[32px] border-b border-border/65 bg-muted/20">
                 <ComposerPlanFollowUpBanner
                   key={activeProposedPlan.id}
                   planTitle={proposedPlanTitle(activeProposedPlan.planMarkdown) ?? null}
@@ -2234,8 +2249,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
 
           <div
             className={cn(
-              "relative px-3 pb-2 sm:px-4",
-              hasComposerHeader ? "pt-2.5 sm:pt-3" : "pt-3.5 sm:pt-4",
+              "relative px-3 pb-2 sm:px-6",
+              hasComposerHeader ? "pt-2.5 sm:pt-5" : "pt-3.5 sm:pt-6",
               isComposerCollapsedMobile && "hidden",
             )}
           >
@@ -2397,7 +2412,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     : []
                 }
                 skills={selectedProviderStatus?.skills ?? []}
-                {...(showMobilePendingAnswerActions ? { className: "max-sm:pb-11" } : {})}
+                className={cn("min-h-8", showMobilePendingAnswerActions && "max-sm:pb-11")}
                 onRemoveTerminalContext={removeComposerTerminalContextFromDraft}
                 onChange={onPromptChange}
                 onCommandKeyDown={onComposerCommandKey}
@@ -2463,13 +2478,13 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
               data-chat-composer-footer="true"
               data-chat-composer-footer-compact={isComposerFooterCompact ? "true" : "false"}
               className={cn(
-                "flex min-w-0 flex-nowrap items-center justify-between gap-2 overflow-visible px-2.5 pb-2.5 sm:px-3 sm:pb-3",
+                "flex min-w-0 flex-nowrap items-center justify-between gap-2 overflow-visible px-2.5 pb-2.5 sm:px-4 sm:pb-4",
                 pendingUserInputs.length > 0 && "pt-2",
                 isComposerFooterCompact ? "gap-1.5" : "gap-2 sm:gap-0",
                 showMobilePendingAnswerActions && "hidden sm:flex",
               )}
             >
-              <div className="-m-1 flex min-w-0 flex-1 items-center gap-1 overflow-x-auto p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <div className={COMPOSER_CONTROL_ROW_CLASS}>
                 <ProviderModelPicker
                   compact={isComposerFooterCompact}
                   activeInstanceId={selectedInstanceId}
@@ -2481,6 +2496,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   modelOptionsByInstance={modelOptionsByInstance}
                   terminalOpen={terminalOpen}
                   open={isComposerModelPickerOpen}
+                  triggerClassName={cn(COMPOSER_CONTROL_TEXT_TRIGGER_CLASS, "max-w-52 sm:max-w-60")}
                   {...(composerProviderState.modelPickerIconClassName
                     ? {
                         activeProviderIconClassName: composerProviderState.modelPickerIconClassName,
@@ -2510,7 +2526,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   <>
                     {providerTraitsPicker ? (
                       <>
-                        <Separator orientation="vertical" className="mx-0.5 hidden h-4 sm:block" />
+                        <ComposerToolbarSeparator />
                         {providerTraitsPicker}
                       </>
                     ) : null}

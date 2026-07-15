@@ -5155,14 +5155,6 @@ function ChatViewContent(props: ChatViewProps) {
               data-chat-composer-overlay="true"
               className="pointer-events-none absolute inset-x-0 bottom-0 z-20 pt-1.5 sm:pt-2"
             >
-              <div
-                aria-hidden="true"
-                className="chat-composer-horizontal-inset pointer-events-none absolute inset-x-0 top-1.5 bottom-0 z-0 sm:top-2"
-              >
-                <div className="relative mx-auto h-full w-full max-w-3xl overflow-clip rounded-t-[20px]">
-                  <div className="chat-composer-shared-blur absolute -inset-8" />
-                </div>
-              </div>
               <div className="chat-composer-horizontal-inset">
                 <div className="pointer-events-auto relative z-10 isolate">
                   <ComposerBannerStack className="relative z-0" items={composerBannerItems} />
@@ -5243,7 +5235,7 @@ function ChatViewContent(props: ChatViewProps) {
               </div>
               <div
                 className={cn(
-                  "chat-composer-horizontal-inset chat-composer-lower-chrome relative z-10",
+                  "chat-composer-horizontal-inset relative z-10",
                   activeProject
                     ? "pb-[calc(env(safe-area-inset-bottom)+0.25rem)]"
                     : "pb-[calc(env(safe-area-inset-bottom)+0.75rem)] sm:pb-[calc(env(safe-area-inset-bottom)+1rem)]",
@@ -5274,6 +5266,7 @@ function ChatViewContent(props: ChatViewProps) {
                         : {})}
                       {...(hasMultipleEnvironments ? { onEnvironmentChange } : {})}
                       availableEnvironments={logicalProjectEnvironments}
+                      isGitRepo={isGitRepo}
                       actions={
                         <ChatContextActions
                           environmentId={activeThread.environmentId}
