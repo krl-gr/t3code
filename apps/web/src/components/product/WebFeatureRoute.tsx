@@ -77,7 +77,7 @@ export function WebRouteNotFound() {
   );
 }
 
-class WebFeatureRouteErrorBoundary extends Component<
+export class WebFeatureRouteErrorBoundary extends Component<
   {
     readonly children: ReactNode;
     readonly featureId: string;

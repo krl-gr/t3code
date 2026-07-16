@@ -4,8 +4,9 @@ import {
   CORE_WEB_PRODUCT_COMPOSITION,
   createExperimentalWebProductComposition,
   listExperimentalWebNavigation,
-  listExperimentalWebRoutes,
   listExperimentalWebProviderDrivers,
+  listExperimentalWebRoutes,
+  listExperimentalWebSettings,
 } from "./WebComposition";
 import { WebFeatureInvariantError } from "./WebFeature";
 import { ProviderDriverKind } from "@t3tools/contracts";
@@ -17,12 +18,13 @@ describe("web product composition", () => {
   it("uses an empty public composition by default", () => {
     expect(CORE_WEB_PRODUCT_COMPOSITION.features).toEqual([]);
     expect(listExperimentalWebRoutes(CORE_WEB_PRODUCT_COMPOSITION)).toEqual([]);
+    expect(listExperimentalWebSettings(CORE_WEB_PRODUCT_COMPOSITION)).toEqual([]);
     expect(
       listExperimentalWebNavigation(CORE_WEB_PRODUCT_COMPOSITION, "primary-after-project"),
     ).toEqual([]);
   });
 
-  it("sorts trusted route and navigation contributions deterministically", () => {
+  it("sorts trusted route, settings, and navigation contributions deterministically", () => {
     const composition = createExperimentalWebProductComposition({
       features: [
         {
@@ -37,6 +39,15 @@ describe("web product composition", () => {
               path: "/tasks",
               slot: "primary-after-project",
               order: 20,
+            },
+          ],
+          settings: [
+            {
+              id: "computer-use",
+              label: "Computer Use",
+              path: "/settings/computer-use",
+              order: 20,
+              load: loadRoute,
             },
           ],
         },
@@ -54,6 +65,15 @@ describe("web product composition", () => {
               order: 10,
             },
           ],
+          settings: [
+            {
+              id: "browser",
+              label: "Browser",
+              path: "/settings/browser",
+              order: 10,
+              load: loadRoute,
+            },
+          ],
         },
       ],
     });
@@ -68,6 +88,10 @@ describe("web product composition", () => {
         ({ item }) => item.id,
       ),
     ).toEqual(["agents", "tasks"]);
+    expect(listExperimentalWebSettings(composition).map(({ page }) => page.id)).toEqual([
+      "browser",
+      "computer-use",
+    ]);
   });
 
   it("fails closed for ambiguous route and navigation registrations", () => {
@@ -109,6 +133,39 @@ describe("web product composition", () => {
                 label: "Tasks",
                 path: "/tasks",
                 slot: "primary-after-project",
+              },
+            ],
+          },
+        ],
+      }),
+    ).toThrowError(WebFeatureInvariantError);
+
+    expect(() =>
+      createExperimentalWebProductComposition({
+        features: [
+          {
+            id: "one",
+            ownerId: "upcomputer.pro",
+            version: 1,
+            settings: [
+              {
+                id: "browser",
+                label: "Browser",
+                path: "/settings/browser",
+                load: loadRoute,
+              },
+            ],
+          },
+          {
+            id: "two",
+            ownerId: "upcomputer.pro",
+            version: 1,
+            settings: [
+              {
+                id: "browser-again",
+                label: "Browser",
+                path: "/settings/browser",
+                load: loadRoute,
               },
             ],
           },

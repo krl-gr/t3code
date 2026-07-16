@@ -13,7 +13,17 @@ import type { ProductCapabilityVersionRequirement } from "@t3tools/shared/produc
 
 const STABLE_ID = /^[a-z0-9]+(?:[._-][a-z0-9]+)*$/;
 const ROUTE_PATH = /^\/[a-z0-9][a-z0-9._-]*$/;
+const SETTINGS_ROUTE_PATH = /^\/settings\/[a-z0-9][a-z0-9._-]*$/;
 const RESERVED_ROUTE_PATHS = new Set(["/draft", "/pair", "/settings"]);
+const RESERVED_SETTINGS_ROUTE_PATHS = new Set([
+  "/settings/archived",
+  "/settings/connections",
+  "/settings/diagnostics",
+  "/settings/general",
+  "/settings/keybindings",
+  "/settings/providers",
+  "/settings/source-control",
+]);
 const WEB_NAVIGATION_SLOTS = new Set<ExperimentalWebNavigationSlot>(["primary-after-project"]);
 
 export type ExperimentalWebNavigationSlot = "primary-after-project";
@@ -44,6 +54,16 @@ export interface ExperimentalWebNavigationContribution {
   readonly order?: number;
   readonly icon?: ComponentType<{ readonly className?: string }>;
   readonly capabilities?: ReadonlyArray<ExperimentalWebCapabilityRequirement>;
+}
+
+export interface ExperimentalWebSettingsPageContribution {
+  readonly id: string;
+  readonly label: string;
+  /** Settings-shell path such as `/settings/browser`. */
+  readonly path: `/settings/${string}`;
+  readonly order?: number;
+  readonly icon?: ComponentType<{ readonly className?: string }>;
+  readonly load: () => Promise<ExperimentalWebRouteModule>;
 }
 
 export interface ExperimentalWebInteractionModePresentation {
@@ -89,6 +109,7 @@ export interface ExperimentalWebFeatureContribution {
   readonly extensionId?: string;
   readonly routes?: ReadonlyArray<ExperimentalWebRouteContribution>;
   readonly navigation?: ReadonlyArray<ExperimentalWebNavigationContribution>;
+  readonly settings?: ReadonlyArray<ExperimentalWebSettingsPageContribution>;
   readonly interactionModes?: ReadonlyArray<ExperimentalWebInteractionModePresentation>;
   readonly providerDrivers?: ReadonlyArray<ExperimentalWebProviderDriverContribution>;
 }
@@ -105,6 +126,7 @@ export class WebFeatureInvariantError extends Error {
       | "duplicate-feature"
       | "duplicate-route"
       | "duplicate-navigation"
+      | "duplicate-settings"
       | "duplicate-presentation"
       | "duplicate-provider-driver",
     message: string,
@@ -127,6 +149,15 @@ function assertRoutePath(path: string): void {
     throw new WebFeatureInvariantError(
       "invalid-route",
       `Web feature route '${path}' must be an unreserved top-level application path.`,
+    );
+  }
+}
+
+function assertSettingsRoutePath(path: string): void {
+  if (!SETTINGS_ROUTE_PATH.test(path) || RESERVED_SETTINGS_ROUTE_PATHS.has(path)) {
+    throw new WebFeatureInvariantError(
+      "invalid-route",
+      `Web feature settings route '${path}' must be an unreserved direct child of /settings.`,
     );
   }
 }
@@ -162,6 +193,16 @@ export function defineExperimentalWebFeature<
       throw new WebFeatureInvariantError(
         "invalid-id",
         `Navigation '${item.id}' for '${feature.id}' must have a non-empty label.`,
+      );
+    }
+  }
+  for (const page of feature.settings ?? []) {
+    assertStableId(page.id, `Settings page id for '${feature.id}'`);
+    assertSettingsRoutePath(page.path);
+    if (page.label.trim().length === 0) {
+      throw new WebFeatureInvariantError(
+        "invalid-id",
+        `Settings page '${page.id}' for '${feature.id}' must have a non-empty label.`,
       );
     }
   }

@@ -20,6 +20,7 @@ import {
   useSidebar,
 } from "../ui/sidebar";
 import { SIDEBAR_LABEL_TEXT_CLASS, SIDEBAR_MUTED_TEXT_CLASS } from "../sidebar/sidebarTextStyles";
+import { WebFeatureSettingsNavigationItems } from "../product/WebFeatureSettingsNavigation";
 
 export type SettingsSectionPath =
   | "/settings/general"
@@ -71,7 +72,35 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
       <SidebarContent className="overflow-x-hidden">
         <SidebarGroup className="px-2 pt-2 pb-2">
           <SidebarMenu className="gap-0.5">
-            {SETTINGS_NAV_ITEMS.map((item) => {
+            {SETTINGS_NAV_ITEMS.slice(0, 1).map((item) => {
+              const Icon = item.icon;
+              const isActive = pathname === item.to;
+              return (
+                <SidebarMenuItem key={item.to}>
+                  <SidebarMenuButton
+                    size="sm"
+                    isActive={isActive}
+                    className={
+                      isActive
+                        ? "h-8 gap-2 px-2 text-left hover:bg-accent data-[active=true]:bg-accent data-[active=true]:text-foreground dark:hover:text-white/86 dark:data-[active=true]:bg-white/[0.06] dark:data-[active=true]:text-white/82"
+                        : `h-8 gap-2 px-2 text-left hover:bg-accent hover:text-foreground dark:hover:text-white/86 ${SIDEBAR_MUTED_TEXT_CLASS}`
+                    }
+                    onClick={() => handleSectionClick(item.to)}
+                  >
+                    <Icon className="size-4 shrink-0" />
+                    <span
+                      className={
+                        SIDEBAR_LABEL_TEXT_CLASS + " truncate text-foreground/72 dark:text-white/82"
+                      }
+                    >
+                      {item.label}
+                    </span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              );
+            })}
+            <WebFeatureSettingsNavigationItems />
+            {SETTINGS_NAV_ITEMS.slice(1).map((item) => {
               const Icon = item.icon;
               const isActive = pathname === item.to;
               return (

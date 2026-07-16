@@ -11,6 +11,7 @@ import {
   type ExperimentalWebNavigationSlot,
   type ExperimentalWebProviderDriverContribution,
   type ExperimentalWebRouteContribution,
+  type ExperimentalWebSettingsPageContribution,
 } from "./WebFeature";
 import type {
   EnvironmentExtensionRpcRequest,
@@ -85,6 +86,8 @@ export function createExperimentalWebProductComposition(input: {
   const routeIds = new Set<string>();
   const routePaths = new Set<string>();
   const navigationIds = new Set<string>();
+  const settingsIds = new Set<string>();
+  const settingsPaths = new Set<string>();
   const interactionModeIds = new Set<string>();
   const providerDriverIds = new Set<string>();
   const providerDriverKinds = new Set<string>();
@@ -120,6 +123,16 @@ export function createExperimentalWebProductComposition(input: {
         );
       }
       navigationIds.add(item.id);
+    }
+    for (const page of feature.settings ?? []) {
+      if (settingsIds.has(page.id) || settingsPaths.has(page.path)) {
+        throw new WebFeatureInvariantError(
+          "duplicate-settings",
+          `Web settings page '${page.id}' at '${page.path}' conflicts with another contribution.`,
+        );
+      }
+      settingsIds.add(page.id);
+      settingsPaths.add(page.path);
     }
     for (const mode of feature.interactionModes ?? []) {
       if (interactionModeIds.has(mode.id)) {
@@ -189,6 +202,20 @@ export function listExperimentalWebNavigation(
     .sort((left, right) => {
       const order = (left.item.order ?? 0) - (right.item.order ?? 0);
       return order !== 0 ? order : left.item.id.localeCompare(right.item.id);
+    });
+}
+
+export function listExperimentalWebSettings(
+  composition: ExperimentalWebProductComposition,
+): ReadonlyArray<{
+  readonly feature: ExperimentalWebFeatureContribution;
+  readonly page: ExperimentalWebSettingsPageContribution;
+}> {
+  return composition.features
+    .flatMap((feature) => (feature.settings ?? []).map((page) => ({ feature, page })))
+    .sort((left, right) => {
+      const order = (left.page.order ?? 0) - (right.page.order ?? 0);
+      return order !== 0 ? order : left.page.id.localeCompare(right.page.id);
     });
 }
 
