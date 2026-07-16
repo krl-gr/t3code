@@ -96,20 +96,15 @@ import {
 } from "./composerProviderState";
 import { ContextWindowMeter } from "./ContextWindowMeter";
 import { buildExpandedImagePreview, type ExpandedImagePreview } from "./ExpandedImagePreview";
+import { AttachmentRemoveButton, ImageAttachmentPreviewStrip } from "./ImageAttachmentPreviewStrip";
 import { basenameOfPath } from "../../pierre-icons";
 import { cn, randomUUID } from "~/lib/utils";
+import { SIDEBAR_LABEL_TEXT_CLASS, SIDEBAR_MUTED_TEXT_CLASS } from "../sidebar/sidebarTextStyles";
 import { Button } from "../ui/button";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { toastManager } from "../ui/toast";
-import {
-  CircleAlertIcon,
-  type LucideIcon,
-  LockIcon,
-  LockOpenIcon,
-  PenLineIcon,
-  XIcon,
-} from "lucide-react";
+import { type LucideIcon, LockIcon, LockOpenIcon, PenLineIcon } from "lucide-react";
 import { proposedPlanTitle } from "../../proposedPlan";
 import { getProviderDisplayName, getProviderInteractionModeToggle } from "../../providerModels";
 import {
@@ -1222,6 +1217,13 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     () => new Set(nonPersistedComposerImageIds),
     [nonPersistedComposerImageIds],
   );
+  const composerAttachmentImages = useMemo(
+    () =>
+      composerImages.filter(
+        (image) => !composerPreviewAnnotations.some((annotation) => annotation.id === image.id),
+      ),
+    [composerImages, composerPreviewAnnotations],
+  );
 
   const isComposerApprovalState = activePendingApproval !== null;
   const activePendingUserInput = pendingUserInputs[0] ?? null;
@@ -1229,6 +1231,10 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     isComposerApprovalState ||
     pendingUserInputs.length > 0 ||
     (showPlanFollowUpPrompt && activeProposedPlan !== null);
+  const showComposerAttachmentRow =
+    !isComposerApprovalState &&
+    pendingUserInputs.length === 0 &&
+    (chatContextBindings.length > 0 || composerAttachmentImages.length > 0);
   const showCollapsedMobilePromptRow =
     isComposerCollapsedMobile && !isComposerApprovalState && pendingUserInputs.length === 0;
 
@@ -2492,129 +2498,62 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                 />
               )}
 
-            {!isComposerCollapsedMobile &&
-              !isComposerApprovalState &&
-              pendingUserInputs.length === 0 &&
-              chatContextBindings.length > 0 && (
-                <div className="mb-3 flex flex-wrap gap-2" aria-label="Attached chat context">
-                  {chatContextBindings.map((binding) => {
-                    const sourceProject = binding.sourceProjectId
-                      ? chatContextProjectById.get(binding.sourceProjectId)
-                      : undefined;
-                    return (
-                      <Tooltip key={binding.id}>
-                        <TooltipTrigger
-                          render={
-                            <span className="inline-flex h-8 max-w-full items-center gap-1.5 rounded-md border border-border/70 bg-background/55 pl-2.5 pr-1 text-muted-foreground text-xs shadow-xs/5" />
-                          }
-                        >
-                          <span className="rounded bg-muted px-1 py-0.5 text-[10px] font-medium uppercase tracking-wide">
-                            Snapshot
-                          </span>
-                          <span className="max-w-56 truncate">{binding.sourceThreadTitle}</span>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon-xs"
-                            className="size-6 shrink-0"
-                            aria-label={`Remove ${binding.sourceThreadTitle} context`}
-                            onClick={(event) => {
-                              event.preventDefault();
-                              event.stopPropagation();
-                              void removeChatContextBinding(binding.id);
-                            }}
-                          >
-                            <XIcon className="size-3" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipPopup side="top" className="max-w-80 whitespace-normal">
-                          Snapshot of {binding.sourceThreadTitle}
-                          {sourceProject ? ` · ${sourceProject.title}` : ""}. It is included with
-                          future messages in this chat.
-                        </TooltipPopup>
-                      </Tooltip>
-                    );
-                  })}
-                </div>
-              )}
-
-            {!isComposerCollapsedMobile &&
-              !isComposerApprovalState &&
-              pendingUserInputs.length === 0 &&
-              composerImages.some(
-                (image) =>
-                  !composerPreviewAnnotations.some((annotation) => annotation.id === image.id),
-              ) && (
-                <div className="mb-3 flex flex-wrap gap-2">
-                  {composerImages
-                    .filter(
-                      (image) =>
-                        !composerPreviewAnnotations.some(
-                          (annotation) => annotation.id === image.id,
-                        ),
-                    )
-                    .map((image) => (
-                      <div
-                        key={image.id}
-                        className="relative h-16 w-16 overflow-hidden rounded-lg border border-border/80 bg-background"
+            {!isComposerCollapsedMobile && showComposerAttachmentRow ? (
+              <div
+                className="mb-3 flex min-w-0 flex-wrap items-center gap-2"
+                aria-label="Composer attachments"
+              >
+                {chatContextBindings.map((binding) => {
+                  const sourceProject = binding.sourceProjectId
+                    ? chatContextProjectById.get(binding.sourceProjectId)
+                    : undefined;
+                  const tooltip = [
+                    "Attached chat snapshot",
+                    sourceProject?.title,
+                    sourceProject?.workspaceRoot,
+                    binding.cutoffMessageId ? "From selected message" : "From thread",
+                  ]
+                    .filter(Boolean)
+                    .join(" · ");
+                  return (
+                    <Tooltip key={binding.id}>
+                      <TooltipTrigger
+                        render={
+                          <span
+                            className={cn(
+                              "relative mr-3.5 inline-flex h-8 max-w-full items-center overflow-visible rounded-md border border-border/70 bg-background/55 py-0 pl-2.5 pr-5 shadow-xs/5",
+                              SIDEBAR_MUTED_TEXT_CLASS,
+                              SIDEBAR_LABEL_TEXT_CLASS,
+                            )}
+                          />
+                        }
                       >
-                        {image.previewUrl ? (
-                          <button
-                            type="button"
-                            className="h-full w-full cursor-zoom-in"
-                            aria-label={`Preview ${image.name}`}
-                            onClick={() => {
-                              const preview = buildExpandedImagePreview(composerImages, image.id);
-                              if (!preview) return;
-                              onExpandImage(preview);
-                            }}
-                          >
-                            <img
-                              src={image.previewUrl}
-                              alt={image.name}
-                              className="h-full w-full object-cover"
-                            />
-                          </button>
-                        ) : (
-                          <div className="flex h-full w-full items-center justify-center px-1 text-center text-[10px] text-muted-foreground/70">
-                            {image.name}
-                          </div>
-                        )}
-                        {nonPersistedComposerImageIdSet.has(image.id) && (
-                          <Tooltip>
-                            <TooltipTrigger
-                              render={
-                                <span
-                                  role="img"
-                                  aria-label="Draft attachment may not persist"
-                                  className="absolute left-1 top-1 inline-flex items-center justify-center rounded bg-background/85 p-0.5 text-amber-600"
-                                >
-                                  <CircleAlertIcon className="size-3" />
-                                </span>
-                              }
-                            />
-                            <TooltipPopup
-                              side="top"
-                              className="max-w-64 whitespace-normal leading-tight"
-                            >
-                              Draft attachment could not be saved locally and may be lost on
-                              navigation.
-                            </TooltipPopup>
-                          </Tooltip>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="icon-xs"
-                          className="absolute right-1 top-1 bg-background/80 hover:bg-background/90"
-                          onClick={() => removeComposerImage(image.id)}
-                          aria-label={`Remove ${image.name}`}
-                        >
-                          <XIcon />
-                        </Button>
-                      </div>
-                    ))}
-                </div>
-              )}
+                        <span className="max-w-72 truncate">{binding.sourceThreadTitle}</span>
+                        <AttachmentRemoveButton
+                          ariaLabel={`Remove ${binding.sourceThreadTitle} context`}
+                          onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            void removeChatContextBinding(binding.id);
+                          }}
+                        />
+                      </TooltipTrigger>
+                      <TooltipPopup side="top" className="max-w-80 whitespace-normal">
+                        {tooltip}
+                      </TooltipPopup>
+                    </Tooltip>
+                  );
+                })}
+                <ImageAttachmentPreviewStrip
+                  images={composerAttachmentImages}
+                  variant="composer"
+                  className="contents"
+                  nonPersistedImageIds={nonPersistedComposerImageIdSet}
+                  onExpandImage={onExpandImage}
+                  onRemoveImage={removeComposerImage}
+                />
+              </div>
+            ) : null}
 
             <div className="relative">
               <ComposerPromptEditor
