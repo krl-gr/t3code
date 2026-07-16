@@ -82,54 +82,68 @@ export function createDesktopClerkBridge(stateDir: string, isDevelopment: boolea
   });
 }
 
-export const make = Effect.gen(function* () {
-  const environment = yield* DesktopEnvironment.DesktopEnvironment;
-  yield* Effect.acquireRelease(
-    Effect.try({
-      try: () => createDesktopClerkBridge(environment.stateDir, environment.isDevelopment),
-      catch: (cause) =>
-        new DesktopClerkBridgeInitializationError({
-          stateDir: environment.stateDir,
-          isDevelopment: environment.isDevelopment,
-          cause,
-        }),
-    }),
-    (bridge) =>
-      Effect.try({
-        try: () => bridge.cleanup(),
-        catch: (cause) =>
-          new DesktopClerkBridgeCleanupError({
-            stateDir: environment.stateDir,
-            isDevelopment: environment.isDevelopment,
-            cause,
-          }),
-      }).pipe(Effect.orDie),
-  );
+type DesktopClerkBridge = ReturnType<typeof createDesktopClerkBridge>;
 
-  return DesktopClerk.of({
-    configure: Effect.gen(function* () {
-      const electronApp = yield* ElectronApp.ElectronApp;
-      const electronWindow = yield* ElectronWindow.ElectronWindow;
-      const context = yield* Effect.context<ElectronWindow.ElectronWindow>();
-      const runPromise = Effect.runPromiseWith(context);
+const make = (precreatedBridge?: DesktopClerkBridge) =>
+  Effect.gen(function* () {
+    const environment = yield* DesktopEnvironment.DesktopEnvironment;
+    yield* Effect.acquireRelease(
+      precreatedBridge === undefined
+        ? Effect.try({
+            try: () => createDesktopClerkBridge(environment.stateDir, environment.isDevelopment),
+            catch: (cause) =>
+              new DesktopClerkBridgeInitializationError({
+                stateDir: environment.stateDir,
+                isDevelopment: environment.isDevelopment,
+                cause,
+              }),
+          })
+        : Effect.succeed(precreatedBridge),
+      (bridge) =>
+        Effect.try({
+          try: () => bridge.cleanup(),
+          catch: (cause) =>
+            new DesktopClerkBridgeCleanupError({
+              stateDir: environment.stateDir,
+              isDevelopment: environment.isDevelopment,
+              cause,
+            }),
+        }).pipe(Effect.orDie),
+    );
 
-      if (!(yield* electronApp.requestSingleInstanceLock)) {
-        yield* electronApp.quit;
-        return yield* Effect.interrupt;
-      }
+    return DesktopClerk.of({
+      configure: Effect.gen(function* () {
+        const electronApp = yield* ElectronApp.ElectronApp;
+        const electronWindow = yield* ElectronWindow.ElectronWindow;
+        const context = yield* Effect.context<ElectronWindow.ElectronWindow>();
+        const runPromise = Effect.runPromiseWith(context);
 
-      yield* electronApp.on("second-instance", () => {
-        void runPromise(
-          Effect.gen(function* () {
-            const mainWindow = yield* electronWindow.currentMainOrFirst;
-            if (Option.isSome(mainWindow)) {
-              yield* electronWindow.reveal(mainWindow.value);
-            }
-          }),
-        );
-      });
-    }).pipe(Effect.withSpan("desktop.clerk.configure")),
+        if (!(yield* electronApp.requestSingleInstanceLock)) {
+          yield* electronApp.quit;
+          return yield* Effect.interrupt;
+        }
+
+        yield* electronApp.on("second-instance", () => {
+          void runPromise(
+            Effect.gen(function* () {
+              const mainWindow = yield* electronWindow.currentMainOrFirst;
+              if (Option.isSome(mainWindow)) {
+                yield* electronWindow.reveal(mainWindow.value);
+              }
+            }),
+          );
+        });
+      }).pipe(Effect.withSpan("desktop.clerk.configure")),
+    });
   });
-});
 
-export const layer = Layer.effect(DesktopClerk, make);
+export const layer = Layer.effect(DesktopClerk, make());
+
+/**
+ * Clerk registers Electron's privileged renderer scheme while creating its bridge.
+ * Electron requires that registration to happen synchronously, before `app` becomes
+ * ready, so production startup creates the bridge at module evaluation time and
+ * hands it to the managed layer for scoped cleanup.
+ */
+export const layerFromPrecreatedBridge = (bridge: DesktopClerkBridge) =>
+  Layer.effect(DesktopClerk, make(bridge));

@@ -1,7 +1,10 @@
+// @effect-diagnostics nodeBuiltinImport:off - Clerk's Electron scheme must be registered synchronously before app readiness, outside the Effect runtime.
 import * as NodeHttpClient from "@effect/platform-node/NodeHttpClient";
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as NodeOS from "node:os";
+import * as NodeFS from "node:fs";
+import * as NodePath from "node:path";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -52,6 +55,23 @@ import * as PreviewManager from "./preview/Manager.ts";
 import * as DesktopWindow from "./window/DesktopWindow.ts";
 import * as DesktopWslBackend from "./wsl/DesktopWslBackend.ts";
 import * as DesktopWslEnvironment from "./wsl/DesktopWslEnvironment.ts";
+
+const isDevelopment = Boolean(process.env.VITE_DEV_SERVER_URL?.trim());
+const configuredBaseDir =
+  process.env.UPCOMPUTER_HOME?.trim() || process.env.T3CODE_HOME?.trim() || undefined;
+const preferredBaseDir = NodePath.join(NodeOS.homedir(), ".upcomputer");
+const legacyBaseDir = NodePath.join(NodeOS.homedir(), ".t3");
+const baseDir =
+  configuredBaseDir ??
+  (NodeFS.existsSync(preferredBaseDir)
+    ? preferredBaseDir
+    : NodeFS.existsSync(legacyBaseDir)
+      ? legacyBaseDir
+      : preferredBaseDir);
+const desktopClerkBridge = DesktopClerk.createDesktopClerkBridge(
+  NodePath.join(baseDir, isDevelopment ? "dev" : "userdata"),
+  isDevelopment,
+);
 
 const desktopEnvironmentLayer = Layer.unwrap(
   Effect.gen(function* () {
@@ -179,7 +199,7 @@ const desktopApplicationLayer = Layer.mergeAll(
   Layer.provideMerge(desktopLocalEnvironmentAuthLayer),
 );
 
-const desktopClerkLayer = DesktopClerk.layer.pipe(
+const desktopClerkLayer = DesktopClerk.layerFromPrecreatedBridge(desktopClerkBridge).pipe(
   Layer.provideMerge(desktopEnvironmentLayer),
   Layer.provideMerge(NodeServices.layer),
   Layer.provideMerge(ElectronApp.layer),
