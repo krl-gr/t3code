@@ -1,5 +1,13 @@
-import type { ComponentType } from "react";
-import type { ProviderInteractionMode } from "@t3tools/contracts";
+import type { ComponentType, FunctionComponent, SVGProps } from "react";
+import type {
+  EnvironmentId,
+  ProviderDriverKind,
+  ProviderInstanceConfig,
+  ProviderInstanceId,
+  ProviderInteractionMode,
+  ServerProvider,
+} from "@t3tools/contracts";
+import type * as Schema from "effect/Schema";
 
 import type { ProductCapabilityVersionRequirement } from "@t3tools/shared/product";
 
@@ -47,6 +55,26 @@ export interface ExperimentalWebInteractionModePresentation {
   readonly capabilities?: ReadonlyArray<ExperimentalWebCapabilityRequirement>;
 }
 
+export interface ExperimentalWebProviderDriverDetailsProps {
+  readonly environmentId: EnvironmentId | undefined;
+  readonly instanceId: ProviderInstanceId;
+  readonly instance: ProviderInstanceConfig;
+  readonly liveProvider: ServerProvider | undefined;
+  readonly refreshProviderStatus: () => void;
+}
+
+export interface ExperimentalWebProviderDriverContribution {
+  readonly id: string;
+  readonly driverKind: ProviderDriverKind;
+  readonly label: string;
+  readonly icon: FunctionComponent<SVGProps<SVGSVGElement>>;
+  readonly settingsSchema: Schema.Top & {
+    readonly fields: Readonly<Record<string, Schema.Top>>;
+  };
+  readonly badgeLabel?: string;
+  readonly details?: ComponentType<ExperimentalWebProviderDriverDetailsProps>;
+}
+
 /**
  * Trusted, build-time web contribution. Executable UI is deliberately kept
  * separate from the server-advertised product manifest.
@@ -62,6 +90,7 @@ export interface ExperimentalWebFeatureContribution {
   readonly routes?: ReadonlyArray<ExperimentalWebRouteContribution>;
   readonly navigation?: ReadonlyArray<ExperimentalWebNavigationContribution>;
   readonly interactionModes?: ReadonlyArray<ExperimentalWebInteractionModePresentation>;
+  readonly providerDrivers?: ReadonlyArray<ExperimentalWebProviderDriverContribution>;
 }
 
 export class WebFeatureInvariantError extends Error {
@@ -76,7 +105,8 @@ export class WebFeatureInvariantError extends Error {
       | "duplicate-feature"
       | "duplicate-route"
       | "duplicate-navigation"
-      | "duplicate-presentation",
+      | "duplicate-presentation"
+      | "duplicate-provider-driver",
     message: string,
   ) {
     super(message);
@@ -141,6 +171,16 @@ export function defineExperimentalWebFeature<
       throw new WebFeatureInvariantError(
         "invalid-id",
         `Interaction mode '${mode.id}' for '${feature.id}' must have display metadata.`,
+      );
+    }
+  }
+  for (const provider of feature.providerDrivers ?? []) {
+    assertStableId(provider.id, `Provider driver contribution id for '${feature.id}'`);
+    assertStableId(provider.driverKind, `Provider driver kind for '${feature.id}'`);
+    if (provider.label.trim().length === 0) {
+      throw new WebFeatureInvariantError(
+        "invalid-id",
+        `Provider driver '${provider.driverKind}' for '${feature.id}' must have display metadata.`,
       );
     }
   }

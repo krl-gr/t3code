@@ -74,7 +74,7 @@ import {
   type ProviderUpdateCandidate,
 } from "../ProviderUpdateLaunchNotification.logic";
 import { ProviderInstanceCard } from "./ProviderInstanceCard";
-import { DRIVER_OPTIONS, getDriverOption } from "./providerDriverMeta";
+import { getDriverOption, getProviderClientDefinitions } from "./providerDriverMeta";
 import {
   buildProviderInstanceUpdatePatch,
   formatDiagnosticsDescription,
@@ -88,6 +88,7 @@ import {
 } from "./settingsLayout";
 import { ProjectFavicon } from "../ProjectFavicon";
 import { useAtomCommand } from "../../state/use-atom-command";
+import { useWebProductComposition } from "../../product/WebComposition";
 
 const THEME_OPTIONS = [
   {
@@ -127,10 +128,6 @@ function withoutProviderInstanceFavorites(
 ) {
   return favorites.filter((favorite) => favorite.provider !== instanceId);
 }
-
-const PROVIDER_SETTINGS = DRIVER_OPTIONS.map((definition) => ({
-  provider: definition.value,
-}));
 
 function ProviderLastChecked({ lastCheckedAt }: { lastCheckedAt: string | null }) {
   useRelativeTimeTick();
@@ -980,6 +977,9 @@ export function ProviderSettingsPanel() {
   const updateSettings = useUpdatePrimarySettings();
   const serverProviders = useAtomValue(primaryServerProvidersAtom);
   const primaryEnvironment = usePrimaryEnvironment();
+  const webComposition = useWebProductComposition();
+  const driverOptions = getProviderClientDefinitions(webComposition);
+  const providerSettings = driverOptions.map((definition) => ({ provider: definition.value }));
   const refreshServerProviders = useAtomCommand(serverEnvironment.refreshProviders, {
     reportFailure: false,
   });
@@ -1002,7 +1002,7 @@ export function ProviderSettingsPanel() {
     () => new Map(providerUpdateCandidates.map((candidate) => [candidate.instanceId, candidate])),
     [providerUpdateCandidates],
   );
-  const visibleProviderSettings = PROVIDER_SETTINGS.filter(
+  const visibleProviderSettings = providerSettings.filter(
     (providerSettings) =>
       providerSettings.provider !== "cursor" ||
       serverProviders.some(
@@ -1135,17 +1135,18 @@ export function ProviderSettingsPanel() {
     const driver = providerSettings.provider;
     const defaultInstanceId = defaultInstanceIdForDriver(driver);
     const explicitInstance = settings.providerInstances?.[defaultInstanceId];
-    const legacyConfig = legacyProviders[providerSettings.provider]!;
-    const defaultLegacyConfig = defaultLegacyProviders[providerSettings.provider]!;
+    const legacyConfig = legacyProviders[providerSettings.provider];
+    const defaultLegacyConfig = defaultLegacyProviders[providerSettings.provider];
     const effectiveInstance: ProviderInstanceConfig =
       explicitInstance ??
       ({
         driver,
-        enabled: legacyConfig.enabled,
-        config: legacyConfig,
+        enabled: legacyConfig?.enabled ?? true,
+        ...(legacyConfig === undefined ? {} : { config: legacyConfig }),
       } satisfies ProviderInstanceConfig);
     const isDirty =
-      explicitInstance !== undefined || !Equal.equals(legacyConfig, defaultLegacyConfig);
+      explicitInstance !== undefined ||
+      (legacyConfig !== undefined && !Equal.equals(legacyConfig, defaultLegacyConfig));
     rows.push({
       instanceId: defaultInstanceId,
       instance: effectiveInstance,
@@ -1314,7 +1315,7 @@ export function ProviderSettingsPanel() {
         }
       >
         {rows.map((row) => {
-          const driverOption = getDriverOption(row.driver);
+          const driverOption = getDriverOption(row.driver, webComposition);
           const liveProvider = serverProviders.find(
             (candidate) => candidate.instanceId === row.instanceId,
           );
@@ -1354,6 +1355,7 @@ export function ProviderSettingsPanel() {
             <ProviderInstanceCard
               key={row.instanceId}
               instanceId={row.instanceId}
+              environmentId={primaryEnvironment?.environmentId}
               instance={row.instance}
               driverOption={driverOption}
               liveProvider={liveProvider}
@@ -1408,6 +1410,7 @@ export function ProviderSettingsPanel() {
                   : undefined
               }
               isUpdating={showInlineUpdateButton ? isDriverUpdateRunning : undefined}
+              refreshProviderStatus={refreshProviders}
             />
           );
         })}

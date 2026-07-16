@@ -14,6 +14,15 @@ export * from "./product/RpcContribution.ts";
 export * from "./product/ServerProductComposition.ts";
 export * from "./product/ServerProductEntry.ts";
 export * from "./product/ProductServerCli.ts";
+export {
+  defaultProviderContinuationIdentity,
+  type AnyProviderDriver,
+  type ProviderContinuationIdentity,
+  type ProviderDriver,
+  type ProviderDriverCreateInput,
+  type ProviderDriverMetadata,
+  type ProviderInstance,
+} from "./provider/ProviderDriver.ts";
 export { CORE_SERVER_PRODUCT_ENTRY } from "./product/defaultProductEntry.ts";
 export { OrchestrationEngineService } from "./orchestration/Services/OrchestrationEngine.ts";
 export { ProjectionSnapshotQuery } from "./orchestration/Services/ProjectionSnapshotQuery.ts";

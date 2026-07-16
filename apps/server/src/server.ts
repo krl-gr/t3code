@@ -32,7 +32,7 @@ import * as BitbucketApi from "./sourceControl/BitbucketApi.ts";
 import * as GitHubCli from "./sourceControl/GitHubCli.ts";
 import * as GitLabCli from "./sourceControl/GitLabCli.ts";
 import * as TextGeneration from "./textGeneration/TextGeneration.ts";
-import { ProviderInstanceRegistryHydrationLive } from "./provider/Layers/ProviderInstanceRegistryHydration.ts";
+import { makeProviderInstanceRegistryHydrationLayer } from "./provider/Layers/ProviderInstanceRegistryHydration.ts";
 import * as TerminalManager from "./terminal/Manager.ts";
 import * as McpHttpServer from "./mcp/McpHttpServer.ts";
 import * as McpSessionRegistry from "./mcp/McpSessionRegistry.ts";
@@ -314,9 +314,9 @@ const makeRuntimeCoreDependenciesLive = <const ProductEntry extends Experimental
   const interactionModeRegistryLayer = InteractionModeRegistryService.layer(
     productEntry.composition.interactionModeRegistry,
   );
-  const providerInstanceRegistryHydrationLayer = ProviderInstanceRegistryHydrationLive.pipe(
-    Layer.provideMerge(dynamicToolRegistryLayer),
-  );
+  const providerInstanceRegistryHydrationLayer = makeProviderInstanceRegistryHydrationLayer(
+    productEntry.composition.providerDrivers,
+  ).pipe(Layer.provideMerge(dynamicToolRegistryLayer));
   const providerRuntimeWithInteractionModesLayer = ProviderRuntimeWithEventsLayerLive.pipe(
     Layer.provide(interactionModeRegistryLayer),
     Layer.provide(dynamicToolRegistryLayer),

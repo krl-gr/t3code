@@ -5,6 +5,7 @@ import * as Rpc from "effect/unstable/rpc/Rpc";
 import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 import * as Schema from "effect/Schema";
 import { InteractionModeRegistryError } from "@t3tools/shared/interactionMode";
+import { ProviderDriverKind } from "@t3tools/contracts";
 
 import {
   CORE_SERVER_PRODUCT_COMPOSITION,
@@ -13,6 +14,7 @@ import {
   defineExperimentalServerFeature,
   eraseExperimentalServerLayer,
 } from "./ServerProductComposition.ts";
+import type { AnyProviderDriver } from "../provider/ProviderDriver.ts";
 import { CORE_SERVER_PRODUCT_ENTRY } from "./defaultProductEntry.ts";
 import { defineNamespacedRpcContribution } from "./RpcContribution.ts";
 
@@ -21,12 +23,20 @@ const CompositionTestRpc = Rpc.make("upcomputer.tasks.ping", {
   success: Schema.String,
 });
 const CompositionTestRpcGroup = RpcGroup.make(CompositionTestRpc);
+const TEST_PROVIDER_DRIVER = {
+  driverKind: ProviderDriverKind.make("upcomputerAgent"),
+  metadata: { displayName: "UpComputer Agent", supportsMultipleInstances: false },
+  configSchema: Schema.Struct({}),
+  defaultConfig: () => ({}),
+  create: () => Effect.die(new Error("Composition tests do not materialize provider drivers.")),
+} satisfies AnyProviderDriver<never>;
 
 describe("server product composition", () => {
   it("keeps the public core features empty and exposes built-in interaction modes", () => {
     expect(CORE_SERVER_PRODUCT_COMPOSITION.features).toEqual([]);
     expect(CORE_SERVER_PRODUCT_COMPOSITION.diagnostics).toEqual([]);
     expect(CORE_SERVER_PRODUCT_COMPOSITION.migrations).toEqual([]);
+    expect(CORE_SERVER_PRODUCT_COMPOSITION.providerDrivers).toEqual([]);
     expect(
       CORE_SERVER_PRODUCT_COMPOSITION.interactionModeRegistry.snapshot().map((mode) => mode.id),
     ).toEqual(["ask", "default", "plan"]);
@@ -56,6 +66,8 @@ describe("server product composition", () => {
         rpcNamespaces: 0,
         dynamicTools: 0,
         interactionModes: 0,
+        providerDrivers: 0,
+        interactionModeProviders: 0,
       },
       {
         id: "upcomputer.tasks",
@@ -66,6 +78,8 @@ describe("server product composition", () => {
         rpcNamespaces: 0,
         dynamicTools: 0,
         interactionModes: 0,
+        providerDrivers: 0,
+        interactionModeProviders: 0,
       },
     ]);
   });
@@ -132,6 +146,26 @@ describe("server product composition", () => {
           migrations: [migration],
           rpc: [rpc],
           interactionModes: [taskReviewMode],
+          providerDrivers: [
+            {
+              id: "upcomputer-agent",
+              ownerId: "upcomputer.tasks",
+              version: 1,
+              driver: TEST_PROVIDER_DRIVER,
+            },
+          ],
+          interactionModeProviders: [
+            {
+              id: "pi-task-review",
+              ownerId: "upcomputer.tasks",
+              version: 1,
+              modeId: "task-review",
+              behavior: {
+                providerId: "pi",
+                promptPrefix: "Review task state without making changes.",
+              },
+            },
+          ],
         },
       ],
     });
@@ -146,13 +180,19 @@ describe("server product composition", () => {
         rpcNamespaces: 1,
         dynamicTools: 0,
         interactionModes: 1,
+        providerDrivers: 1,
+        interactionModeProviders: 1,
       },
     ]);
     expect(composition.migrations).toEqual([migration]);
     expect(composition.rpc).toEqual([rpc]);
+    expect(composition.providerDrivers).toEqual([TEST_PROVIDER_DRIVER]);
     const resolvedMode = composition.interactionModeRegistry.resolveOrThrow("task-review", "codex");
     expect(resolvedMode.ownerId).toBe("upcomputer.tasks");
     expect(resolvedMode.provider.sandbox).toBe("read-only");
+    expect(
+      composition.interactionModeRegistry.resolveOrThrow("task-review", "pi").provider.promptPrefix,
+    ).toBe("Review task state without making changes.");
   });
 
   it("rejects ambiguous server feature registrations", () => {
@@ -290,5 +330,24 @@ describe("server product composition", () => {
         ],
       }),
     ).toThrow(InteractionModeRegistryError);
+
+    expect(() =>
+      createExperimentalServerProductComposition({
+        features: [
+          {
+            id: "upcomputer.tasks",
+            version: 1,
+            providerDrivers: [
+              {
+                id: "codex-override",
+                ownerId: "upcomputer.tasks",
+                version: 1,
+                driver: { ...TEST_PROVIDER_DRIVER, driverKind: ProviderDriverKind.make("codex") },
+              },
+            ],
+          },
+        ],
+      }),
+    ).toThrow(ServerProductCompositionInvariantError);
   });
 });

@@ -7,6 +7,12 @@ import {
   ProviderDriverKind,
 } from "@t3tools/contracts";
 import type * as Schema from "effect/Schema";
+import type { ComponentType } from "react";
+import {
+  listExperimentalWebProviderDrivers,
+  type ExperimentalWebProductComposition,
+} from "../../product/WebComposition";
+import type { ExperimentalWebProviderDriverDetailsProps } from "../../product/WebFeature";
 import { ClaudeAI, CursorIcon, GrokIcon, type Icon, OpenAI, OpenCodeIcon } from "../Icons";
 
 type ProviderSettingsSchema = {
@@ -32,6 +38,7 @@ export interface ProviderClientDefinition {
    * built-in default or custom — advertises the same marker.
    */
   readonly badgeLabel?: string;
+  readonly details?: ComponentType<ExperimentalWebProviderDriverDetailsProps>;
 }
 
 export const PROVIDER_CLIENT_DEFINITIONS: readonly ProviderClientDefinition[] = [
@@ -79,12 +86,33 @@ export const DRIVER_OPTIONS = PROVIDER_CLIENT_DEFINITIONS;
 export const DRIVER_OPTION_BY_VALUE = PROVIDER_CLIENT_DEFINITION_BY_VALUE;
 export type DriverOption = ProviderClientDefinition;
 
+export function getProviderClientDefinitions(
+  composition: ExperimentalWebProductComposition,
+): ReadonlyArray<ProviderClientDefinition> {
+  return [
+    ...PROVIDER_CLIENT_DEFINITIONS,
+    ...listExperimentalWebProviderDrivers(composition).map(({ provider }) => ({
+      value: provider.driverKind,
+      label: provider.label,
+      icon: provider.icon,
+      settingsSchema: provider.settingsSchema,
+      ...(provider.badgeLabel === undefined ? {} : { badgeLabel: provider.badgeLabel }),
+      ...(provider.details === undefined ? {} : { details: provider.details }),
+    })),
+  ];
+}
+
 /**
  * Look up the driver metadata for an instance's `driver` field. Accepts
  * Returns `undefined` for fork / unknown drivers so callers can decide how
  * to render them — typically by falling back to a generic card.
  */
-export function getDriverOption(driver: ProviderDriverKind | undefined): DriverOption | undefined {
+export function getDriverOption(
+  driver: ProviderDriverKind | undefined,
+  composition?: ExperimentalWebProductComposition,
+): DriverOption | undefined {
   if (driver === undefined) return undefined;
-  return PROVIDER_CLIENT_DEFINITION_BY_VALUE[driver];
+  return composition === undefined
+    ? PROVIDER_CLIENT_DEFINITION_BY_VALUE[driver]
+    : getProviderClientDefinitions(composition).find((definition) => definition.value === driver);
 }

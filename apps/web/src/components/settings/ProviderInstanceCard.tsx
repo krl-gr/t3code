@@ -18,6 +18,7 @@ import {
   type ProviderInstanceConfig,
   type ProviderInstanceEnvironmentVariable,
   type ProviderInstanceId,
+  type EnvironmentId,
   type ProviderDriverKind,
   type ServerProvider,
   type ServerProviderModel,
@@ -319,6 +320,7 @@ function ProviderEnvironmentSection(props: {
 }
 
 interface ProviderInstanceCardProps {
+  readonly environmentId: EnvironmentId | undefined;
   readonly instanceId: ProviderInstanceId;
   readonly instance: ProviderInstanceConfig;
   readonly driverOption: DriverOption | undefined;
@@ -349,6 +351,7 @@ interface ProviderInstanceCardProps {
   readonly onModelOrderChange: (next: ReadonlyArray<string>) => void;
   readonly onRunUpdate?: (() => void) | undefined;
   readonly isUpdating?: boolean | undefined;
+  readonly refreshProviderStatus: () => void;
 }
 
 /**
@@ -393,6 +396,8 @@ export function ProviderInstanceCard({
   onModelOrderChange,
   onRunUpdate,
   isUpdating = false,
+  environmentId,
+  refreshProviderStatus,
 }: ProviderInstanceCardProps) {
   const enabled = instance.enabled ?? true;
   // The server-reported status wins when present; otherwise fall back to
@@ -451,6 +456,7 @@ export function ProviderInstanceCard({
     liveModels: liveProvider?.models,
     customModels,
   });
+  const ProviderDetails = driverOption?.details;
 
   const updateDisplayName = (value: string) => {
     const trimmed = value.trim();
@@ -763,6 +769,16 @@ export function ProviderInstanceCard({
                 onChange={updateEnvironment}
               />
             </div>
+
+            {ProviderDetails ? (
+              <ProviderDetails
+                environmentId={environmentId}
+                instanceId={instanceId}
+                instance={instance}
+                liveProvider={liveProvider}
+                refreshProviderStatus={refreshProviderStatus}
+              />
+            ) : null}
 
             {driverOption ? (
               <ProviderSettingsForm

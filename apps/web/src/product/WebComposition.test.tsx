@@ -5,8 +5,11 @@ import {
   createExperimentalWebProductComposition,
   listExperimentalWebNavigation,
   listExperimentalWebRoutes,
+  listExperimentalWebProviderDrivers,
 } from "./WebComposition";
 import { WebFeatureInvariantError } from "./WebFeature";
+import { ProviderDriverKind } from "@t3tools/contracts";
+import * as Schema from "effect/Schema";
 
 const loadRoute = async () => ({ default: () => null });
 
@@ -108,6 +111,48 @@ describe("web product composition", () => {
                 slot: "primary-after-project",
               },
             ],
+          },
+        ],
+      }),
+    ).toThrowError(WebFeatureInvariantError);
+  });
+
+  it("composes contributed provider driver presentation and rejects duplicate kinds", () => {
+    const provider = {
+      id: "pi",
+      driverKind: ProviderDriverKind.make("pi"),
+      label: "Pi",
+      icon: () => null,
+      settingsSchema: Schema.Struct({}),
+    };
+    const composition = createExperimentalWebProductComposition({
+      features: [
+        {
+          id: "upcomputer.agent-runtime.web",
+          ownerId: "upcomputer.agent-runtime",
+          version: 1,
+          providerDrivers: [provider],
+        },
+      ],
+    });
+
+    expect(
+      listExperimentalWebProviderDrivers(composition).map(({ provider }) => provider.label),
+    ).toEqual(["Pi"]);
+    expect(() =>
+      createExperimentalWebProductComposition({
+        features: [
+          {
+            id: "one",
+            ownerId: "upcomputer.pro",
+            version: 1,
+            providerDrivers: [provider],
+          },
+          {
+            id: "two",
+            ownerId: "upcomputer.pro",
+            version: 1,
+            providerDrivers: [{ ...provider, id: "pi-again" }],
           },
         ],
       }),

@@ -9,6 +9,7 @@ import {
   type ExperimentalWebInteractionModePresentation,
   type ExperimentalWebNavigationContribution,
   type ExperimentalWebNavigationSlot,
+  type ExperimentalWebProviderDriverContribution,
   type ExperimentalWebRouteContribution,
 } from "./WebFeature";
 import type {
@@ -85,6 +86,8 @@ export function createExperimentalWebProductComposition(input: {
   const routePaths = new Set<string>();
   const navigationIds = new Set<string>();
   const interactionModeIds = new Set<string>();
+  const providerDriverIds = new Set<string>();
+  const providerDriverKinds = new Set<string>();
   const features = [...(input.features ?? [])]
     .map((feature) => defineExperimentalWebFeature(feature))
     .sort((left, right) => left.id.localeCompare(right.id));
@@ -126,6 +129,16 @@ export function createExperimentalWebProductComposition(input: {
         );
       }
       interactionModeIds.add(mode.id);
+    }
+    for (const provider of feature.providerDrivers ?? []) {
+      if (providerDriverIds.has(provider.id) || providerDriverKinds.has(provider.driverKind)) {
+        throw new WebFeatureInvariantError(
+          "duplicate-provider-driver",
+          `Web provider driver '${provider.driverKind}' conflicts with another contribution.`,
+        );
+      }
+      providerDriverIds.add(provider.id);
+      providerDriverKinds.add(provider.driverKind);
     }
   }
 
@@ -196,6 +209,19 @@ export function listExperimentalWebInteractionModes(
   return composition.features
     .flatMap((feature) => (feature.interactionModes ?? []).map((mode) => ({ feature, mode })))
     .sort((left, right) => compareOrderedPresentation(left.mode, right.mode));
+}
+
+export function listExperimentalWebProviderDrivers(
+  composition: ExperimentalWebProductComposition,
+): ReadonlyArray<{
+  readonly feature: ExperimentalWebFeatureContribution;
+  readonly provider: ExperimentalWebProviderDriverContribution;
+}> {
+  return composition.features
+    .flatMap((feature) =>
+      (feature.providerDrivers ?? []).map((provider) => ({ feature, provider })),
+    )
+    .sort((left, right) => left.provider.label.localeCompare(right.provider.label));
 }
 
 const WebProductCompositionContext = createContext<ExperimentalWebProductComposition>(

@@ -26,9 +26,10 @@ import { Badge } from "../ui/badge";
 import { Input } from "../ui/input";
 import { RadioGroup } from "../ui/radio-group";
 import { toastManager } from "../ui/toast";
-import { DRIVER_OPTION_BY_VALUE, DRIVER_OPTIONS } from "./providerDriverMeta";
+import { DRIVER_OPTIONS, getProviderClientDefinitions } from "./providerDriverMeta";
 import { ProviderSettingsForm, deriveProviderSettingsFields } from "./ProviderSettingsForm";
 import { AnimatedHeight } from "../AnimatedHeight";
+import { useWebProductComposition } from "../../product/WebComposition";
 
 const PROVIDER_ACCENT_SWATCHES = [
   "#2563eb",
@@ -62,7 +63,6 @@ function deriveInstanceId(driver: ProviderDriverKind, label: string): string {
 
 const INSTANCE_ID_PATTERN = /^[a-zA-Z][a-zA-Z0-9_-]*$/;
 const DEFAULT_DRIVER_KIND = ProviderDriverKind.make("codex");
-const DEFAULT_DRIVER_OPTION = DRIVER_OPTIONS[0]!;
 const EMPTY_CONFIG_DRAFT: Record<string, unknown> = {};
 interface ComingSoonDriverOption {
   readonly value: ProviderDriverKind;
@@ -116,6 +116,10 @@ interface AddProviderInstanceDialogProps {
 export function AddProviderInstanceDialog({ open, onOpenChange }: AddProviderInstanceDialogProps) {
   const settings = usePrimarySettings();
   const updateSettings = useUpdatePrimarySettings();
+  const composition = useWebProductComposition();
+  const driverOptions = getProviderClientDefinitions(composition);
+  const driverOptionsByValue = new Map(driverOptions.map((option) => [option.value, option]));
+  const defaultDriverOption = driverOptions[0] ?? DRIVER_OPTIONS[0]!;
 
   const [wizardStep, setWizardStep] = useState(0);
   const [driver, setDriver] = useState<ProviderDriverKind>(DEFAULT_DRIVER_KIND);
@@ -134,7 +138,7 @@ export function AddProviderInstanceDialog({ open, onOpenChange }: AddProviderIns
     [settings.providerInstances],
   );
 
-  const driverOption = DRIVER_OPTION_BY_VALUE[driver] ?? DEFAULT_DRIVER_OPTION;
+  const driverOption = driverOptionsByValue.get(driver) ?? defaultDriverOption;
   const instanceId = instanceIdOverride ?? deriveInstanceId(driver, label);
   const driverSettingsFields = useMemo(
     () => deriveProviderSettingsFields(driverOption),
@@ -284,7 +288,7 @@ export function AddProviderInstanceDialog({ open, onOpenChange }: AddProviderIns
                   aria-labelledby="add-instance-driver-label"
                   className="grid grid-cols-2 gap-2.5"
                 >
-                  {DRIVER_OPTIONS.map((option) => {
+                  {driverOptions.map((option) => {
                     const IconComponent = option.icon;
                     const isSelected = option.value === driver;
                     return (
