@@ -3,6 +3,16 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 const OLD_PUBLIC_MIGRATION_31 = "ProjectionThreadContextBindings";
 const OLD_PUBLIC_MIGRATION_32 = "ProjectionTurnsContextBlocks";
+const LEGACY_UPCOMPUTER_MIGRATIONS = new Map<number, string>([
+  [31, OLD_PUBLIC_MIGRATION_31],
+  [32, OLD_PUBLIC_MIGRATION_32],
+  [33, "Tasks"],
+  [34, "TaskTriggers"],
+  [35, "TaskAgentsCompatibility"],
+  [36, "EnsureTaskTables"],
+  [37, "ProjectionThreadProposedPlanProposal"],
+  [38, "ProjectionThreadsSidebarVisibility"],
+]);
 
 export interface ApplyOldPublicMigrationCompatibilityOptions {
   readonly toMigrationInclusive?: number | undefined;
@@ -45,18 +55,14 @@ export const applyOldPublicMigrationCompatibility = Effect.fn(
       }>`
         SELECT migration_id, name
         FROM effect_sql_migrations
-        WHERE migration_id IN (31, 32)
+        WHERE migration_id BETWEEN 31 AND 38
         ORDER BY migration_id
       `;
+      const legacyRows = conflictingRows.filter(
+        (row) => LEGACY_UPCOMPUTER_MIGRATIONS.get(row.migration_id) === row.name,
+      );
 
-      const hasOldPublic31 = conflictingRows.some(
-        (row) => row.migration_id === 31 && row.name === OLD_PUBLIC_MIGRATION_31,
-      );
-      const hasOldPublic32 = conflictingRows.some(
-        (row) => row.migration_id === 32 && row.name === OLD_PUBLIC_MIGRATION_32,
-      );
-      const shouldInstallOldPublicContextSchema =
-        latestMigrationId === 30 || hasOldPublic31 || hasOldPublic32;
+      const shouldInstallOldPublicContextSchema = latestMigrationId === 30 || legacyRows.length > 0;
 
       if (!shouldInstallOldPublicContextSchema) return;
 
@@ -100,7 +106,7 @@ export const applyOldPublicMigrationCompatibility = Effect.fn(
         `;
       }
 
-      if (!hasOldPublic31 && !hasOldPublic32) return;
+      if (legacyRows.length === 0) return;
 
       yield* sql`
         CREATE TABLE IF NOT EXISTS old_public_migration_history (
@@ -111,25 +117,23 @@ export const applyOldPublicMigrationCompatibility = Effect.fn(
         )
       `;
 
-      yield* sql`
-        INSERT OR IGNORE INTO old_public_migration_history (
-          legacy_migration_id,
-          legacy_name,
-          legacy_created_at
-        )
-        SELECT migration_id, name, created_at
-        FROM effect_sql_migrations
-        WHERE
-          (migration_id = 31 AND name = ${OLD_PUBLIC_MIGRATION_31})
-          OR (migration_id = 32 AND name = ${OLD_PUBLIC_MIGRATION_32})
-      `;
+      for (const row of legacyRows) {
+        yield* sql`
+          INSERT OR IGNORE INTO old_public_migration_history (
+            legacy_migration_id,
+            legacy_name,
+            legacy_created_at
+          )
+          SELECT migration_id, name, created_at
+          FROM effect_sql_migrations
+          WHERE migration_id = ${row.migration_id} AND name = ${row.name}
+        `;
 
-      yield* sql`
-        DELETE FROM effect_sql_migrations
-        WHERE
-          (migration_id = 31 AND name = ${OLD_PUBLIC_MIGRATION_31})
-          OR (migration_id = 32 AND name = ${OLD_PUBLIC_MIGRATION_32})
-      `;
+        yield* sql`
+          DELETE FROM effect_sql_migrations
+          WHERE migration_id = ${row.migration_id} AND name = ${row.name}
+        `;
+      }
     }),
   );
 });

@@ -207,3 +207,61 @@ it.effect("normalizes old public migration IDs before current auth migrations ru
     ]);
   }).pipe(Effect.provide(sqliteMemoryLayer)),
 );
+
+it.effect("normalizes legacy Pro migrations that advanced past the upstream migration range", () =>
+  Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
+
+    yield* runMigrations({ toMigrationInclusive: 30 });
+    yield* sql`CREATE TABLE tasks (id TEXT PRIMARY KEY, title TEXT NOT NULL)`;
+    yield* sql`INSERT INTO tasks (id, title) VALUES ('preserved-task', 'Keep me')`;
+
+    const legacyNames = [
+      "Tasks",
+      "TaskTriggers",
+      "TaskAgentsCompatibility",
+      "EnsureTaskTables",
+      "ProjectionThreadProposedPlanProposal",
+      "ProjectionThreadsSidebarVisibility",
+    ] as const;
+    for (const [index, name] of legacyNames.entries()) {
+      yield* sql`
+        INSERT INTO effect_sql_migrations (migration_id, name)
+        VALUES (${index + 33}, ${name})
+      `;
+    }
+
+    yield* runMigrations();
+
+    assert.isTrue(yield* hasAuthScopesColumns());
+    assert.isTrue(yield* hasAuthProofKeyColumn());
+    assert.deepStrictEqual(yield* selectMigration31And32(), [
+      { migration_id: 31, name: "AuthAuthorizationScopes" },
+      { migration_id: 32, name: "AuthPairingProofKeyThumbprint" },
+    ]);
+
+    const current33 = yield* sql<{ readonly name: string }>`
+      SELECT name FROM effect_sql_migrations WHERE migration_id = 33
+    `;
+    assert.deepStrictEqual(current33, [{ name: "ProjectionThreadContext" }]);
+
+    const preservedTasks = yield* sql<{ readonly id: string; readonly title: string }>`
+      SELECT id, title FROM tasks
+    `;
+    assert.deepStrictEqual(preservedTasks, [{ id: "preserved-task", title: "Keep me" }]);
+
+    const legacyHistory = yield* sql<{
+      readonly legacy_migration_id: number;
+      readonly legacy_name: string;
+    }>`
+      SELECT legacy_migration_id, legacy_name
+      FROM old_public_migration_history
+      WHERE legacy_migration_id BETWEEN 33 AND 38
+      ORDER BY legacy_migration_id
+    `;
+    assert.deepStrictEqual(
+      legacyHistory,
+      legacyNames.map((name, index) => ({ legacy_migration_id: index + 33, legacy_name: name })),
+    );
+  }).pipe(Effect.provide(sqliteMemoryLayer)),
+);
