@@ -5031,7 +5031,7 @@ function ChatViewContent(props: ChatViewProps) {
   ) : null;
 
   return (
-    <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden bg-background">
+    <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden bg-app-content-background">
       {showHeaderControls && rightPanelOpen && !shouldUsePlanSidebarSheet
         ? panelLayoutControls
         : null}
@@ -5157,6 +5157,12 @@ function ChatViewContent(props: ChatViewProps) {
               data-chat-composer-overlay="true"
               className="pointer-events-none absolute inset-x-0 bottom-0 z-20 pt-1.5 sm:pt-2"
             >
+              <div
+                aria-hidden="true"
+                className="chat-composer-horizontal-inset pointer-events-none absolute inset-x-0 top-1/2 bottom-0 z-0"
+              >
+                <div className="chat-composer-backdrop-fade mx-auto h-full w-full max-w-208" />
+              </div>
               <div className="chat-composer-horizontal-inset">
                 <div className="pointer-events-auto relative z-10 isolate">
                   <ComposerBannerStack className="relative z-0" items={composerBannerItems} />
