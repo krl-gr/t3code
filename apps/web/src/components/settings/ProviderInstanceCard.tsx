@@ -511,6 +511,7 @@ export function ProviderInstanceCard({
     <ProviderInstanceIcon
       driverKind={driverKind}
       displayName={displayName}
+      icon={FallbackIconComponent}
       accentColor={accentColor}
       showBadge={Boolean(accentColor)}
       statusDotClassName={statusStyle.dot}
