@@ -440,6 +440,14 @@ export const PickFolderOptionsSchema = Schema.Struct({
   targetEnvironmentId: Schema.optionalKey(Schema.String),
 });
 
+export interface PickFileSystemEntriesOptions {
+  initialPath?: string | null;
+}
+
+export const PickFileSystemEntriesOptionsSchema = Schema.Struct({
+  initialPath: Schema.optionalKey(Schema.NullOr(Schema.String)),
+});
+
 export interface DesktopWslDistro {
   name: string;
   isDefault: boolean;
@@ -986,6 +994,9 @@ export interface DesktopBridge {
   setWslDistro: (distro: string | null) => Promise<DesktopWslState>;
   setWslOnly: (enabled: boolean) => Promise<DesktopWslState>;
   pickFolder: (options?: PickFolderOptions) => Promise<string | null>;
+  pickFileSystemEntries?: (
+    options?: PickFileSystemEntriesOptions,
+  ) => Promise<readonly string[] | null>;
   confirm: (message: string) => Promise<boolean>;
   setTheme: (theme: DesktopTheme) => Promise<void>;
   showContextMenu: <T extends string>(
@@ -1082,6 +1093,9 @@ export interface DesktopPreviewBridge {
 export interface LocalApi {
   dialogs: {
     pickFolder: (options?: PickFolderOptions) => Promise<string | null>;
+    pickFileSystemEntries?: (
+      options?: PickFileSystemEntriesOptions,
+    ) => Promise<readonly string[] | null>;
     confirm: (message: string) => Promise<boolean>;
   };
   shell: {

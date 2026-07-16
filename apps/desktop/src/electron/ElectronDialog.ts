@@ -23,6 +23,21 @@ export class ElectronDialogPickFolderError extends Schema.TaggedErrorClass<Elect
   }
 }
 
+export class ElectronDialogPickFileSystemEntriesError extends Schema.TaggedErrorClass<ElectronDialogPickFileSystemEntriesError>()(
+  "ElectronDialogPickFileSystemEntriesError",
+  {
+    ownerWindowId: Schema.NullOr(Schema.Number),
+    defaultPath: Schema.NullOr(Schema.String),
+    cause: Schema.Defect(),
+  },
+) {
+  override get message(): string {
+    const owner = this.ownerWindowId === null ? "the application" : `window ${this.ownerWindowId}`;
+    const defaultPath = this.defaultPath === null ? "no default path" : this.defaultPath;
+    return `Failed to open the Electron file system picker for ${owner} with ${defaultPath}.`;
+  }
+}
+
 export class ElectronDialogConfirmError extends Schema.TaggedErrorClass<ElectronDialogConfirmError>()(
   "ElectronDialogConfirmError",
   {
@@ -69,6 +84,7 @@ export class ElectronDialogShowErrorBoxError extends Schema.TaggedErrorClass<Ele
 
 export const ElectronDialogError = Schema.Union([
   ElectronDialogPickFolderError,
+  ElectronDialogPickFileSystemEntriesError,
   ElectronDialogConfirmError,
   ElectronDialogShowMessageBoxError,
   ElectronDialogShowErrorBoxError,
@@ -77,6 +93,11 @@ export type ElectronDialogError = typeof ElectronDialogError.Type;
 export const isElectronDialogError = Schema.is(ElectronDialogError);
 
 export interface ElectronDialogPickFolderInput {
+  readonly owner: Option.Option<Electron.BrowserWindow>;
+  readonly defaultPath: Option.Option<string>;
+}
+
+export interface ElectronDialogPickFileSystemEntriesInput {
   readonly owner: Option.Option<Electron.BrowserWindow>;
   readonly defaultPath: Option.Option<string>;
 }
@@ -92,6 +113,9 @@ export class ElectronDialog extends Context.Service<
     readonly pickFolder: (
       input: ElectronDialogPickFolderInput,
     ) => Effect.Effect<Option.Option<string>, ElectronDialogPickFolderError>;
+    readonly pickFileSystemEntries: (
+      input: ElectronDialogPickFileSystemEntriesInput,
+    ) => Effect.Effect<Option.Option<readonly string[]>, ElectronDialogPickFileSystemEntriesError>;
     readonly confirm: (
       input: ElectronDialogConfirmInput,
     ) => Effect.Effect<boolean, ElectronDialogConfirmError>;
@@ -137,6 +161,42 @@ export const make = ElectronDialog.of({
     }
     return Option.fromNullishOr(result.filePaths[0]);
   }),
+  pickFileSystemEntries: Effect.fn("desktop.electron.dialog.pickFileSystemEntries")(
+    function* (input) {
+      const ownerWindowId = Option.match(input.owner, {
+        onNone: () => null,
+        onSome: (owner) => owner.id,
+      });
+      const defaultPath = Option.getOrNull(input.defaultPath);
+      const openDialogOptions: Electron.OpenDialogOptions = Option.match(input.defaultPath, {
+        onNone: () => ({
+          properties: ["openFile", "openDirectory", "multiSelections"],
+        }),
+        onSome: (resolvedDefaultPath) => ({
+          properties: ["openFile", "openDirectory", "multiSelections"],
+          defaultPath: resolvedDefaultPath,
+        }),
+      });
+      const result = yield* Effect.tryPromise({
+        try: () =>
+          Option.match(input.owner, {
+            onNone: () => Electron.dialog.showOpenDialog(openDialogOptions),
+            onSome: (owner) => Electron.dialog.showOpenDialog(owner, openDialogOptions),
+          }),
+        catch: (cause) =>
+          new ElectronDialogPickFileSystemEntriesError({
+            ownerWindowId,
+            defaultPath,
+            cause,
+          }),
+      });
+
+      if (result.canceled || result.filePaths.length === 0) {
+        return Option.none();
+      }
+      return Option.some(result.filePaths);
+    },
+  ),
   confirm: Effect.fn("desktop.electron.dialog.confirm")(function* (input) {
     const normalizedMessage = input.message.trim();
     if (normalizedMessage.length === 0) {

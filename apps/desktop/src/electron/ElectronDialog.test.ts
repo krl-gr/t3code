@@ -117,6 +117,56 @@ describe("ElectronDialog", () => {
     }).pipe(Effect.provide(ElectronDialog.layer)),
   );
 
+  it.effect("picks files and folders with multiple selection enabled", () =>
+    Effect.gen(function* () {
+      const owner = { id: 8 } as BrowserWindow;
+      showOpenDialogMock.mockResolvedValue({
+        canceled: false,
+        filePaths: ["/workspace/src", "/workspace/README.md"],
+      });
+      const dialog = yield* ElectronDialog.ElectronDialog;
+
+      const result = yield* dialog.pickFileSystemEntries({
+        owner: Option.some(owner),
+        defaultPath: Option.some("/workspace"),
+      });
+
+      assert.deepEqual(result, Option.some(["/workspace/src", "/workspace/README.md"]));
+      assert.deepEqual(showOpenDialogMock.mock.calls[0], [
+        owner,
+        {
+          properties: ["openFile", "openDirectory", "multiSelections"],
+          defaultPath: "/workspace",
+        },
+      ]);
+    }).pipe(Effect.provide(ElectronDialog.layer)),
+  );
+
+  it.effect("preserves file system picker request context and cause", () =>
+    Effect.gen(function* () {
+      const cause = new Error("file system picker failed");
+      const owner = { id: 11 } as BrowserWindow;
+      showOpenDialogMock.mockRejectedValue(cause);
+      const dialog = yield* ElectronDialog.ElectronDialog;
+
+      const error = yield* Effect.flip(
+        dialog.pickFileSystemEntries({
+          owner: Option.some(owner),
+          defaultPath: Option.some("/workspace"),
+        }),
+      );
+
+      assert.instanceOf(error, ElectronDialog.ElectronDialogPickFileSystemEntriesError);
+      assert.isTrue(ElectronDialog.isElectronDialogError(error));
+      assert.strictEqual(error.ownerWindowId, 11);
+      assert.strictEqual(error.defaultPath, "/workspace");
+      assert.strictEqual(error.cause, cause);
+      assert.include(error.message, "window 11");
+      assert.include(error.message, "/workspace");
+      assert.notInclude(error.message, cause.message);
+    }).pipe(Effect.provide(ElectronDialog.layer)),
+  );
+
   it.effect("preserves confirmation request context and cause", () =>
     Effect.gen(function* () {
       const cause = new Error("confirmation failed");

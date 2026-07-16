@@ -85,11 +85,15 @@ describe("LocalApi", () => {
   it("delegates host capabilities and persistence to the desktop bridge", async () => {
     const showContextMenu = vi.fn().mockResolvedValue("delete");
     const pickFolder = vi.fn().mockResolvedValue("/tmp/project");
+    const pickFileSystemEntries = vi
+      .fn()
+      .mockResolvedValue(["/tmp/project/src", "/tmp/project/README.md"]);
     const getClientSettings = vi.fn().mockResolvedValue(DEFAULT_CLIENT_SETTINGS);
     const setClientSettings = vi.fn().mockResolvedValue(undefined);
     testWindow().desktopBridge = {
       showContextMenu,
       pickFolder,
+      pickFileSystemEntries,
       getClientSettings,
       setClientSettings,
     } as unknown as DesktopBridge;
@@ -100,13 +104,23 @@ describe("LocalApi", () => {
 
     await expect(api.contextMenu.show(items)).resolves.toBe("delete");
     await expect(api.dialogs.pickFolder({ initialPath: "/tmp" })).resolves.toBe("/tmp/project");
+    await expect(
+      api.dialogs.pickFileSystemEntries?.({ initialPath: "/tmp/project" }),
+    ).resolves.toEqual(["/tmp/project/src", "/tmp/project/README.md"]);
     await expect(api.persistence.getClientSettings()).resolves.toEqual(DEFAULT_CLIENT_SETTINGS);
     await api.persistence.setClientSettings(DEFAULT_CLIENT_SETTINGS);
 
     expect(showContextMenu).toHaveBeenCalledWith(items, undefined);
     expect(pickFolder).toHaveBeenCalledWith({ initialPath: "/tmp" });
+    expect(pickFileSystemEntries).toHaveBeenCalledWith({ initialPath: "/tmp/project" });
     expect(getClientSettings).toHaveBeenCalledTimes(1);
     expect(setClientSettings).toHaveBeenCalledWith(DEFAULT_CLIENT_SETTINGS);
+  });
+
+  it("does not expose the native file system picker in a browser tab", async () => {
+    const { createLocalApi } = await import("./localApi");
+
+    expect(createLocalApi().dialogs.pickFileSystemEntries).toBeUndefined();
   });
 
   it("persists client settings in browser storage", async () => {

@@ -1,7 +1,11 @@
 import * as Schema from "effect/Schema";
 import { describe, expect, it } from "vite-plus/test";
 
-import { DesktopEnvironmentBootstrapSchema } from "./ipc.ts";
+import { DesktopEnvironmentBootstrapSchema, PickFileSystemEntriesOptionsSchema } from "./ipc.ts";
+
+const decodePickFileSystemEntriesOptions = Schema.decodeUnknownSync(
+  PickFileSystemEntriesOptionsSchema,
+);
 
 describe("DesktopEnvironmentBootstrapSchema", () => {
   const decode = Schema.decodeUnknownSync(DesktopEnvironmentBootstrapSchema);
@@ -34,5 +38,17 @@ describe("DesktopEnvironmentBootstrapSchema", () => {
         wsBaseUrl: null,
       }).runningDistro,
     ).toBeNull();
+  });
+});
+
+describe("PickFileSystemEntriesOptionsSchema", () => {
+  it("preserves the initial path", () => {
+    expect(
+      decodePickFileSystemEntriesOptions({
+        initialPath: "/workspace",
+      }),
+    ).toEqual({
+      initialPath: "/workspace",
+    });
   });
 });

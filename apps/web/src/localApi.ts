@@ -11,12 +11,18 @@ function unavailableLocalBackendError(): Error {
 }
 
 function createBrowserLocalApi(): LocalApi {
+  const pickFileSystemEntries = window.desktopBridge?.pickFileSystemEntries;
   return {
     dialogs: {
       pickFolder: async (options) => {
         if (!window.desktopBridge) return null;
         return window.desktopBridge.pickFolder(options);
       },
+      ...(pickFileSystemEntries
+        ? {
+            pickFileSystemEntries: (options) => pickFileSystemEntries(options),
+          }
+        : {}),
       confirm: async (message) => {
         if (window.desktopBridge) {
           return window.desktopBridge.confirm(message);

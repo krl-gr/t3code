@@ -73,7 +73,7 @@ import {
 } from "../composerFooterLayout";
 import { type ComposerPromptEditorHandle, ComposerPromptEditor } from "../ComposerPromptEditor";
 import { ProviderModelPicker } from "./ProviderModelPicker";
-import { AttachChatContextPicker } from "./AttachChatContextPicker";
+import { ComposerAttachmentPicker } from "./ComposerAttachmentPicker";
 import { type ComposerCommandItem, ComposerCommandMenu } from "./ComposerCommandMenu";
 import { ComposerPendingApprovalActions } from "./ComposerPendingApprovalActions";
 import { CompactComposerControlsMenu } from "./CompactComposerControlsMenu";
@@ -126,6 +126,7 @@ import {
 import { formatProviderSkillDisplayName } from "../../providerSkillPresentation";
 import { searchProviderSkills } from "../../providerSkillSearch";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
+import { readLocalApi } from "../../localApi";
 import type { ReviewCommentContext } from "../../reviewCommentContext";
 import {
   resolveInteractionModePresentation,
@@ -135,6 +136,8 @@ import { useInteractionModePresentations } from "../../product/interactionModePr
 import { useProjects, useThreadShells } from "../../state/entities";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { threadEnvironment } from "../../state/threads";
+import { usePrimaryEnvironmentId } from "../../state/environments";
+import { buildContextLinkInsertion, workspaceRelativeContextPath } from "./composerAttachmentPaths";
 
 const IMAGE_SIZE_LIMIT_LABEL = `${Math.round(PROVIDER_SEND_TURN_MAX_IMAGE_BYTES / (1024 * 1024))}MB`;
 
@@ -566,7 +569,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     routeThreadRef,
     draftId,
     activeThreadId,
-    activeThreadEnvironmentId: _activeThreadEnvironmentId,
+    activeThreadEnvironmentId,
     activeThread,
     isServerThread,
     isLocalDraftThread: _isLocalDraftThread,
@@ -680,7 +683,11 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const removeThreadContext = useAtomCommand(threadEnvironment.removeContext, {
     reportFailure: false,
   });
-  const [chatContextPickerOpen, setChatContextPickerOpen] = useState(false);
+  const primaryEnvironmentId = usePrimaryEnvironmentId();
+  const composerEnvironmentId = activeThreadEnvironmentId ?? environmentId;
+  const showComposerWorkspaceContextControl =
+    primaryEnvironmentId !== null && composerEnvironmentId === primaryEnvironmentId;
+  const [attachmentPickerOpen, setAttachmentPickerOpen] = useState(false);
   const [chatContextSearch, setChatContextSearch] = useState("");
   const [highlightedChatContextSourceId, setHighlightedChatContextSourceId] =
     useState<ThreadId | null>(null);
@@ -731,7 +738,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   ]);
 
   useEffect(() => {
-    if (!chatContextPickerOpen) return;
+    if (!attachmentPickerOpen) return;
     if (
       highlightedChatContextSourceId &&
       chatContextCandidates.some((thread) => thread.id === highlightedChatContextSourceId)
@@ -739,36 +746,26 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       return;
     }
     setHighlightedChatContextSourceId(chatContextCandidates[0]?.id ?? null);
-  }, [chatContextCandidates, chatContextPickerOpen, highlightedChatContextSourceId]);
+  }, [attachmentPickerOpen, chatContextCandidates, highlightedChatContextSourceId]);
 
-  const handleChatContextPickerOpenChange = useCallback(
+  const handleAttachmentPickerOpenChange = useCallback(
     (open: boolean) => {
       if (!open) {
-        setChatContextPickerOpen(false);
-        return;
-      }
-      if (!activeThread || !isServerThread) {
-        toastManager.add({
-          type: "warning",
-          title: "Create the chat first",
-          description: "Chat context can be attached after the thread exists.",
-        });
-        return;
-      }
-      if (chatContextBindings.length >= 4) {
-        toastManager.add({
-          type: "warning",
-          title: "Context limit reached",
-          description: "A chat can have up to four attached chat snapshots.",
-        });
+        setAttachmentPickerOpen(false);
         return;
       }
       setChatContextSearch("");
       setHighlightedChatContextSourceId(chatContextCandidates[0]?.id ?? null);
-      setChatContextPickerOpen(true);
+      setAttachmentPickerOpen(true);
     },
-    [activeThread, chatContextBindings.length, chatContextCandidates, isServerThread],
+    [chatContextCandidates],
   );
+  const chatContextDisabledReason =
+    !activeThread || !isServerThread
+      ? "Create the chat before attaching another conversation."
+      : chatContextBindings.length >= 4
+        ? "This chat already has the maximum of four snapshots."
+        : null;
 
   const attachChatContextSource = useCallback(
     async (sourceThreadId: ThreadId) => {
@@ -789,7 +786,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           if (isAtomCommandInterrupted(result)) return;
           throw squashAtomCommandFailure(result);
         }
-        setChatContextPickerOpen(false);
+        setAttachmentPickerOpen(false);
       } catch (error) {
         toastManager.add({
           type: "error",
@@ -1072,6 +1069,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   // ------------------------------------------------------------------
   const composerEditorRef = useRef<ComposerPromptEditorHandle>(null);
   const composerFormRef = useRef<HTMLFormElement>(null);
+  const composerImageInputRef = useRef<HTMLInputElement>(null);
   const composerSurfaceRef = useRef<HTMLDivElement>(null);
   const composerSelectLockRef = useRef(false);
   const composerMenuOpenRef = useRef(false);
@@ -1729,6 +1727,83 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     };
   }, [composerCursor, composerTerminalContexts, promptRef]);
 
+  const addWorkspacePathsToComposer = useCallback(
+    (paths: ReadonlyArray<string>) => {
+      if (paths.length === 0) return;
+      const snapshot = readComposerSnapshot();
+      const insertion = buildContextLinkInsertion(paths, snapshot.expandedCursor, snapshot.value);
+      if (!insertion) return;
+      applyPromptReplacement(snapshot.expandedCursor, snapshot.expandedCursor, insertion);
+    },
+    [applyPromptReplacement, readComposerSnapshot],
+  );
+
+  const handlePickFileSystemEntries = useCallback(() => {
+    if (!showComposerWorkspaceContextControl) {
+      toastManager.add({
+        type: "warning",
+        title: "Files and folders are available for local projects.",
+      });
+      return;
+    }
+    if (!gitCwd) {
+      toastManager.add({
+        type: "warning",
+        title: "Open a project before adding file context.",
+      });
+      return;
+    }
+
+    const pickFileSystemEntries = readLocalApi()?.dialogs.pickFileSystemEntries;
+    if (!pickFileSystemEntries) {
+      toastManager.add({
+        type: "warning",
+        title: "Open this project in the desktop app",
+        description: "The native file and folder picker is not available in the browser.",
+      });
+      return;
+    }
+
+    void pickFileSystemEntries({
+      initialPath: gitCwd,
+    })
+      .then((selectedPaths) => {
+        if (!selectedPaths || selectedPaths.length === 0) return;
+        const seenPaths = new Set<string>();
+        const workspacePaths: string[] = [];
+        let skippedOutsideWorkspace = 0;
+        for (const selectedPath of selectedPaths) {
+          const relativePath = workspaceRelativeContextPath(gitCwd, selectedPath);
+          if (relativePath === null) {
+            skippedOutsideWorkspace += 1;
+            continue;
+          }
+          if (seenPaths.has(relativePath)) continue;
+          seenPaths.add(relativePath);
+          workspacePaths.push(relativePath);
+        }
+        addWorkspacePathsToComposer(workspacePaths);
+        if (skippedOutsideWorkspace > 0) {
+          toastManager.add({
+            type: "warning",
+            title: "Some items were outside this project",
+            description: "Only files and folders inside the current workspace were added.",
+          });
+        }
+      })
+      .catch((error: unknown) => {
+        toastManager.add({
+          type: "error",
+          title: "Unable to add file context",
+          description: error instanceof Error ? error.message : "The native picker failed.",
+        });
+      });
+  }, [addWorkspacePathsToComposer, gitCwd, showComposerWorkspaceContextControl]);
+
+  const handlePickImages = useCallback(() => {
+    composerImageInputRef.current?.click();
+  }, []);
+
   const resolveActiveComposerTrigger = useCallback((): {
     snapshot: { value: string; cursor: number; expandedCursor: number };
     trigger: ComposerTrigger | null;
@@ -2242,6 +2317,20 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       className="mx-auto w-full min-w-0 max-w-208"
       data-chat-composer-form="true"
     >
+      <input
+        ref={composerImageInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        className="sr-only"
+        tabIndex={-1}
+        aria-hidden="true"
+        onChange={(event) => {
+          const files = Array.from(event.currentTarget.files ?? []);
+          event.currentTarget.value = "";
+          addComposerImages(files);
+        }}
+      />
       <div
         className={cn(
           "group rounded-[32px] transition-colors duration-200",
@@ -2645,9 +2734,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
               )}
             >
               <div className={COMPOSER_CONTROL_ROW_CLASS}>
-                <AttachChatContextPicker
-                  open={chatContextPickerOpen}
-                  onOpenChange={handleChatContextPickerOpenChange}
+                <ComposerAttachmentPicker
+                  open={attachmentPickerOpen}
+                  onOpenChange={handleAttachmentPickerOpenChange}
                   candidates={chatContextCandidates}
                   projectById={chatContextProjectById}
                   search={chatContextSearch}
@@ -2655,6 +2744,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   highlightedSourceId={highlightedChatContextSourceId}
                   onHighlightedSourceIdChange={setHighlightedChatContextSourceId}
                   attachingSourceId={attachingChatContextSourceId}
+                  chatContextDisabledReason={chatContextDisabledReason}
+                  onPickImages={handlePickImages}
+                  onPickFileSystemEntries={handlePickFileSystemEntries}
                   onSelectSource={attachChatContextSource}
                 />
                 <ComposerToolbarSeparator />
