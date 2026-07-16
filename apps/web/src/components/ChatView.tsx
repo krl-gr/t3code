@@ -159,7 +159,7 @@ import {
   deriveLogicalProjectKeyFromSettings,
   selectProjectGroupingSettings,
 } from "../logicalProject";
-import { buildDraftThreadRouteParams } from "../threadRoutes";
+import { buildDraftThreadRouteParams, buildThreadRouteParams } from "../threadRoutes";
 import {
   type ComposerImageAttachment,
   type DraftThreadEnvMode,
@@ -1009,6 +1009,9 @@ function ChatViewContent(props: ChatViewProps) {
   const writeTerminal = useAtomCommand(terminalEnvironment.write, "terminal write");
   const closeTerminalMutation = useAtomCommand(terminalEnvironment.close, "terminal close");
   const createThread = useAtomCommand(threadEnvironment.create, { reportFailure: false });
+  const forkThreadContext = useAtomCommand(threadEnvironment.forkContext, {
+    reportFailure: false,
+  });
   const deleteThread = useAtomCommand(threadEnvironment.delete, { reportFailure: false });
   const updateThreadMetadata = useAtomCommand(threadEnvironment.updateMetadata, {
     reportFailure: false,
@@ -4917,6 +4920,62 @@ function ChatViewContent(props: ChatViewProps) {
     }
     void onRevertToTurnCountRef.current(targetTurnCount);
   }, []);
+  const onForkAssistantMessage = useCallback(
+    async (sourceMessageId: MessageId) => {
+      if (!activeThread || !activeProject || !isServerThread) {
+        toastManager.add({
+          type: "warning",
+          title: "Create the chat first",
+          description: "Forking is available after the thread exists.",
+        });
+        return;
+      }
+
+      const nextThreadId = newThreadId();
+      const nextThreadRef = scopeThreadRef(activeThread.environmentId, nextThreadId);
+      const result = await forkThreadContext({
+        environmentId: activeThread.environmentId,
+        input: {
+          threadId: nextThreadId,
+          projectId: activeProject.id,
+          title: truncate(`Fork: ${activeThread.title}`),
+          modelSelection: activeThread.modelSelection,
+          runtimeMode,
+          interactionMode,
+          branch: activeThreadBranch,
+          worktreePath: activeThread.worktreePath,
+          sourceThreadId: activeThread.id,
+          sourceMessageId,
+        },
+      });
+      if (result._tag === "Failure") {
+        if (isAtomCommandInterrupted(result)) return;
+        const error = squashAtomCommandFailure(result);
+        toastManager.add(
+          stackedThreadToast({
+            type: "error",
+            title: "Failed to fork chat",
+            description: error instanceof Error ? error.message : "An error occurred.",
+          }),
+        );
+        return;
+      }
+      await navigate({
+        to: "/$environmentId/$threadId",
+        params: buildThreadRouteParams(nextThreadRef),
+      });
+    },
+    [
+      activeProject,
+      activeThread,
+      activeThreadBranch,
+      forkThreadContext,
+      interactionMode,
+      isServerThread,
+      navigate,
+      runtimeMode,
+    ],
+  );
 
   // Empty state: no active thread
   if (!activeThread) {
@@ -5115,6 +5174,7 @@ function ChatViewContent(props: ChatViewProps) {
                 onOpenTurnDiff={onOpenTurnDiff}
                 revertTurnCountByUserMessageId={revertTurnCountByUserMessageId}
                 onRevertUserMessage={onRevertUserMessage}
+                onForkAssistantMessage={(messageId) => void onForkAssistantMessage(messageId)}
                 isRevertingCheckpoint={isRevertingCheckpoint}
                 onImageExpand={onExpandTimelineImage}
                 markdownCwd={gitCwd ?? undefined}

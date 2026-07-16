@@ -52,6 +52,7 @@ export function buildLocalDraftThread(
     checkpoints: [],
     activities: [],
     proposedPlans: [],
+    contextBindings: [],
   };
 }
 

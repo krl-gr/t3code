@@ -5,6 +5,7 @@ import {
   EventId,
   MessageId,
   ProjectId,
+  ThreadContextBindingId,
   ThreadId,
   TurnId,
   ProviderInstanceId,
@@ -174,6 +175,124 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
     }),
   );
 });
+
+it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-context-binding-updated-at-")))(
+  "OrchestrationProjectionPipeline",
+  (it) => {
+    it.effect("updates thread updated_at when context bindings are added or removed", () =>
+      Effect.gen(function* () {
+        const projectionPipeline = yield* OrchestrationProjectionPipeline;
+        const eventStore = yield* OrchestrationEventStore;
+        const sql = yield* SqlClient.SqlClient;
+        const createdAt = "2026-01-02T00:00:00.000Z";
+        const attachedAt = "2026-01-02T00:00:10.000Z";
+        const removedAt = "2026-01-02T00:00:20.000Z";
+        const threadId = ThreadId.make("thread-context-target");
+        const sourceThreadId = ThreadId.make("thread-context-source");
+        const bindingId = ThreadContextBindingId.make("ctx-source");
+
+        yield* eventStore.append({
+          type: "project.created",
+          eventId: EventId.make("evt-context-project"),
+          aggregateKind: "project",
+          aggregateId: ProjectId.make("project-context"),
+          occurredAt: createdAt,
+          commandId: CommandId.make("cmd-context-project"),
+          causationEventId: null,
+          correlationId: CorrelationId.make("cmd-context-project"),
+          metadata: {},
+          payload: {
+            projectId: ProjectId.make("project-context"),
+            title: "Project Context",
+            workspaceRoot: "/tmp/project-context",
+            defaultModelSelection: null,
+            scripts: [],
+            createdAt,
+            updatedAt: createdAt,
+          },
+        });
+
+        yield* eventStore.append({
+          type: "thread.created",
+          eventId: EventId.make("evt-context-thread"),
+          aggregateKind: "thread",
+          aggregateId: threadId,
+          occurredAt: createdAt,
+          commandId: CommandId.make("cmd-context-thread"),
+          causationEventId: null,
+          correlationId: CorrelationId.make("cmd-context-thread"),
+          metadata: {},
+          payload: {
+            threadId,
+            projectId: ProjectId.make("project-context"),
+            title: "Thread Context Target",
+            modelSelection: {
+              instanceId: ProviderInstanceId.make("codex"),
+              model: "gpt-5-codex",
+            },
+            runtimeMode: "full-access",
+            branch: null,
+            worktreePath: null,
+            createdAt,
+            updatedAt: createdAt,
+          },
+        });
+
+        yield* eventStore.append({
+          type: "thread.context-binding-added",
+          eventId: EventId.make("evt-context-added"),
+          aggregateKind: "thread",
+          aggregateId: threadId,
+          occurredAt: attachedAt,
+          commandId: CommandId.make("cmd-context-added"),
+          causationEventId: null,
+          correlationId: CorrelationId.make("cmd-context-added"),
+          metadata: {},
+          payload: {
+            threadId,
+            binding: {
+              id: bindingId,
+              targetThreadId: threadId,
+              sourceThreadId,
+              sourceProjectId: ProjectId.make("project-context"),
+              sourceThreadTitle: "Source Thread",
+              mode: "snapshot",
+              snapshotText: "USER:\nhello",
+              createdAt: attachedAt,
+              updatedAt: attachedAt,
+            },
+          },
+        });
+
+        yield* eventStore.append({
+          type: "thread.context-binding-removed",
+          eventId: EventId.make("evt-context-removed"),
+          aggregateKind: "thread",
+          aggregateId: threadId,
+          occurredAt: removedAt,
+          commandId: CommandId.make("cmd-context-removed"),
+          causationEventId: null,
+          correlationId: CorrelationId.make("cmd-context-removed"),
+          metadata: {},
+          payload: {
+            threadId,
+            bindingId,
+            removedAt,
+          },
+        });
+
+        yield* projectionPipeline.bootstrap;
+
+        const rows = yield* sql<{ readonly updatedAt: string }>`
+          SELECT updated_at AS "updatedAt"
+          FROM projection_threads
+          WHERE thread_id = ${threadId}
+        `;
+        assert.deepEqual(rows, [{ updatedAt: removedAt }]);
+      }),
+    );
+  },
+);
 
 it.layer(Layer.fresh(makeProjectionPipelinePrefixedTestLayer("t3-base-")))(
   "OrchestrationProjectionPipeline",

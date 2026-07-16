@@ -47,6 +47,7 @@ import {
   CircleAlertIcon,
   EyeIcon,
   FileDiffIcon,
+  GitBranchIcon,
   GlobeIcon,
   HammerIcon,
   MessageCircleIcon,
@@ -131,6 +132,7 @@ interface TimelineRowSharedState {
   skills: ReadonlyArray<Pick<ServerProviderSkill, "name" | "displayName">>;
   activeThreadEnvironmentId: EnvironmentId;
   onRevertUserMessage: (messageId: MessageId) => void;
+  onForkAssistantMessage: ((messageId: MessageId) => void) | null;
   onImageExpand: (preview: ExpandedImagePreview) => void;
   onOpenTurnDiff: (turnId: TurnId, filePath?: string) => void;
   onToggleTurnFold: (turnId: TurnId) => void;
@@ -166,6 +168,7 @@ interface MessagesTimelineProps {
   onOpenTurnDiff: (turnId: TurnId, filePath?: string) => void;
   revertTurnCountByUserMessageId: Map<MessageId, number>;
   onRevertUserMessage: (messageId: MessageId) => void;
+  onForkAssistantMessage?: (messageId: MessageId) => void;
   isRevertingCheckpoint: boolean;
   onImageExpand: (preview: ExpandedImagePreview) => void;
   activeThreadEnvironmentId: EnvironmentId;
@@ -200,6 +203,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   onOpenTurnDiff,
   revertTurnCountByUserMessageId,
   onRevertUserMessage,
+  onForkAssistantMessage = undefined,
   isRevertingCheckpoint,
   onImageExpand,
   activeThreadEnvironmentId,
@@ -398,6 +402,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       skills,
       activeThreadEnvironmentId,
       onRevertUserMessage,
+      onForkAssistantMessage: onForkAssistantMessage ?? null,
       onImageExpand,
       onOpenTurnDiff,
       onToggleTurnFold,
@@ -412,6 +417,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       skills,
       activeThreadEnvironmentId,
       onRevertUserMessage,
+      onForkAssistantMessage,
       onImageExpand,
       onOpenTurnDiff,
       onToggleTurnFold,
@@ -974,7 +980,8 @@ function AssistantTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "mess
     showCopyButton: row.showAssistantCopyButton,
     streaming: row.assistantCopyStreaming,
   });
-  const hasAssistantActions = assistantCopyState.visible;
+  const canFork = !row.message.streaming && ctx.onForkAssistantMessage !== null;
+  const hasAssistantActions = assistantCopyState.visible || canFork;
 
   return (
     <>
@@ -1016,6 +1023,7 @@ function AssistantTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "mess
             ) : null}
             {hasAssistantActions ? (
               <div className="absolute inset-y-0 left-0 flex items-center gap-1.5 opacity-0 transition-opacity duration-200 group-focus-within/assistant-actions:opacity-100 group-hover/assistant-actions:opacity-100">
+                {canFork ? <ForkAssistantMessageButton messageId={row.message.id} /> : null}
                 <AssistantCopyButton copyState={assistantCopyState} />
               </div>
             ) : null}
@@ -1023,6 +1031,26 @@ function AssistantTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "mess
         ) : null}
       </div>
     </>
+  );
+}
+
+function ForkAssistantMessageButton({ messageId }: { messageId: MessageId }) {
+  const ctx = use(TimelineRowCtx);
+  const activity = use(TimelineRowActivityCtx);
+
+  return (
+    <Button
+      type="button"
+      size="icon-sm"
+      variant="outline"
+      disabled={activity.isWorking || activity.isRevertingCheckpoint}
+      className="shadow-none before:hidden"
+      onClick={() => ctx.onForkAssistantMessage?.(messageId)}
+      aria-label="Fork from this message"
+      title="Fork from this message"
+    >
+      <GitBranchIcon className="size-4" />
+    </Button>
   );
 }
 

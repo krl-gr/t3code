@@ -4,6 +4,7 @@ import {
   OrchestrationMessage,
   OrchestrationSession,
   OrchestrationThread,
+  ThreadContextBinding,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
@@ -19,6 +20,8 @@ import {
   ThreadCreatedPayload,
   ThreadDeletedPayload,
   ThreadInteractionModeSetPayload,
+  ThreadContextBindingAddedPayload,
+  ThreadContextBindingRemovedPayload,
   ThreadMetaUpdatedPayload,
   ThreadProposedPlanUpsertedPayload,
   ThreadRuntimeModeSetPayload,
@@ -288,6 +291,8 @@ export function projectEvent(
             archivedAt: null,
             deletedAt: null,
             messages: [],
+            proposedPlans: [],
+            contextBindings: [],
             activities: [],
             checkpoints: [],
             session: null,
@@ -535,6 +540,64 @@ export function projectEvent(
           }),
         };
       });
+
+    case "thread.context-binding-added":
+      return Effect.gen(function* () {
+        const payload = yield* decodeForEvent(
+          ThreadContextBindingAddedPayload,
+          event.payload,
+          event.type,
+          "payload",
+        );
+        const thread = nextBase.threads.find((entry) => entry.id === payload.threadId);
+        if (!thread) {
+          return nextBase;
+        }
+        const binding = yield* decodeForEvent(
+          ThreadContextBinding,
+          payload.binding,
+          event.type,
+          "binding",
+        );
+        const contextBindings = [
+          ...(thread.contextBindings ?? []).filter((entry) => entry.id !== binding.id),
+          binding,
+        ].toSorted(
+          (left, right) =>
+            left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id),
+        );
+        return {
+          ...nextBase,
+          threads: updateThread(nextBase.threads, payload.threadId, {
+            contextBindings,
+            updatedAt: event.occurredAt,
+          }),
+        };
+      });
+
+    case "thread.context-binding-removed":
+      return decodeForEvent(
+        ThreadContextBindingRemovedPayload,
+        event.payload,
+        event.type,
+        "payload",
+      ).pipe(
+        Effect.map((payload) => {
+          const thread = nextBase.threads.find((entry) => entry.id === payload.threadId);
+          if (!thread) {
+            return nextBase;
+          }
+          return {
+            ...nextBase,
+            threads: updateThread(nextBase.threads, payload.threadId, {
+              contextBindings: (thread.contextBindings ?? []).filter(
+                (binding) => binding.id !== payload.bindingId,
+              ),
+              updatedAt: event.occurredAt,
+            }),
+          };
+        }),
+      );
 
     case "thread.turn-diff-completed":
       return Effect.gen(function* () {

@@ -38,6 +38,9 @@ export type UnarchiveThreadInput = CommandInput<"thread.unarchive">;
 export type UpdateThreadMetadataInput = CommandInput<"thread.meta.update">;
 export type SetThreadRuntimeModeInput = CommandInput<"thread.runtime-mode.set">;
 export type SetThreadInteractionModeInput = CommandInput<"thread.interaction-mode.set">;
+export type AttachThreadContextInput = CommandInput<"thread.context-binding.add">;
+export type RemoveThreadContextInput = CommandInput<"thread.context-binding.remove">;
+export type ForkThreadContextInput = CommandInput<"thread.context-fork.create">;
 export type StartThreadTurnInput = CommandInput<"thread.turn.start">;
 export type InterruptThreadTurnInput = CommandInput<"thread.turn.interrupt">;
 export type RespondToThreadApprovalInput = CommandInput<"thread.approval.respond">;
@@ -185,6 +188,42 @@ export const setThreadInteractionMode: (input: SetThreadInteractionModeInput) =>
       createdAt: metadata.createdAt,
     });
   });
+
+export const attachThreadContext: (input: AttachThreadContextInput) => CommandEffect = Effect.fn(
+  "EnvironmentCommands.attachThreadContext",
+)(function* (input) {
+  const metadata = yield* timestampedCommandMetadata(input);
+  return yield* dispatch({
+    ...input,
+    type: "thread.context-binding.add",
+    commandId: metadata.commandId,
+    createdAt: metadata.createdAt,
+  });
+});
+
+export const removeThreadContext: (input: RemoveThreadContextInput) => CommandEffect = Effect.fn(
+  "EnvironmentCommands.removeThreadContext",
+)(function* (input) {
+  const metadata = yield* timestampedCommandMetadata(input);
+  return yield* dispatch({
+    ...input,
+    type: "thread.context-binding.remove",
+    commandId: metadata.commandId,
+    createdAt: metadata.createdAt,
+  });
+});
+
+export const forkThreadContext: (input: ForkThreadContextInput) => CommandEffect = Effect.fn(
+  "EnvironmentCommands.forkThreadContext",
+)(function* (input) {
+  const metadata = yield* timestampedCommandMetadata(input);
+  return yield* dispatch({
+    ...input,
+    type: "thread.context-fork.create",
+    commandId: metadata.commandId,
+    createdAt: metadata.createdAt,
+  });
+});
 
 export const startThreadTurn: (input: StartThreadTurnInput) => CommandEffect = Effect.fn(
   "EnvironmentCommands.startThreadTurn",

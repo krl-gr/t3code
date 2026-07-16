@@ -76,6 +76,18 @@ function commandToAggregateRef(command: OrchestrationCommand): {
   }
 }
 
+function mergeThreadDetail(
+  readModel: OrchestrationReadModel,
+  threadDetail: OrchestrationReadModel["threads"][number],
+): OrchestrationReadModel {
+  return {
+    ...readModel,
+    threads: readModel.threads.map((thread) =>
+      thread.id === threadDetail.id ? threadDetail : thread,
+    ),
+  };
+}
+
 const makeOrchestrationEngine = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   const eventStore = yield* OrchestrationEventStore;
@@ -101,6 +113,32 @@ const makeOrchestrationEngine = Effect.gen(function* () {
       }
       return nextReadModel;
     });
+
+  const hydrateThreadDetailForDecision = (readModel: OrchestrationReadModel, threadId: ThreadId) =>
+    projectionSnapshotQuery
+      .getThreadDetailById(threadId)
+      .pipe(
+        Effect.map((threadDetail) =>
+          Option.isSome(threadDetail)
+            ? mergeThreadDetail(readModel, threadDetail.value)
+            : readModel,
+        ),
+      );
+
+  const hydrateCommandReadModelForDecision = (
+    readModel: OrchestrationReadModel,
+    command: OrchestrationCommand,
+  ) => {
+    switch (command.type) {
+      case "thread.context-binding.add":
+      case "thread.context-fork.create":
+        return hydrateThreadDetailForDecision(readModel, command.sourceThreadId);
+      case "thread.turn.start":
+        return hydrateThreadDetailForDecision(readModel, command.threadId);
+      default:
+        return Effect.succeed(readModel);
+    }
+  };
 
   const processEnvelope = (envelope: CommandEnvelope): Effect.Effect<void> => {
     const dispatchStartSequence = commandReadModel.snapshotSequence;
@@ -150,9 +188,13 @@ const makeOrchestrationEngine = Effect.gen(function* () {
           });
         }
 
+        const decisionReadModel = yield* hydrateCommandReadModelForDecision(
+          commandReadModel,
+          envelope.command,
+        );
         const eventBase = yield* decideOrchestrationCommand({
           command: envelope.command,
-          readModel: commandReadModel,
+          readModel: decisionReadModel,
         }).pipe(
           Effect.provideService(Crypto.Crypto, crypto),
           Effect.mapError((cause) =>

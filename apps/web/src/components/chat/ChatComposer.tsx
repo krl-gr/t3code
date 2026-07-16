@@ -17,11 +17,16 @@ import {
   ProviderInstanceId,
   PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
   PROVIDER_SEND_TURN_MAX_IMAGE_BYTES,
+  ThreadContextBindingId,
 } from "@t3tools/contracts";
 import {
   connectionStatusText,
   type EnvironmentConnectionPresentation,
 } from "@t3tools/client-runtime/connection";
+import {
+  isAtomCommandInterrupted,
+  squashAtomCommandFailure,
+} from "@t3tools/client-runtime/state/runtime";
 import { serializeComposerFileLink } from "@t3tools/shared/composerTrigger";
 import { createModelSelection, normalizeModelSlug } from "@t3tools/shared/model";
 import {
@@ -68,6 +73,7 @@ import {
 } from "../composerFooterLayout";
 import { type ComposerPromptEditorHandle, ComposerPromptEditor } from "../ComposerPromptEditor";
 import { ProviderModelPicker } from "./ProviderModelPicker";
+import { AttachChatContextPicker } from "./AttachChatContextPicker";
 import { type ComposerCommandItem, ComposerCommandMenu } from "./ComposerCommandMenu";
 import { ComposerPendingApprovalActions } from "./ComposerPendingApprovalActions";
 import { CompactComposerControlsMenu } from "./CompactComposerControlsMenu";
@@ -131,6 +137,9 @@ import {
   type InteractionModePresentation,
 } from "../../interactionModes";
 import { useInteractionModePresentations } from "../../product/interactionModePresentation";
+import { useProjects, useThreadShells } from "../../state/entities";
+import { useAtomCommand } from "../../state/use-atom-command";
+import { threadEnvironment } from "../../state/threads";
 
 const IMAGE_SIZE_LIMIT_LABEL = `${Math.round(PROVIDER_SEND_TURN_MAX_IMAGE_BYTES / (1024 * 1024))}MB`;
 
@@ -564,7 +573,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     activeThreadId,
     activeThreadEnvironmentId: _activeThreadEnvironmentId,
     activeThread,
-    isServerThread: _isServerThread,
+    isServerThread,
     isLocalDraftThread: _isLocalDraftThread,
     phase,
     isConnecting,
@@ -664,6 +673,167 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     (store) => store.syncPersistedAttachments,
   );
   const getComposerDraft = useComposerDraftStore((store) => store.getComposerDraft);
+
+  // ------------------------------------------------------------------
+  // Attached chat snapshot context
+  // ------------------------------------------------------------------
+  const allThreadShells = useThreadShells();
+  const allProjects = useProjects();
+  const attachThreadContext = useAtomCommand(threadEnvironment.attachContext, {
+    reportFailure: false,
+  });
+  const removeThreadContext = useAtomCommand(threadEnvironment.removeContext, {
+    reportFailure: false,
+  });
+  const [chatContextPickerOpen, setChatContextPickerOpen] = useState(false);
+  const [chatContextSearch, setChatContextSearch] = useState("");
+  const [highlightedChatContextSourceId, setHighlightedChatContextSourceId] =
+    useState<ThreadId | null>(null);
+  const [attachingChatContextSourceId, setAttachingChatContextSourceId] = useState<ThreadId | null>(
+    null,
+  );
+  const attachingChatContextSourceIdRef = useRef<ThreadId | null>(null);
+  const chatContextBindings = activeThread?.contextBindings ?? [];
+  const chatContextProjectById = useMemo(
+    () =>
+      new Map(
+        allProjects
+          .filter((project) => project.environmentId === environmentId)
+          .map((project) => [project.id, project] as const),
+      ),
+    [allProjects, environmentId],
+  );
+  const chatContextCandidates = useMemo(() => {
+    const boundSourceIds = new Set(chatContextBindings.map((binding) => binding.sourceThreadId));
+    const query = chatContextSearch.trim().toLowerCase();
+    return allThreadShells
+      .filter(
+        (thread) =>
+          thread.environmentId === environmentId &&
+          thread.id !== activeThreadId &&
+          !boundSourceIds.has(thread.id),
+      )
+      .filter((thread) => {
+        if (!query) return true;
+        const project = chatContextProjectById.get(thread.projectId);
+        return (
+          thread.title.toLowerCase().includes(query) ||
+          project?.title.toLowerCase().includes(query) ||
+          project?.workspaceRoot.toLowerCase().includes(query)
+        );
+      })
+      .toSorted(
+        (left, right) =>
+          right.updatedAt.localeCompare(left.updatedAt) || left.title.localeCompare(right.title),
+      );
+  }, [
+    activeThreadId,
+    allThreadShells,
+    chatContextBindings,
+    chatContextProjectById,
+    chatContextSearch,
+    environmentId,
+  ]);
+
+  useEffect(() => {
+    if (!chatContextPickerOpen) return;
+    if (
+      highlightedChatContextSourceId &&
+      chatContextCandidates.some((thread) => thread.id === highlightedChatContextSourceId)
+    ) {
+      return;
+    }
+    setHighlightedChatContextSourceId(chatContextCandidates[0]?.id ?? null);
+  }, [chatContextCandidates, chatContextPickerOpen, highlightedChatContextSourceId]);
+
+  const handleChatContextPickerOpenChange = useCallback(
+    (open: boolean) => {
+      if (!open) {
+        setChatContextPickerOpen(false);
+        return;
+      }
+      if (!activeThread || !isServerThread) {
+        toastManager.add({
+          type: "warning",
+          title: "Create the chat first",
+          description: "Chat context can be attached after the thread exists.",
+        });
+        return;
+      }
+      if (chatContextBindings.length >= 4) {
+        toastManager.add({
+          type: "warning",
+          title: "Context limit reached",
+          description: "A chat can have up to four attached chat snapshots.",
+        });
+        return;
+      }
+      setChatContextSearch("");
+      setHighlightedChatContextSourceId(chatContextCandidates[0]?.id ?? null);
+      setChatContextPickerOpen(true);
+    },
+    [activeThread, chatContextBindings.length, chatContextCandidates, isServerThread],
+  );
+
+  const attachChatContextSource = useCallback(
+    async (sourceThreadId: ThreadId) => {
+      if (!activeThread || attachingChatContextSourceIdRef.current !== null) return;
+      attachingChatContextSourceIdRef.current = sourceThreadId;
+      setAttachingChatContextSourceId(sourceThreadId);
+      try {
+        const result = await attachThreadContext({
+          environmentId: activeThread.environmentId,
+          input: {
+            threadId: activeThread.id,
+            bindingId: ThreadContextBindingId.make(`ctx-${randomUUID()}`),
+            sourceThreadId,
+            mode: "snapshot",
+          },
+        });
+        if (result._tag === "Failure") {
+          if (isAtomCommandInterrupted(result)) return;
+          throw squashAtomCommandFailure(result);
+        }
+        setChatContextPickerOpen(false);
+      } catch (error) {
+        toastManager.add({
+          type: "error",
+          title: "Failed to attach chat context",
+          description: error instanceof Error ? error.message : "An error occurred.",
+        });
+      } finally {
+        attachingChatContextSourceIdRef.current = null;
+        setAttachingChatContextSourceId(null);
+      }
+    },
+    [activeThread, attachThreadContext],
+  );
+
+  const removeChatContextBinding = useCallback(
+    async (bindingId: ThreadContextBindingId) => {
+      if (!activeThread) return;
+      try {
+        const result = await removeThreadContext({
+          environmentId: activeThread.environmentId,
+          input: {
+            threadId: activeThread.id,
+            bindingId,
+          },
+        });
+        if (result._tag === "Failure") {
+          if (isAtomCommandInterrupted(result)) return;
+          throw squashAtomCommandFailure(result);
+        }
+      } catch (error) {
+        toastManager.add({
+          type: "error",
+          title: "Failed to remove chat context",
+          description: error instanceof Error ? error.message : "An error occurred.",
+        });
+      }
+    },
+    [activeThread, removeThreadContext],
+  );
 
   // ------------------------------------------------------------------
   // Model state
@@ -2325,6 +2495,52 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
             {!isComposerCollapsedMobile &&
               !isComposerApprovalState &&
               pendingUserInputs.length === 0 &&
+              chatContextBindings.length > 0 && (
+                <div className="mb-3 flex flex-wrap gap-2" aria-label="Attached chat context">
+                  {chatContextBindings.map((binding) => {
+                    const sourceProject = binding.sourceProjectId
+                      ? chatContextProjectById.get(binding.sourceProjectId)
+                      : undefined;
+                    return (
+                      <Tooltip key={binding.id}>
+                        <TooltipTrigger
+                          render={
+                            <span className="inline-flex h-8 max-w-full items-center gap-1.5 rounded-md border border-border/70 bg-background/55 pl-2.5 pr-1 text-muted-foreground text-xs shadow-xs/5" />
+                          }
+                        >
+                          <span className="rounded bg-muted px-1 py-0.5 text-[10px] font-medium uppercase tracking-wide">
+                            Snapshot
+                          </span>
+                          <span className="max-w-56 truncate">{binding.sourceThreadTitle}</span>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-xs"
+                            className="size-6 shrink-0"
+                            aria-label={`Remove ${binding.sourceThreadTitle} context`}
+                            onClick={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              void removeChatContextBinding(binding.id);
+                            }}
+                          >
+                            <XIcon className="size-3" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipPopup side="top" className="max-w-80 whitespace-normal">
+                          Snapshot of {binding.sourceThreadTitle}
+                          {sourceProject ? ` · ${sourceProject.title}` : ""}. It is included with
+                          future messages in this chat.
+                        </TooltipPopup>
+                      </Tooltip>
+                    );
+                  })}
+                </div>
+              )}
+
+            {!isComposerCollapsedMobile &&
+              !isComposerApprovalState &&
+              pendingUserInputs.length === 0 &&
               composerImages.some(
                 (image) =>
                   !composerPreviewAnnotations.some((annotation) => annotation.id === image.id),
@@ -2490,6 +2706,20 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
               )}
             >
               <div className={COMPOSER_CONTROL_ROW_CLASS}>
+                <AttachChatContextPicker
+                  open={chatContextPickerOpen}
+                  onOpenChange={handleChatContextPickerOpenChange}
+                  candidates={chatContextCandidates}
+                  projectById={chatContextProjectById}
+                  search={chatContextSearch}
+                  onSearchChange={setChatContextSearch}
+                  highlightedSourceId={highlightedChatContextSourceId}
+                  onHighlightedSourceIdChange={setHighlightedChatContextSourceId}
+                  attachingSourceId={attachingChatContextSourceId}
+                  onSelectSource={attachChatContextSource}
+                />
+                <ComposerToolbarSeparator />
+
                 {composerProviderControls.showInteractionModeToggle ? (
                   <>
                     <ComposerInteractionModeControl

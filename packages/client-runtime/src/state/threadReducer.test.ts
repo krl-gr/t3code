@@ -6,6 +6,7 @@ import {
   MessageId,
   ProjectId,
   ProviderInstanceId,
+  ThreadContextBindingId,
   ThreadId,
   TurnId,
 } from "@t3tools/contracts";
@@ -40,6 +41,7 @@ const baseThread: OrchestrationThread = {
   activities: [],
   checkpoints: [],
   session: null,
+  contextBindings: [],
 };
 
 describe("applyThreadDetailEvent", () => {
@@ -117,6 +119,56 @@ describe("applyThreadDetailEvent", () => {
         },
       });
       expect(result.kind).toBe("deleted");
+    });
+  });
+
+  describe("thread context bindings", () => {
+    it("adds and removes a snapshot binding", () => {
+      const bindingId = ThreadContextBindingId.make("ctx-1");
+      const added = applyThreadDetailEvent(baseThread, {
+        ...baseEventFields,
+        sequence: 2,
+        occurredAt: "2026-04-01T02:00:00.000Z",
+        aggregateKind: "thread",
+        aggregateId: baseThread.id,
+        type: "thread.context-binding-added",
+        payload: {
+          threadId: baseThread.id,
+          binding: {
+            id: bindingId,
+            targetThreadId: baseThread.id,
+            sourceThreadId: ThreadId.make("thread-source"),
+            sourceProjectId: baseThread.projectId,
+            sourceThreadTitle: "Source thread",
+            mode: "snapshot",
+            snapshotText: "USER:\nhello",
+            createdAt: "2026-04-01T02:00:00.000Z",
+            updatedAt: "2026-04-01T02:00:00.000Z",
+          },
+        },
+      });
+
+      expect(added.kind).toBe("updated");
+      if (added.kind !== "updated") return;
+      expect(added.thread.contextBindings).toHaveLength(1);
+
+      const removed = applyThreadDetailEvent(added.thread, {
+        ...baseEventFields,
+        sequence: 3,
+        occurredAt: "2026-04-01T03:00:00.000Z",
+        aggregateKind: "thread",
+        aggregateId: baseThread.id,
+        type: "thread.context-binding-removed",
+        payload: {
+          threadId: baseThread.id,
+          bindingId,
+          removedAt: "2026-04-01T03:00:00.000Z",
+        },
+      });
+
+      expect(removed.kind).toBe("updated");
+      if (removed.kind !== "updated") return;
+      expect(removed.thread.contextBindings).toEqual([]);
     });
   });
 

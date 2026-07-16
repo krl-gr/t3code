@@ -3,6 +3,7 @@ import {
   type OrchestrationCommand,
   type OrchestrationEvent,
   type OrchestrationReadModel,
+  ThreadContextBindingId,
 } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 import * as Crypto from "effect/Crypto";
@@ -20,6 +21,11 @@ import {
   requireThreadNotArchived,
 } from "./commandInvariants.ts";
 import { projectEvent } from "./projector.ts";
+import {
+  buildSnapshotThreadContextBinding,
+  materializeThreadContextBindings,
+  validateThreadContextBinding,
+} from "./threadContext.ts";
 
 const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
 
@@ -392,6 +398,193 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       };
     }
 
+    case "thread.context-binding.add": {
+      const targetThread = yield* requireThread({
+        readModel,
+        command,
+        threadId: command.threadId,
+      });
+      const sourceThread = yield* requireThread({
+        readModel,
+        command,
+        threadId: command.sourceThreadId,
+      });
+      const validation = validateThreadContextBinding({
+        readModel,
+        targetThreadId: command.threadId,
+        sourceThreadId: command.sourceThreadId,
+      });
+      if (!validation.ok) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: validation.detail ?? "Invalid thread context binding.",
+        });
+      }
+      const binding = buildSnapshotThreadContextBinding({
+        bindingId: command.bindingId,
+        targetThread,
+        sourceThread,
+        ...(command.cutoffMessageId !== undefined
+          ? { cutoffMessageId: command.cutoffMessageId }
+          : {}),
+        createdAt: command.createdAt,
+      });
+      if (typeof binding === "string") {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: binding,
+        });
+      }
+      return {
+        ...(yield* withEventBase({
+          aggregateKind: "thread",
+          aggregateId: command.threadId,
+          occurredAt: command.createdAt,
+          commandId: command.commandId,
+        })),
+        type: "thread.context-binding-added",
+        payload: {
+          threadId: command.threadId,
+          binding,
+        },
+      };
+    }
+
+    case "thread.context-binding.remove": {
+      const targetThread = yield* requireThread({
+        readModel,
+        command,
+        threadId: command.threadId,
+      });
+      const existingBinding = (targetThread.contextBindings ?? []).find(
+        (binding) => binding.id === command.bindingId,
+      );
+      if (!existingBinding) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: `Context binding '${command.bindingId}' does not exist on thread '${command.threadId}'.`,
+        });
+      }
+      return {
+        ...(yield* withEventBase({
+          aggregateKind: "thread",
+          aggregateId: command.threadId,
+          occurredAt: command.createdAt,
+          commandId: command.commandId,
+        })),
+        type: "thread.context-binding-removed",
+        payload: {
+          threadId: command.threadId,
+          bindingId: command.bindingId,
+          removedAt: command.createdAt,
+        },
+      };
+    }
+
+    case "thread.context-fork.create": {
+      yield* requireProject({
+        readModel,
+        command,
+        projectId: command.projectId,
+      });
+      yield* requireThreadAbsent({
+        readModel,
+        command,
+        threadId: command.threadId,
+      });
+      const sourceThread = yield* requireThread({
+        readModel,
+        command,
+        threadId: command.sourceThreadId,
+      });
+      const validation = validateThreadContextBinding({
+        readModel,
+        targetThreadId: command.threadId,
+        sourceThreadId: command.sourceThreadId,
+      });
+      if (validation.ok === false && !validation.detail?.includes("Target thread")) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: validation.detail ?? "Invalid thread context fork.",
+        });
+      }
+      const targetThread = {
+        id: command.threadId,
+        projectId: command.projectId,
+        title: command.title,
+        modelSelection: command.modelSelection,
+        runtimeMode: command.runtimeMode,
+        interactionMode: command.interactionMode,
+        branch: command.branch,
+        worktreePath: command.worktreePath,
+        latestTurn: null,
+        createdAt: command.createdAt,
+        updatedAt: command.createdAt,
+        archivedAt: null,
+        deletedAt: null,
+        messages: [],
+        proposedPlans: [],
+        contextBindings: [],
+        activities: [],
+        checkpoints: [],
+        session: null,
+      } satisfies OrchestrationReadModel["threads"][number];
+      const bindingUuid = yield* Crypto.Crypto.pipe(
+        Effect.flatMap((cryptoService) => cryptoService.randomUUIDv4),
+      );
+      const binding = buildSnapshotThreadContextBinding({
+        bindingId: ThreadContextBindingId.make(`ctx-${bindingUuid}`),
+        targetThread,
+        sourceThread,
+        ...(command.sourceMessageId !== undefined
+          ? { cutoffMessageId: command.sourceMessageId }
+          : {}),
+        createdAt: command.createdAt,
+      });
+      if (typeof binding === "string") {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: binding,
+        });
+      }
+      const threadCreatedEvent: Omit<OrchestrationEvent, "sequence"> = {
+        ...(yield* withEventBase({
+          aggregateKind: "thread",
+          aggregateId: command.threadId,
+          occurredAt: command.createdAt,
+          commandId: command.commandId,
+        })),
+        type: "thread.created",
+        payload: {
+          threadId: command.threadId,
+          projectId: command.projectId,
+          title: command.title,
+          modelSelection: command.modelSelection,
+          runtimeMode: command.runtimeMode,
+          interactionMode: command.interactionMode,
+          branch: command.branch,
+          worktreePath: command.worktreePath,
+          createdAt: command.createdAt,
+          updatedAt: command.createdAt,
+        },
+      };
+      const bindingAddedEvent: Omit<OrchestrationEvent, "sequence"> = {
+        ...(yield* withEventBase({
+          aggregateKind: "thread",
+          aggregateId: command.threadId,
+          occurredAt: command.createdAt,
+          commandId: command.commandId,
+        })),
+        causationEventId: threadCreatedEvent.eventId,
+        type: "thread.context-binding-added",
+        payload: {
+          threadId: command.threadId,
+          binding,
+        },
+      };
+      return [threadCreatedEvent, bindingAddedEvent];
+    }
+
     case "thread.turn.start": {
       const targetThread = yield* requireThread({
         readModel,
@@ -422,6 +615,11 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           detail: `Proposed plan '${sourceProposedPlan?.planId}' belongs to thread '${sourceThread.id}' in a different project.`,
         });
       }
+      const contextMaterialization = materializeThreadContextBindings({
+        readModel,
+        targetThread,
+        userPromptLength: command.message.text.length,
+      });
       const userMessageEvent: Omit<OrchestrationEvent, "sequence"> = {
         ...(yield* withEventBase({
           aggregateKind: "thread",
@@ -461,6 +659,9 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           runtimeMode: targetThread.runtimeMode,
           interactionMode: targetThread.interactionMode,
           ...(sourceProposedPlan !== undefined ? { sourceProposedPlan } : {}),
+          ...(contextMaterialization.blocks.length > 0
+            ? { contextBlocks: contextMaterialization.blocks }
+            : {}),
           createdAt: command.createdAt,
         },
       };

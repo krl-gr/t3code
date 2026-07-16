@@ -331,6 +331,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
               updatedAt: "2026-02-24T00:00:05.500Z",
             },
           ],
+          contextBindings: [],
           activities: [
             {
               id: asEventId("activity-1"),
@@ -431,6 +432,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           hasPendingApprovals: true,
           hasPendingUserInput: false,
           hasActionableProposedPlan: false,
+          contextBindingCount: 0,
         },
       ]);
 

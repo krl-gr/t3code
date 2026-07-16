@@ -131,6 +131,17 @@ it.effect("leaves fresh databases on the current auth-only migration path", () =
   }).pipe(Effect.provide(sqliteMemoryLayer)),
 );
 
+it.effect("installs thread context schema after the auth compatibility range", () =>
+  Effect.gen(function* () {
+    yield* runMigrations({ toMigrationInclusive: 33 });
+
+    assert.isTrue(yield* hasContextBindingTable());
+    assert.isTrue(yield* hasProjectionTurnContextBlocksColumn());
+    assert.isTrue(yield* hasAuthScopesColumns());
+    assert.isTrue(yield* hasAuthProofKeyColumn());
+  }).pipe(Effect.provide(sqliteMemoryLayer)),
+);
+
 it.effect("upgrades old public databases stopped before old context migrations", () =>
   Effect.gen(function* () {
     yield* runMigrations({ toMigrationInclusive: 30 });

@@ -62,6 +62,7 @@ import {
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
 import { Link, useLocation, useNavigate, useParams, useRouter } from "@tanstack/react-router";
+import { truncate } from "@t3tools/shared/String";
 import type {
   SidebarThreadPreviewCount,
   SidebarThreadSortOrder,
@@ -73,7 +74,7 @@ import { isElectron } from "../env";
 import { APP_VERSION } from "../branding";
 import { useOpenPrLink } from "../lib/openPullRequestLink";
 import { isTerminalFocused } from "../lib/terminalFocus";
-import { cn, isMacPlatform } from "../lib/utils";
+import { cn, isMacPlatform, newThreadId } from "../lib/utils";
 import {
   readThreadShell,
   useProject,
@@ -1056,6 +1057,9 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
   const updateThreadMetadata = useAtomCommand(threadEnvironment.updateMetadata, {
     reportFailure: false,
   });
+  const forkThreadContext = useAtomCommand(threadEnvironment.forkContext, {
+    reportFailure: false,
+  });
   const updateSettings = useUpdateClientSettings();
   const sidebarThreadPreviewCount = useClientSettings<SidebarThreadPreviewCount>(
     (settings) => settings.sidebarThreadPreviewCount,
@@ -2003,6 +2007,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         thread.worktreePath ?? threadProject?.workspaceRoot ?? project.workspaceRoot ?? null;
       const clicked = await api.contextMenu.show(
         [
+          { id: "fork-thread", label: "Fork thread" },
           { id: "rename", label: "Rename thread" },
           { id: "mark-unread", label: "Mark unread" },
           { id: "copy-path", label: "Copy Path" },
@@ -2011,6 +2016,39 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         ],
         position,
       );
+
+      if (clicked === "fork-thread") {
+        const nextThreadId = newThreadId();
+        const nextThreadRef = scopeThreadRef(thread.environmentId, nextThreadId);
+        const result = await forkThreadContext({
+          environmentId: thread.environmentId,
+          input: {
+            threadId: nextThreadId,
+            projectId: thread.projectId,
+            title: truncate(`Fork: ${thread.title}`),
+            modelSelection: thread.modelSelection,
+            runtimeMode: thread.runtimeMode,
+            interactionMode: thread.interactionMode,
+            branch: thread.branch,
+            worktreePath: thread.worktreePath,
+            sourceThreadId: thread.id,
+          },
+        });
+        if (result._tag === "Failure") {
+          if (isAtomCommandInterrupted(result)) return;
+          const error = squashAtomCommandFailure(result);
+          toastManager.add(
+            stackedThreadToast({
+              type: "error",
+              title: "Failed to fork thread",
+              description: error instanceof Error ? error.message : "An error occurred.",
+            }),
+          );
+          return;
+        }
+        navigateToThread(nextThreadRef);
+        return;
+      }
 
       if (clicked === "rename") {
         startThreadRename(threadKey, thread.title);
@@ -2068,8 +2106,10 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       copyPathToClipboard,
       copyThreadIdToClipboard,
       deleteThread,
+      forkThreadContext,
       markThreadUnread,
       memberProjectByScopedKey,
+      navigateToThread,
       project.workspaceRoot,
       startThreadRename,
     ],

@@ -75,6 +75,7 @@ export function applyThreadDetailEvent(
           deletedAt: null,
           messages: [],
           proposedPlans: [],
+          contextBindings: [],
           activities: [],
           checkpoints: [],
           session: null,
@@ -135,6 +136,33 @@ export function applyThreadDetailEvent(
           ...thread,
           interactionMode: event.payload.interactionMode,
           updatedAt: event.payload.updatedAt,
+        },
+      };
+
+    case "thread.context-binding-added":
+      return {
+        kind: "updated",
+        thread: {
+          ...thread,
+          contextBindings: Arr.append(
+            (thread.contextBindings ?? []).filter(
+              (binding) => binding.id !== event.payload.binding.id,
+            ),
+            event.payload.binding,
+          ),
+          updatedAt: event.payload.binding.updatedAt,
+        },
+      };
+
+    case "thread.context-binding-removed":
+      return {
+        kind: "updated",
+        thread: {
+          ...thread,
+          contextBindings: (thread.contextBindings ?? []).filter(
+            (binding) => binding.id !== event.payload.bindingId,
+          ),
+          updatedAt: event.payload.removedAt,
         },
       };
 

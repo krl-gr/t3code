@@ -144,6 +144,10 @@ export const PROVIDER_SEND_TURN_MAX_ATTACHMENTS = 8;
 export const PROVIDER_SEND_TURN_MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const PROVIDER_SEND_TURN_MAX_IMAGE_DATA_URL_CHARS = 14_000_000;
 const CHAT_ATTACHMENT_ID_MAX_CHARS = 128;
+export const THREAD_CONTEXT_MAX_BINDINGS = 4;
+export const THREAD_CONTEXT_MAX_CHARS_PER_BINDING = 30_000;
+export const THREAD_CONTEXT_MAX_TOTAL_CHARS = 60_000;
+export const THREAD_CONTEXT_MIN_USER_PROMPT_BUDGET = 20_000;
 // Correlation id is command id by design in this model.
 export const CorrelationId = CommandId;
 export type CorrelationId = typeof CorrelationId.Type;
@@ -258,6 +262,39 @@ const SourceProposedPlanReference = Schema.Struct({
   planId: OrchestrationProposedPlanId,
 });
 
+export const ThreadContextBindingId = TrimmedNonEmptyString.check(Schema.isMaxLength(128)).pipe(
+  Schema.brand("ThreadContextBindingId"),
+);
+export type ThreadContextBindingId = typeof ThreadContextBindingId.Type;
+
+export const ThreadContextMode = Schema.Literals(["snapshot"]);
+export type ThreadContextMode = typeof ThreadContextMode.Type;
+
+export const ThreadContextBinding = Schema.Struct({
+  id: ThreadContextBindingId,
+  targetThreadId: ThreadId,
+  sourceThreadId: ThreadId,
+  sourceProjectId: Schema.optional(ProjectId),
+  sourceThreadTitle: TrimmedNonEmptyString,
+  mode: ThreadContextMode,
+  cutoffMessageId: Schema.optional(MessageId),
+  snapshotText: Schema.optional(Schema.String),
+  createdAt: IsoDateTime,
+  updatedAt: IsoDateTime,
+});
+export type ThreadContextBinding = typeof ThreadContextBinding.Type;
+
+export const ThreadContextMaterialization = Schema.Struct({
+  bindingId: ThreadContextBindingId,
+  sourceThreadId: ThreadId,
+  sourceThreadTitle: TrimmedNonEmptyString,
+  mode: ThreadContextMode,
+  messagesIncluded: NonNegativeInt,
+  omittedMessages: NonNegativeInt,
+  text: Schema.String,
+});
+export type ThreadContextMaterialization = typeof ThreadContextMaterialization.Type;
+
 export const OrchestrationSessionStatus = Schema.Literals([
   "idle",
   "starting",
@@ -362,6 +399,9 @@ export const OrchestrationThread = Schema.Struct({
   proposedPlans: Schema.Array(OrchestrationProposedPlan).pipe(
     Schema.withDecodingDefault(Effect.succeed([])),
   ),
+  contextBindings: Schema.optional(Schema.Array(ThreadContextBinding)).pipe(
+    Schema.withDecodingDefault(Effect.succeed([])),
+  ),
   activities: Schema.Array(OrchestrationThreadActivity),
   checkpoints: Schema.Array(OrchestrationCheckpointSummary),
   session: Schema.NullOr(OrchestrationSession),
@@ -408,6 +448,9 @@ export const OrchestrationThreadShell = Schema.Struct({
   hasPendingApprovals: Schema.Boolean,
   hasPendingUserInput: Schema.Boolean,
   hasActionableProposedPlan: Schema.Boolean,
+  contextBindingCount: Schema.optional(NonNegativeInt).pipe(
+    Schema.withDecodingDefault(Effect.succeed(0)),
+  ),
 });
 export type OrchestrationThreadShell = typeof OrchestrationThreadShell.Type;
 
@@ -573,6 +616,43 @@ const ThreadInteractionModeSetCommand = Schema.Struct({
   createdAt: IsoDateTime,
 });
 
+const ThreadContextBindingAddCommand = Schema.Struct({
+  type: Schema.Literal("thread.context-binding.add"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  bindingId: ThreadContextBindingId,
+  sourceThreadId: ThreadId,
+  mode: ThreadContextMode,
+  cutoffMessageId: Schema.optional(MessageId),
+  createdAt: IsoDateTime,
+});
+
+const ThreadContextBindingRemoveCommand = Schema.Struct({
+  type: Schema.Literal("thread.context-binding.remove"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  bindingId: ThreadContextBindingId,
+  createdAt: IsoDateTime,
+});
+
+const ThreadContextForkCreateCommand = Schema.Struct({
+  type: Schema.Literal("thread.context-fork.create"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  projectId: ProjectId,
+  title: TrimmedNonEmptyString,
+  modelSelection: ModelSelection,
+  runtimeMode: RuntimeMode,
+  interactionMode: ProviderInteractionMode.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_PROVIDER_INTERACTION_MODE)),
+  ),
+  branch: Schema.NullOr(TrimmedNonEmptyString),
+  worktreePath: Schema.NullOr(TrimmedNonEmptyString),
+  sourceThreadId: ThreadId,
+  sourceMessageId: Schema.optional(MessageId),
+  createdAt: IsoDateTime,
+});
+
 const ThreadTurnStartBootstrapCreateThread = Schema.Struct({
   projectId: ProjectId,
   title: TrimmedNonEmptyString,
@@ -691,6 +771,9 @@ const DispatchableClientOrchestrationCommand = Schema.Union([
   ThreadMetaUpdateCommand,
   ThreadRuntimeModeSetCommand,
   ThreadInteractionModeSetCommand,
+  ThreadContextBindingAddCommand,
+  ThreadContextBindingRemoveCommand,
+  ThreadContextForkCreateCommand,
   ThreadTurnStartCommand,
   ThreadTurnInterruptCommand,
   ThreadApprovalRespondCommand,
@@ -712,6 +795,9 @@ export const ClientOrchestrationCommand = Schema.Union([
   ThreadMetaUpdateCommand,
   ThreadRuntimeModeSetCommand,
   ThreadInteractionModeSetCommand,
+  ThreadContextBindingAddCommand,
+  ThreadContextBindingRemoveCommand,
+  ThreadContextForkCreateCommand,
   ClientThreadTurnStartCommand,
   ThreadTurnInterruptCommand,
   ThreadApprovalRespondCommand,
@@ -814,6 +900,8 @@ export const OrchestrationEventType = Schema.Literals([
   "thread.meta-updated",
   "thread.runtime-mode-set",
   "thread.interaction-mode-set",
+  "thread.context-binding-added",
+  "thread.context-binding-removed",
   "thread.message-sent",
   "thread.turn-start-requested",
   "thread.turn-interrupt-requested",
@@ -913,6 +1001,17 @@ export const ThreadInteractionModeSetPayload = Schema.Struct({
   updatedAt: IsoDateTime,
 });
 
+export const ThreadContextBindingAddedPayload = Schema.Struct({
+  threadId: ThreadId,
+  binding: ThreadContextBinding,
+});
+
+export const ThreadContextBindingRemovedPayload = Schema.Struct({
+  threadId: ThreadId,
+  bindingId: ThreadContextBindingId,
+  removedAt: IsoDateTime,
+});
+
 export const ThreadMessageSentPayload = Schema.Struct({
   threadId: ThreadId,
   messageId: MessageId,
@@ -935,6 +1034,7 @@ export const ThreadTurnStartRequestedPayload = Schema.Struct({
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_PROVIDER_INTERACTION_MODE)),
   ),
   sourceProposedPlan: Schema.optional(SourceProposedPlanReference),
+  contextBlocks: Schema.optional(Schema.Array(ThreadContextMaterialization)),
   createdAt: IsoDateTime,
 });
 
@@ -1071,6 +1171,16 @@ export const OrchestrationEvent = Schema.Union([
     ...EventBaseFields,
     type: Schema.Literal("thread.interaction-mode-set"),
     payload: ThreadInteractionModeSetPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("thread.context-binding-added"),
+    payload: ThreadContextBindingAddedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("thread.context-binding-removed"),
+    payload: ThreadContextBindingRemovedPayload,
   }),
   Schema.Struct({
     ...EventBaseFields,
