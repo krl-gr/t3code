@@ -5,6 +5,7 @@ import { ProviderInstanceIcon } from "./ProviderInstanceIcon";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { cn } from "~/lib/utils";
 import { isProviderInstancePickerReady, type ProviderInstanceEntry } from "../../providerInstances";
+import type { Icon } from "../Icons";
 
 /**
  * Build the hover tooltip for an instance button. Mirrors the old
@@ -46,6 +47,7 @@ export const ModelPickerSidebar = memo(function ModelPickerSidebar(props: {
    * their own model list.
    */
   instanceEntries: ReadonlyArray<ProviderInstanceEntry>;
+  providerIconsByDriverKind?: ReadonlyMap<ProviderInstanceEntry["driverKind"], Icon>;
   /** Render the favorites rail entry. Hidden for locked-provider instance switching. */
   showFavorites?: boolean;
   /** Instance ids shown in the rail but unavailable for the current picker context. */
@@ -198,6 +200,7 @@ export const ModelPickerSidebar = memo(function ModelPickerSidebar(props: {
                 <ProviderInstanceIcon
                   driverKind={entry.driverKind}
                   displayName={entry.displayName}
+                  icon={props.providerIconsByDriverKind?.get(entry.driverKind)}
                   accentColor={entry.accentColor}
                   showBadge={showInstanceBadge}
                   className="size-6"

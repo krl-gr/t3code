@@ -12,6 +12,7 @@ import { Button } from "../ui/button";
 import { Kbd } from "../ui/kbd";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { cn } from "~/lib/utils";
+import type { Icon } from "../Icons";
 
 export const ModelListRow = memo(function ModelListRow(props: {
   index: number;
@@ -26,6 +27,7 @@ export const ModelListRow = memo(function ModelListRow(props: {
    * "Codex Personal" render with their user-authored label.
    */
   providerDisplayName: string;
+  providerIcon?: Icon | undefined;
   providerAccentColor?: string | undefined;
   isFavorite: boolean;
   isSelected: boolean;
@@ -37,7 +39,7 @@ export const ModelListRow = memo(function ModelListRow(props: {
   disabledReason?: string | null;
   onToggleFavorite: () => void;
 }) {
-  const ProviderIcon = PROVIDER_ICON_BY_PROVIDER[props.driverKind] ?? null;
+  const ProviderIcon = props.providerIcon ?? PROVIDER_ICON_BY_PROVIDER[props.driverKind] ?? null;
   const providerLabel = props.model.subProvider
     ? `${props.providerDisplayName} · ${props.model.subProvider}`
     : props.providerDisplayName;

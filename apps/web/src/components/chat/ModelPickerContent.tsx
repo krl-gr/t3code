@@ -28,6 +28,7 @@ import {
   type ProviderInstanceEntry,
 } from "../../providerInstances";
 import { providerModelKey, sortProviderModelItems } from "../../modelOrdering";
+import type { Icon } from "../Icons";
 
 type ModelPickerItem = {
   slug: string;
@@ -76,6 +77,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
    * for the locked-mode header.
    */
   instanceEntries: ReadonlyArray<ProviderInstanceEntry>;
+  providerIconsByDriverKind?: ReadonlyMap<ProviderDriverKind, Icon>;
   keybindings?: ResolvedKeybindingsConfig;
   /**
    * Model options per instance. Keyed by `ProviderInstanceId` so the
@@ -530,6 +532,9 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
             selectedInstanceId={selectedInstanceId}
             onSelectInstance={handleSelectInstance}
             instanceEntries={sidebarInstanceEntries}
+            {...(props.providerIconsByDriverKind
+              ? { providerIconsByDriverKind: props.providerIconsByDriverKind }
+              : {})}
             showFavorites
             {...(lockedDisabledInstanceIds
               ? {
@@ -641,6 +646,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
                         driverKind={model.driverKind}
                         providerDisplayName={model.instanceDisplayName}
                         providerAccentColor={model.instanceAccentColor}
+                        providerIcon={props.providerIconsByDriverKind?.get(model.driverKind)}
                         isFavorite={favoritesSet.has(modelKey)}
                         isSelected={modelKey === `${props.activeInstanceId}:${props.model}`}
                         showProvider

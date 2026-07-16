@@ -13,6 +13,10 @@ import { cn } from "~/lib/utils";
 import { ModelPickerContent } from "./ModelPickerContent";
 import { ProviderInstanceIcon } from "./ProviderInstanceIcon";
 import {
+  listExperimentalWebProviderDrivers,
+  useWebProductComposition,
+} from "../../product/WebComposition";
+import {
   ModelEsque,
   getTriggerDisplayModelLabel,
   getTriggerDisplayModelName,
@@ -47,6 +51,17 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
 }) {
   const [uncontrolledIsMenuOpen, setUncontrolledIsMenuOpen] = useState(false);
   const isMenuOpen = props.open ?? uncontrolledIsMenuOpen;
+  const webComposition = useWebProductComposition();
+  const providerIconsByDriverKind = useMemo(
+    () =>
+      new Map(
+        listExperimentalWebProviderDrivers(webComposition).map(({ provider }) => [
+          provider.driverKind,
+          provider.icon,
+        ]),
+      ),
+    [webComposition],
+  );
 
   // Resolve the active instance entry by exact routing key. The composer
   // resolves fallbacks before rendering this component; if the selected
@@ -165,6 +180,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
             <ProviderInstanceIcon
               driverKind={activeEntry.driverKind}
               displayName={activeEntry.displayName}
+              icon={providerIconsByDriverKind.get(activeEntry.driverKind)}
               accentColor={activeEntry.accentColor}
               showBadge={showInstanceBadge}
               className={showInstanceBadge ? "size-5" : "size-4"}
@@ -203,6 +219,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
           lockedProvider={props.lockedProvider}
           lockedContinuationGroupKey={props.lockedContinuationGroupKey ?? null}
           instanceEntries={props.instanceEntries}
+          providerIconsByDriverKind={providerIconsByDriverKind}
           {...(props.keybindings ? { keybindings: props.keybindings } : {})}
           modelOptionsByInstance={props.modelOptionsByInstance}
           terminalOpen={props.terminalOpen ?? false}
