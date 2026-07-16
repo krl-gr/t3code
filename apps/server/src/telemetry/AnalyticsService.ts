@@ -28,9 +28,11 @@ interface BufferedAnalyticsEvent {
   readonly capturedAt: string;
 }
 
+export const UPCOMPUTER_POSTHOG_PROJECT_KEY = "phc_uqRUAQavAKuUny7uFxm8tqr6nyVDpdoSARKsWNzs8wBx";
+
 const TelemetryEnvConfig = Config.all({
   posthogKey: Config.string("T3CODE_POSTHOG_KEY").pipe(
-    Config.withDefault("phc_XOWci4oZP4VvLiEyrFqkFjP4CZn55mjYYBMREK5Wd6m"),
+    Config.withDefault(UPCOMPUTER_POSTHOG_PROJECT_KEY),
   ),
   posthogHost: Config.string("T3CODE_POSTHOG_HOST").pipe(
     Config.withDefault("https://us.i.posthog.com"),

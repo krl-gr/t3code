@@ -36,6 +36,13 @@ interface RecordedBatchBody {
 }
 
 it.layer(NodeServices.layer)("AnalyticsService test", (it) => {
+  it("uses the UpComputer PostHog project by default", () => {
+    assert.equal(
+      AnalyticsService.UPCOMPUTER_POSTHOG_PROJECT_KEY,
+      "phc_uqRUAQavAKuUny7uFxm8tqr6nyVDpdoSARKsWNzs8wBx",
+    );
+  });
+
   it.effect("flush drains all buffered events across multiple batches", () =>
     Effect.gen(function* () {
       const capturedRequests: Array<RecordedBatchRequest> = [];
