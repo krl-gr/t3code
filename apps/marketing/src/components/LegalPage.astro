@@ -1,0 +1,96 @@
+---
+interface Props {
+  title: string;
+  description: string;
+  effectiveDate: string;
+}
+
+const { title, description, effectiveDate } = Astro.props;
+---
+
+<section class="legal-shell">
+  <div class="legal-copy">
+    <a class="legal-back" href="/">← Up.computer</a>
+    <p class="legal-kicker">Legal</p>
+    <h1>{title}</h1>
+    <p class="legal-lead">{description}</p>
+    <p class="legal-date">Effective {effectiveDate}</p>
+    <div class="legal-content">
+      <slot />
+    </div>
+  </div>
+</section>
+
+<style>
+  .legal-shell {
+    padding: 7rem 1.5rem 6rem;
+  }
+
+  .legal-copy {
+    max-width: 760px;
+    margin: 0 auto;
+  }
+
+  .legal-back,
+  .legal-content :global(a) {
+    color: var(--fg-muted);
+  }
+
+  .legal-back:hover,
+  .legal-content :global(a:hover) {
+    color: var(--fg);
+  }
+
+  .legal-kicker {
+    margin-top: 3rem;
+    color: var(--accent);
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  h1 {
+    margin-top: 0.75rem;
+    font-size: clamp(2.4rem, 8vw, 4.5rem);
+    letter-spacing: -0.055em;
+    line-height: 0.98;
+  }
+
+  .legal-lead {
+    margin-top: 1.5rem;
+    color: var(--fg-muted);
+    font-size: 1.1rem;
+    line-height: 1.65;
+  }
+
+  .legal-date {
+    margin-top: 0.75rem;
+    color: var(--fg-dim);
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+  }
+
+  .legal-content {
+    margin-top: 3rem;
+    color: var(--fg-muted);
+    font-size: 0.98rem;
+    line-height: 1.75;
+  }
+
+  .legal-content :global(h2) {
+    margin: 2.5rem 0 0.75rem;
+    color: var(--fg);
+    font-size: 1.25rem;
+    letter-spacing: -0.02em;
+  }
+
+  .legal-content :global(p),
+  .legal-content :global(ul) {
+    margin-top: 0.9rem;
+  }
+
+  .legal-content :global(ul) {
+    padding-left: 1.25rem;
+  }
+</style>

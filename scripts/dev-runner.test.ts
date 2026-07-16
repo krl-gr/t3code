@@ -5,6 +5,7 @@ import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
 import { assert, describe, it } from "@effect/vitest";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
@@ -127,9 +128,10 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
   });
 
   describe("createDevRunnerEnv", () => {
-    it.effect("defaults T3CODE_HOME to ~/.t3 when not provided", () =>
+    it.effect("prefers ~/.upcomputer while adopting an existing legacy ~/.t3 home", () =>
       Effect.gen(function* () {
         const path = yield* Path.Path;
+        const fileSystem = yield* FileSystem.FileSystem;
         const env = yield* createDevRunnerEnv({
           mode: "dev",
           baseEnv: {},
@@ -144,7 +146,21 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
           devUrl: undefined,
         });
 
-        assert.equal(env.T3CODE_HOME, path.resolve(NodeOS.homedir(), ".t3"));
+        const preferredPath = path.resolve(NodeOS.homedir(), ".upcomputer");
+        const legacyPath = path.resolve(NodeOS.homedir(), ".t3");
+        const preferredExists = yield* fileSystem
+          .exists(preferredPath)
+          .pipe(Effect.orElseSucceed(() => false));
+        const legacyExists = yield* fileSystem
+          .exists(legacyPath)
+          .pipe(Effect.orElseSucceed(() => false));
+        const expectedPath = preferredExists
+          ? preferredPath
+          : legacyExists
+            ? legacyPath
+            : preferredPath;
+        assert.equal(env.UPCOMPUTER_HOME, expectedPath);
+        assert.equal(env.T3CODE_HOME, expectedPath);
       }),
     );
 

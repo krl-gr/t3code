@@ -1,0 +1,57 @@
+---
+import LegalPage from "../components/LegalPage.astro";
+import Layout from "../layouts/Layout.astro";
+---
+
+<Layout title="Privacy Policy · Up.computer" description="How Up.computer handles information.">
+  <LegalPage
+    title="Privacy Policy"
+    description="This policy explains what Up.computer processes when you use the app and website."
+    effectiveDate="July 16, 2026"
+  >
+    <h2>Who operates Up.computer</h2>
+    <p>
+      Up.computer is operated by Kirill Gurianov. Privacy and data requests can be sent to
+      <a href="mailto:support@up.computer">support@up.computer</a>.
+    </p>
+
+    <h2>Local data and agent providers</h2>
+    <p>
+      Project files, thread history, settings, and credentials are primarily stored on your device.
+      When you ask an agent to work, the content needed for that request is sent to the model or
+      service provider you selected. That provider processes it under its own terms and privacy
+      policy. Remote environments and websites used through Browser or Computer Use can also
+      receive and observe the data you send to them.
+    </p>
+
+    <h2>Telemetry</h2>
+    <p>
+      Up.computer may collect limited product telemetry such as app version, operating system,
+      client type, feature events, and an anonymous installation or hashed provider-account
+      identifier. Telemetry is intended not to contain prompts, source files, terminal output,
+      credentials, or other project content. It is used to understand reliability and product use.
+    </p>
+
+    <h2>Website and third parties</h2>
+    <p>
+      The website and app can link to or integrate with third-party services such as GitHub, model
+      providers, authentication providers, and telemetry infrastructure. Their handling of data is
+      governed by their own policies. Basic server logs may include IP address, user agent, time,
+      and requested path for security and reliability.
+    </p>
+
+    <h2>Retention and your choices</h2>
+    <p>
+      Local data remains until you delete it or uninstall the relevant data directory. Service data
+      is kept only as reasonably necessary for operation, security, support, and legal obligations.
+      You can disable optional telemetry in product settings where that control is available. Send
+      access, correction, or deletion requests to the contact above.
+    </p>
+
+    <h2>Changes</h2>
+    <p>
+      This policy may change as the alpha product evolves. Material updates will be published on
+      this page with a new effective date.
+    </p>
+  </LegalPage>
+</Layout>

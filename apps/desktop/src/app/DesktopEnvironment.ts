@@ -7,12 +7,19 @@ import type {
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as PlatformError from "effect/PlatformError";
 
 import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
 import * as DesktopConfig from "./DesktopConfig.ts";
+import {
+  LEGACY_HOME_DIRECTORY_NAME,
+  UPCOMPUTER_APP_ID,
+  UPCOMPUTER_HOME_DIRECTORY_NAME,
+} from "./DesktopProductIdentity.ts";
 import { isNightlyDesktopVersion } from "../updates/updateChannels.ts";
 
 export interface MakeDesktopEnvironmentInput {
@@ -67,7 +74,7 @@ export class DesktopEnvironment extends Context.Service<
     readonly linuxDesktopEntryName: string;
     readonly linuxWmClass: string;
     readonly userDataDirName: string;
-    readonly legacyUserDataDirName: string;
+    readonly legacyUserDataDirNames: readonly string[];
     readonly defaultDesktopSettings: DesktopAppSettings.DesktopSettings;
     readonly runtimeInfo: DesktopRuntimeInfo;
     readonly resolvePickFolderDefaultPath: (rawOptions: unknown) => Option.Option<string>;
@@ -133,8 +140,13 @@ function resolveDesktopRuntimeInfo(input: {
 
 const make = Effect.fn("desktop.environment.make")(function* (
   input: MakeDesktopEnvironmentInput,
-): Effect.fn.Return<DesktopEnvironment["Service"], Config.ConfigError, Path.Path> {
+): Effect.fn.Return<
+  DesktopEnvironment["Service"],
+  Config.ConfigError | PlatformError.PlatformError,
+  FileSystem.FileSystem | Path.Path
+> {
   const path = yield* Path.Path;
+  const fileSystem = yield* FileSystem.FileSystem;
   const config = yield* DesktopConfig.DesktopConfig;
   const homeDirectory = input.homeDirectory;
   const devServerUrl = config.devServerUrl;
@@ -147,7 +159,26 @@ const make = Effect.fn("desktop.environment.make")(function* (
       : input.platform === "darwin"
         ? path.join(homeDirectory, "Library", "Application Support")
         : Option.getOrElse(config.xdgConfigHome, () => path.join(homeDirectory, ".config"));
-  const baseDir = Option.getOrElse(config.t3Home, () => path.join(homeDirectory, ".t3"));
+  const configuredBaseDir = Option.orElse(config.upcomputerHome, () => config.t3Home);
+  const preferredBaseDir = path.join(homeDirectory, UPCOMPUTER_HOME_DIRECTORY_NAME);
+  const legacyBaseDir = path.join(homeDirectory, LEGACY_HOME_DIRECTORY_NAME);
+  const baseDir = yield* Option.match(configuredBaseDir, {
+    onSome: (value) => Effect.succeed(value),
+    onNone: () =>
+      fileSystem
+        .exists(preferredBaseDir)
+        .pipe(
+          Effect.flatMap((preferredExists) =>
+            preferredExists
+              ? Effect.succeed(preferredBaseDir)
+              : fileSystem
+                  .exists(legacyBaseDir)
+                  .pipe(
+                    Effect.map((legacyExists) => (legacyExists ? legacyBaseDir : preferredBaseDir)),
+                  ),
+          ),
+        ),
+  });
   const rootDir = path.resolve(input.dirname, "../../..");
   const appRoot = input.isPackaged ? input.appPath : rootDir;
   const branding = resolveDesktopAppBranding({
@@ -156,8 +187,10 @@ const make = Effect.fn("desktop.environment.make")(function* (
   });
   const displayName = branding.displayName;
   const stateDir = path.join(baseDir, isDevelopment ? "dev" : "userdata");
-  const userDataDirName = isDevelopment ? "t3code-dev" : "t3code";
-  const legacyUserDataDirName = isDevelopment ? "T3 Code (Dev)" : "T3 Code (Alpha)";
+  const userDataDirName = isDevelopment ? "Up.computer (Dev)" : "Up.computer";
+  const legacyUserDataDirNames = isDevelopment
+    ? ["t3code-dev", "T3 Code (Dev)"]
+    : ["t3code", "T3 Code (Alpha)"];
   const resourcesPath = input.resourcesPath;
 
   return DesktopEnvironment.of({
@@ -197,12 +230,12 @@ const make = Effect.fn("desktop.environment.make")(function* (
     branding,
     displayName,
     appUserModelId: Option.getOrElse(config.appUserModelIdOverride, () =>
-      isDevelopment ? "com.t3tools.t3code.dev" : "com.t3tools.t3code",
+      isDevelopment ? `${UPCOMPUTER_APP_ID}.dev` : UPCOMPUTER_APP_ID,
     ),
-    linuxDesktopEntryName: isDevelopment ? "t3code-dev.desktop" : "t3code.desktop",
-    linuxWmClass: isDevelopment ? "t3code-dev" : "t3code",
+    linuxDesktopEntryName: isDevelopment ? "upcomputer-dev.desktop" : "upcomputer.desktop",
+    linuxWmClass: isDevelopment ? "upcomputer-dev" : "upcomputer",
     userDataDirName,
-    legacyUserDataDirName,
+    legacyUserDataDirNames,
     defaultDesktopSettings: DesktopAppSettings.resolveDefaultDesktopSettings(input.appVersion),
     runtimeInfo: resolveDesktopRuntimeInfo({
       platform: input.platform,

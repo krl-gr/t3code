@@ -21,12 +21,12 @@ const decodeAppPackageMetadata = Schema.decodeEffect(Schema.fromJsonString(AppPa
 export class DesktopUserDataPathResolutionError extends Schema.TaggedErrorClass<DesktopUserDataPathResolutionError>()(
   "DesktopUserDataPathResolutionError",
   {
-    legacyPath: Schema.String,
+    path: Schema.String,
     cause: Schema.Defect(),
   },
 ) {
   override get message(): string {
-    return `Failed to inspect legacy desktop user-data path at "${this.legacyPath}".`;
+    return `Failed to inspect desktop user-data path at "${this.path}".`;
   }
 }
 
@@ -91,22 +91,29 @@ export const make = Effect.gen(function* () {
   });
 
   const resolveUserDataPath = Effect.gen(function* () {
-    const legacyPath = environment.path.join(
+    const preferredPath = environment.path.join(
       environment.appDataDirectory,
-      environment.legacyUserDataDirName,
+      environment.userDataDirName,
     );
-    const legacyPathExists = yield* fileSystem.exists(legacyPath).pipe(
-      Effect.mapError(
-        (cause) =>
-          new DesktopUserDataPathResolutionError({
-            legacyPath,
-            cause,
-          }),
-      ),
-    );
-    return legacyPathExists
-      ? legacyPath
-      : environment.path.join(environment.appDataDirectory, environment.userDataDirName);
+    const pathExists = (path: string) =>
+      fileSystem.exists(path).pipe(
+        Effect.mapError(
+          (cause) =>
+            new DesktopUserDataPathResolutionError({
+              path,
+              cause,
+            }),
+        ),
+      );
+    if (yield* pathExists(preferredPath)) return preferredPath;
+
+    for (const legacyName of environment.legacyUserDataDirNames) {
+      const legacyPath = environment.path.join(environment.appDataDirectory, legacyName);
+      const legacyPathExists = yield* pathExists(legacyPath);
+      if (legacyPathExists) return legacyPath;
+    }
+
+    return preferredPath;
   }).pipe(Effect.withSpan("desktop.appIdentity.resolveUserDataPath"));
 
   const configure = Effect.gen(function* () {

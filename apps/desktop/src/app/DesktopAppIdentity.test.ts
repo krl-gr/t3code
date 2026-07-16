@@ -105,7 +105,7 @@ const withIdentity = <A, E, R>(
   input: {
     readonly calls?: ElectronAppCalls;
     readonly environment?: TestEnvironmentInput;
-    readonly legacyPathExists?: boolean;
+    readonly existingUserDataDirectoryName?: string;
     readonly legacyPathProbeError?: PlatformError.PlatformError;
     readonly packageJson?: string;
     readonly pngIconPath?: Option.Option<string>;
@@ -126,7 +126,8 @@ const withIdentity = <A, E, R>(
               input.legacyPathProbeError
                 ? Effect.fail(input.legacyPathProbeError)
                 : Effect.succeed(
-                    input.legacyPathExists === true && path.includes("T3 Code (Alpha)"),
+                    input.existingUserDataDirectoryName !== undefined &&
+                      path.endsWith(input.existingUserDataDirectoryName),
                   ),
             readFileString: () =>
               Effect.succeed(input.packageJson ?? '{"t3codeCommitHash":"abcdef1234567890"}'),
@@ -149,7 +150,19 @@ describe("DesktopAppIdentity", () => {
 
         assert.equal(userDataPath, "/Users/alice/Library/Application Support/T3 Code (Alpha)");
       }),
-      { legacyPathExists: true },
+      { existingUserDataDirectoryName: "T3 Code (Alpha)" },
+    ),
+  );
+
+  it.effect("prefers the new Up.computer userData path when it already exists", () =>
+    withIdentity(
+      Effect.gen(function* () {
+        const identity = yield* DesktopAppIdentity.DesktopAppIdentity;
+        const userDataPath = yield* identity.resolveUserDataPath;
+
+        assert.equal(userDataPath, "/Users/alice/Library/Application Support/Up.computer");
+      }),
+      { existingUserDataDirectoryName: "Up.computer" },
     ),
   );
 
@@ -169,11 +182,11 @@ describe("DesktopAppIdentity", () => {
         const error = yield* identity.resolveUserDataPath.pipe(Effect.flip);
 
         assert.instanceOf(error, DesktopAppIdentity.DesktopUserDataPathResolutionError);
-        assert.equal(error.legacyPath, legacyPath);
+        assert.equal(error.path, "/Users/alice/Library/Application Support/Up.computer");
         assert.strictEqual(error.cause, cause);
         assert.equal(
           error.message,
-          `Failed to inspect legacy desktop user-data path at "${legacyPath}".`,
+          'Failed to inspect desktop user-data path at "/Users/alice/Library/Application Support/Up.computer".',
         );
       }),
       { legacyPathProbeError: cause },

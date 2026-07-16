@@ -8,7 +8,7 @@ interface Props {
 
 const {
   title = "Up.computer",
-  description = "Up.computer — The open-source control plane for coding agents.",
+  description = "Up.computer — The local control plane for coding agents.",
 } = Astro.props;
 ---
 
@@ -61,12 +61,15 @@ const {
         <div class="footer-inner">
           <div class="footer-brand">
             <img src="/icon.webp" alt="" />
-            <span>&copy; {new Date().getFullYear()} Up.computer · MIT licensed</span>
+            <span>&copy; {new Date().getFullYear()} Kirill Gurianov · MIT-licensed Core</span>
           </div>
           <div class="footer-links">
             <a href={GITHUB_REPOSITORY_URL} target="_blank" rel="noopener noreferrer">GitHub</a>
             <a href="https://discord.gg/jn4EGJjrvv" target="_blank" rel="noopener noreferrer">Discord</a>
             <a href="/download">Download</a>
+            <a href="/privacy">Privacy</a>
+            <a href="/terms">Terms</a>
+            <a href="/security">Security</a>
           </div>
         </div>
       </footer>

@@ -1,6 +1,13 @@
 {
   "name": "@t3tools/monorepo",
   "private": true,
+  "homepage": "https://up.computer",
+  "license": "MIT",
+  "author": "Kirill Gurianov",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/krl-gr/upcomputer.git"
+  },
   "type": "module",
   "scripts": {
     "prepare": "effect-tsgo patch && vp config --no-agent",

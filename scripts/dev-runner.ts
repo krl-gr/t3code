@@ -9,6 +9,7 @@ import { HostProcessEnvironment } from "@t3tools/shared/hostProcess";
 import { resolveSpawnCommand } from "@t3tools/shared/shell";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Hash from "effect/Hash";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
@@ -29,9 +30,18 @@ const MAX_PORT = 65535;
 const DESKTOP_DEV_LOOPBACK_HOST = "127.0.0.1";
 const DEV_PORT_PROBE_HOSTS = ["127.0.0.1", "0.0.0.0", "::1", "::"] as const;
 
-export const DEFAULT_T3_HOME = Effect.map(Effect.service(Path.Path), (path) =>
-  path.join(NodeOS.homedir(), ".t3"),
-);
+export const DEFAULT_T3_HOME = Effect.gen(function* () {
+  const path = yield* Path.Path;
+  const fileSystem = yield* FileSystem.FileSystem;
+  const preferredPath = path.join(NodeOS.homedir(), ".upcomputer");
+  if (yield* fileSystem.exists(preferredPath).pipe(Effect.orElseSucceed(() => false))) {
+    return preferredPath;
+  }
+
+  const legacyPath = path.join(NodeOS.homedir(), ".t3");
+  const legacyExists = yield* fileSystem.exists(legacyPath).pipe(Effect.orElseSucceed(() => false));
+  return legacyExists ? legacyPath : preferredPath;
+});
 
 const MODE_ARGS = {
   dev: [
@@ -202,7 +212,9 @@ export function resolveOffset(config: {
   return Effect.succeed({ offset, source: `hashed T3CODE_DEV_INSTANCE=${seed}` });
 }
 
-function resolveBaseDir(baseDir: string | undefined): Effect.Effect<string, never, Path.Path> {
+function resolveBaseDir(
+  baseDir: string | undefined,
+): Effect.Effect<string, never, FileSystem.FileSystem | Path.Path> {
   return Effect.gen(function* () {
     const path = yield* Path.Path;
     const configured = baseDir?.trim();
@@ -241,7 +253,11 @@ export function createDevRunnerEnv({
   host,
   port,
   devUrl,
-}: CreateDevRunnerEnvInput): Effect.Effect<NodeJS.ProcessEnv, never, Path.Path> {
+}: CreateDevRunnerEnvInput): Effect.Effect<
+  NodeJS.ProcessEnv,
+  never,
+  FileSystem.FileSystem | Path.Path
+> {
   return Effect.gen(function* () {
     const serverPort = port ?? BASE_SERVER_PORT + serverOffset;
     const webPort = BASE_WEB_PORT + webOffset;
@@ -254,6 +270,7 @@ export function createDevRunnerEnv({
       VITE_DEV_SERVER_URL:
         devUrl?.toString() ??
         `http://${isDesktopMode ? DESKTOP_DEV_LOOPBACK_HOST : "localhost"}:${webPort}`,
+      UPCOMPUTER_HOME: resolvedBaseDir,
       T3CODE_HOME: resolvedBaseDir,
     };
 
@@ -586,8 +603,14 @@ const devRunnerCli = Command.make("dev-runner", {
     Argument.withDescription("Development mode to run."),
   ),
   t3Home: Flag.string("home-dir").pipe(
-    Flag.withDescription("Base directory for all Up.computer data (equivalent to T3CODE_HOME)."),
-    Flag.withFallbackConfig(optionalStringConfig("T3CODE_HOME")),
+    Flag.withDescription(
+      "Base directory for all Up.computer data (UPCOMPUTER_HOME; legacy T3CODE_HOME is supported).",
+    ),
+    Flag.withFallbackConfig(
+      Config.orElse(optionalStringConfig("UPCOMPUTER_HOME"), () =>
+        optionalStringConfig("T3CODE_HOME"),
+      ),
+    ),
   ),
   noBrowser: Flag.boolean("no-browser").pipe(
     Flag.withDescription("Browser auto-open toggle (equivalent to T3CODE_NO_BROWSER)."),

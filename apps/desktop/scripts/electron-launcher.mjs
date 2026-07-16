@@ -17,9 +17,9 @@ const devBundleIdSuffix = NodePath.basename(repoRoot)
   .replaceAll(/[^a-z0-9]+/g, "");
 export const APP_DISPLAY_NAME = isDevelopment ? "Up.computer (Dev)" : "Up.computer (Alpha)";
 export const APP_BUNDLE_ID = isDevelopment
-  ? `com.t3tools.t3code.dev.${devBundleIdSuffix || "local"}`
-  : "com.t3tools.t3code";
-const APP_PROTOCOL_SCHEMES = isDevelopment ? ["t3code-dev"] : ["t3code"];
+  ? `computer.up.upcomputer.dev.${devBundleIdSuffix || "local"}`
+  : "computer.up.upcomputer";
+const APP_PROTOCOL_SCHEMES = isDevelopment ? ["upcomputer-dev"] : ["upcomputer"];
 const LAUNCHER_VERSION = 12;
 const defaultIconPath = NodePath.join(desktopDir, "resources", "icon.icns");
 const developmentMacIconPngPath = NodePath.join(
@@ -109,6 +109,7 @@ export function makeDevelopmentLauncherScript({
   const envEntries = [
     ["VITE_DEV_SERVER_URL", environment.VITE_DEV_SERVER_URL],
     ["T3CODE_PORT", environment.T3CODE_PORT],
+    ["UPCOMPUTER_HOME", environment.UPCOMPUTER_HOME],
     ["T3CODE_HOME", environment.T3CODE_HOME],
     ["T3CODE_COMMIT_HASH", environment.T3CODE_COMMIT_HASH],
     ["T3CODE_OTLP_TRACES_URL", environment.T3CODE_OTLP_TRACES_URL],

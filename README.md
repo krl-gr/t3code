@@ -26,8 +26,12 @@ release pipeline from this exact public core plus bundled first-party
 extensions. It is still one Upcomputer application, but the complete official
 binary is not represented by this public source tree alone.
 
-Provider CLIs are installed and authenticated separately. At minimum, install
-and log in to one runtime you want to use:
+The official installer includes the built-in **Up** agent runtime, so a user can install
+Up.computer, sign in or configure a supported BYOK provider, and start without installing a
+third-party harness. Browser and Computer Use are integrated through that runtime.
+
+The public Core source also supports external provider CLIs. Install and authenticate any optional
+runtime you want to use:
 
 - Codex CLI: install the [Codex CLI](https://developers.openai.com/codex/cli)
   and run `codex login`.
@@ -48,7 +52,8 @@ Requirements:
 - Vite+ `vp`
 - Node 24.13.1+
 - Git
-- At least one supported coding-agent CLI installed and authenticated
+- A supported external coding-agent CLI installed and authenticated when running Core without the
+  private built-in Up runtime
 
 Install Vite+:
 
@@ -107,8 +112,10 @@ This fork keeps the upstream runtime, provider orchestration, contracts,
 desktop infrastructure, and release plumbing close to upstream while developing
 a different product direction, UI, branding, and workflow layer.
 
-Some package names, storage keys, docs, and internal identifiers still refer to
-T3 Code while the fork is being separated. That is expected during the alpha.
+Some internal package names, storage keys, and compatibility environment variables intentionally
+retain T3 Code identifiers so existing profiles keep working and upstream changes remain practical
+to merge. Public application identity, protocol links, update identity, and new data directories use
+Up.computer names.
 
 ## Contributing
 
@@ -128,9 +135,13 @@ Please do not report security vulnerabilities in public issues. See
 
 ## License And Brand
 
-The source code is MIT licensed. See [LICENSE](./LICENSE).
+The public Core source code is MIT licensed. See [LICENSE](./LICENSE) and [NOTICE.md](./NOTICE.md).
+Official installers can additionally contain proprietary first-party extensions and third-party
+components under their own licenses.
 
 The MIT license does not grant trademark rights in the Up.computer name, logo,
 or visual identity. You may use the name to refer to this project, but do not
 use the branding in a way that implies endorsement or an official build unless
 you have permission.
+
+Licensing, privacy, security, or support questions: **support@up.computer**.

@@ -86,7 +86,12 @@ export const expandHomePath = Effect.fn(function* (input: string) {
 export const resolveBaseDir = Effect.fn(function* (raw: string | undefined) {
   const { join, resolve } = yield* Path.Path;
   if (!raw || raw.trim().length === 0) {
-    return join(NodeOS.homedir(), ".t3");
+    const fileSystem = yield* FileSystem.FileSystem;
+    const preferredPath = join(NodeOS.homedir(), ".upcomputer");
+    if (yield* fileSystem.exists(preferredPath)) return preferredPath;
+
+    const legacyPath = join(NodeOS.homedir(), ".t3");
+    return (yield* fileSystem.exists(legacyPath)) ? legacyPath : preferredPath;
   }
   return resolve(yield* expandHomePath(raw.trim()));
 });

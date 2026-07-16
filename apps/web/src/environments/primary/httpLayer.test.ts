@@ -41,7 +41,7 @@ describe.sequential("primary environment HTTP layer", () => {
     Object.defineProperty(globalThis, "window", {
       configurable: true,
       value: {
-        location: { origin: "t3code://app" },
+        location: { origin: "upcomputer://app" },
         desktopBridge: {
           getLocalEnvironmentBootstrap: () => ({
             label: "Local environment",

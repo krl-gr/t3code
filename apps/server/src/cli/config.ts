@@ -31,7 +31,9 @@ export const hostFlag = Flag.string("host").pipe(
   Flag.optional,
 );
 export const baseDirFlag = Flag.string("base-dir").pipe(
-  Flag.withDescription("Base directory path (equivalent to T3CODE_HOME)."),
+  Flag.withDescription(
+    "Base directory path (equivalent to UPCOMPUTER_HOME; legacy T3CODE_HOME is supported).",
+  ),
   Flag.optional,
 );
 export const devUrlFlag = Flag.string("dev-url").pipe(
@@ -102,6 +104,10 @@ const EnvServerConfig = Config.all({
   ),
   port: Config.port("T3CODE_PORT").pipe(Config.option, Config.map(Option.getOrUndefined)),
   host: Config.string("T3CODE_HOST").pipe(Config.option, Config.map(Option.getOrUndefined)),
+  upcomputerHome: Config.string("UPCOMPUTER_HOME").pipe(
+    Config.option,
+    Config.map(Option.getOrUndefined),
+  ),
   t3Home: Config.string("T3CODE_HOME").pipe(Config.option, Config.map(Option.getOrUndefined)),
   devUrl: Config.url("VITE_DEV_SERVER_URL").pipe(Config.option, Config.map(Option.getOrUndefined)),
   noBrowser: Config.boolean("T3CODE_NO_BROWSER").pipe(
@@ -263,6 +269,7 @@ export const resolveServerConfig = (
       Option.getOrUndefined(
         resolveOptionPrecedence(
           normalizedFlags.baseDir,
+          Option.fromUndefinedOr(env.upcomputerHome),
           Option.fromUndefinedOr(env.t3Home),
           Option.fromUndefinedOr(bootstrap?.t3Home),
         ),
