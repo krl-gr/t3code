@@ -17,6 +17,7 @@ import {
   ProviderInstanceId,
   PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
   PROVIDER_SEND_TURN_MAX_IMAGE_BYTES,
+  THREAD_CONTEXT_MAX_BINDINGS,
   ThreadContextBindingId,
 } from "@t3tools/contracts";
 import {
@@ -436,6 +437,7 @@ export interface ChatComposerHandle {
     elementContexts: ElementContextDraft[];
     previewAnnotations: PreviewAnnotationPayload[];
     reviewComments: ReviewCommentContext[];
+    pendingChatContextThreadIds: ThreadId[];
     selectedPromptEffort: string | null;
     selectedModelOptionsForDispatch: unknown;
     selectedModelSelection: ModelSelection;
@@ -640,6 +642,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const composerElementContexts = composerDraft.elementContexts;
   const composerPreviewAnnotations = composerDraft.previewAnnotations;
   const composerReviewComments = composerDraft.reviewComments;
+  const pendingChatContextThreadIds = composerDraft.pendingChatContextThreadIds;
   const nonPersistedComposerImageIds = composerDraft.nonPersistedImageIds;
 
   const setComposerDraftPrompt = useComposerDraftStore((store) => store.setPrompt);
@@ -664,6 +667,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const removeComposerDraftReviewComment = useComposerDraftStore(
     (store) => store.removeReviewComment,
   );
+  const addPendingChatContext = useComposerDraftStore((store) => store.addPendingChatContext);
+  const removePendingChatContext = useComposerDraftStore((store) => store.removePendingChatContext);
   const clearComposerDraftPersistedAttachments = useComposerDraftStore(
     (store) => store.clearPersistedAttachments,
   );
@@ -696,6 +701,16 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   );
   const attachingChatContextSourceIdRef = useRef<ThreadId | null>(null);
   const chatContextBindings = activeThread?.contextBindings ?? [];
+  const pendingChatContextThreads = useMemo(
+    () =>
+      pendingChatContextThreadIds.map((sourceThreadId) => ({
+        sourceThreadId,
+        thread: allThreadShells.find(
+          (thread) => thread.environmentId === environmentId && thread.id === sourceThreadId,
+        ),
+      })),
+    [allThreadShells, environmentId, pendingChatContextThreadIds],
+  );
   const chatContextProjectById = useMemo(
     () =>
       new Map(
@@ -706,7 +721,10 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     [allProjects, environmentId],
   );
   const chatContextCandidates = useMemo(() => {
-    const boundSourceIds = new Set(chatContextBindings.map((binding) => binding.sourceThreadId));
+    const boundSourceIds = new Set([
+      ...chatContextBindings.map((binding) => binding.sourceThreadId),
+      ...pendingChatContextThreadIds,
+    ]);
     const query = chatContextSearch.trim().toLowerCase();
     return allThreadShells
       .filter(
@@ -732,6 +750,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     activeThreadId,
     allThreadShells,
     chatContextBindings,
+    pendingChatContextThreadIds,
     chatContextProjectById,
     chatContextSearch,
     environmentId,
@@ -760,16 +779,21 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     },
     [chatContextCandidates],
   );
-  const chatContextDisabledReason =
-    !activeThread || !isServerThread
-      ? "Create the chat before attaching another conversation."
-      : chatContextBindings.length >= 4
-        ? "This chat already has the maximum of four snapshots."
-        : null;
+  const chatContextDisabledReason = !activeThread
+    ? "Open a chat draft before attaching another conversation."
+    : chatContextBindings.length + pendingChatContextThreadIds.length >= THREAD_CONTEXT_MAX_BINDINGS
+      ? `This chat already has the maximum of ${THREAD_CONTEXT_MAX_BINDINGS} snapshots.`
+      : null;
 
   const attachChatContextSource = useCallback(
     async (sourceThreadId: ThreadId) => {
       if (!activeThread || attachingChatContextSourceIdRef.current !== null) return;
+      if (!isServerThread) {
+        if (addPendingChatContext(composerDraftTarget, sourceThreadId)) {
+          setAttachmentPickerOpen(false);
+        }
+        return;
+      }
       attachingChatContextSourceIdRef.current = sourceThreadId;
       setAttachingChatContextSourceId(sourceThreadId);
       try {
@@ -798,7 +822,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         setAttachingChatContextSourceId(null);
       }
     },
-    [activeThread, attachThreadContext],
+    [activeThread, addPendingChatContext, attachThreadContext, composerDraftTarget, isServerThread],
   );
 
   const removeChatContextBinding = useCallback(
@@ -1232,7 +1256,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const showComposerAttachmentRow =
     !isComposerApprovalState &&
     pendingUserInputs.length === 0 &&
-    (chatContextBindings.length > 0 || composerAttachmentImages.length > 0);
+    (chatContextBindings.length > 0 ||
+      pendingChatContextThreadIds.length > 0 ||
+      composerAttachmentImages.length > 0);
   const showCollapsedMobilePromptRow =
     isComposerCollapsedMobile && !isComposerApprovalState && pendingUserInputs.length === 0;
 
@@ -2271,6 +2297,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         elementContexts: composerElementContextsRef.current,
         previewAnnotations: composerPreviewAnnotations,
         reviewComments: composerReviewComments,
+        pendingChatContextThreadIds,
         selectedPromptEffort,
         selectedModelOptionsForDispatch,
         selectedModelSelection,
@@ -2291,6 +2318,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       composerElementContextsRef,
       composerPreviewAnnotations,
       composerReviewComments,
+      pendingChatContextThreadIds,
       isConnecting,
       isComposerApprovalState,
       pendingUserInputs.length,
@@ -2624,6 +2652,47 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                             event.preventDefault();
                             event.stopPropagation();
                             void removeChatContextBinding(binding.id);
+                          }}
+                        />
+                      </TooltipTrigger>
+                      <TooltipPopup side="top" className="max-w-80 whitespace-normal">
+                        {tooltip}
+                      </TooltipPopup>
+                    </Tooltip>
+                  );
+                })}
+                {pendingChatContextThreads.map(({ sourceThreadId, thread }) => {
+                  const sourceProject = thread
+                    ? chatContextProjectById.get(thread.projectId)
+                    : undefined;
+                  const sourceTitle = thread?.title ?? "Unavailable chat";
+                  const tooltip = [
+                    "Chat snapshot will be attached when this chat is created",
+                    sourceProject?.title,
+                    sourceProject?.workspaceRoot,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ");
+                  return (
+                    <Tooltip key={sourceThreadId}>
+                      <TooltipTrigger
+                        render={
+                          <span
+                            className={cn(
+                              "relative mr-3.5 inline-flex h-8 max-w-full items-center overflow-visible rounded-md border border-border/70 bg-background/55 py-0 pl-2.5 pr-5 shadow-xs/5",
+                              SIDEBAR_MUTED_TEXT_CLASS,
+                              SIDEBAR_LABEL_TEXT_CLASS,
+                            )}
+                          />
+                        }
+                      >
+                        <span className="max-w-72 truncate">{sourceTitle}</span>
+                        <AttachmentRemoveButton
+                          ariaLabel={`Remove ${sourceTitle} context`}
+                          onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            removePendingChatContext(composerDraftTarget, sourceThreadId);
                           }}
                         />
                       </TooltipTrigger>

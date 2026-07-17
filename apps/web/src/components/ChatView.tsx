@@ -1081,6 +1081,7 @@ function ChatViewContent(props: ChatViewProps) {
     (store) => store.setPreviewAnnotations,
   );
   const setComposerDraftReviewComments = useComposerDraftStore((store) => store.setReviewComments);
+  const setPendingChatContexts = useComposerDraftStore((store) => store.setPendingChatContexts);
   const setComposerDraftModelSelection = useComposerDraftStore((store) => store.setModelSelection);
   const setComposerDraftRuntimeMode = useComposerDraftStore((store) => store.setRuntimeMode);
   const setComposerDraftInteractionMode = useComposerDraftStore(
@@ -3909,6 +3910,7 @@ function ChatViewContent(props: ChatViewProps) {
       elementContexts: composerElementContexts,
       previewAnnotations: composerPreviewAnnotations,
       reviewComments: composerReviewComments,
+      pendingChatContextThreadIds,
       selectedProvider: ctxSelectedProvider,
       selectedModel: ctxSelectedModel,
       selectedProviderModels: ctxSelectedProviderModels,
@@ -4000,6 +4002,7 @@ function ChatViewContent(props: ChatViewProps) {
     const composerElementContextsSnapshot = [...composerElementContexts];
     const composerPreviewAnnotationsSnapshot = [...composerPreviewAnnotations];
     const composerReviewCommentsSnapshot: ReviewCommentContext[] = [...composerReviewComments];
+    const pendingChatContextThreadIdsSnapshot = [...pendingChatContextThreadIds];
     const messageTextWithContexts = appendElementContextsToPrompt(
       appendTerminalContextsToPrompt(promptForSend, composerTerminalContextsSnapshot),
       composerElementContextsSnapshot,
@@ -4157,6 +4160,13 @@ function ChatViewContent(props: ChatViewProps) {
                       interactionMode,
                       branch: activeThreadBranch,
                       worktreePath: activeThread.worktreePath,
+                      ...(pendingChatContextThreadIdsSnapshot.length > 0
+                        ? {
+                            contextSources: pendingChatContextThreadIdsSnapshot.map(
+                              (sourceThreadId) => ({ sourceThreadId }),
+                            ),
+                          }
+                        : {}),
                       createdAt: activeThread.createdAt,
                     },
                   }
@@ -4209,7 +4219,9 @@ function ChatViewContent(props: ChatViewProps) {
         (useComposerDraftStore.getState().getComposerDraft(composerDraftTarget)?.previewAnnotations
           .length ?? 0) === 0 &&
         (useComposerDraftStore.getState().getComposerDraft(composerDraftTarget)?.reviewComments
-          .length ?? 0) === 0
+          .length ?? 0) === 0 &&
+        (useComposerDraftStore.getState().getComposerDraft(composerDraftTarget)
+          ?.pendingChatContextThreadIds.length ?? 0) === 0
       ) {
         setOptimisticUserMessages((existing) => {
           const removed = existing.filter((message) => message.id === messageIdForSend);
@@ -4230,6 +4242,7 @@ function ChatViewContent(props: ChatViewProps) {
         setComposerDraftElementContexts(composerDraftTarget, composerElementContextsSnapshot);
         setComposerDraftPreviewAnnotations(composerDraftTarget, composerPreviewAnnotationsSnapshot);
         setComposerDraftReviewComments(composerDraftTarget, composerReviewCommentsSnapshot);
+        setPendingChatContexts(composerDraftTarget, pendingChatContextThreadIdsSnapshot);
         composerRef.current?.resetCursorState({
           cursor: collapseExpandedComposerCursor(promptForSend, promptForSend.length),
           prompt: promptForSend,

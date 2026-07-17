@@ -6209,6 +6209,9 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
                   interactionMode: "default",
                   branch: "main",
                   worktreePath: null,
+                  contextSources: [
+                    { sourceThreadId: ThreadId.make("thread-bootstrap-context-source") },
+                  ],
                   createdAt,
                 },
                 prepareWorktree: {
@@ -6224,11 +6227,12 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
           ),
         );
 
-        assert.equal(response.sequence, 5);
+        assert.equal(response.sequence, 6);
         assert.deepEqual(
           dispatchedCommands.map((command) => command.type),
           [
             "thread.create",
+            "thread.context-binding.add",
             "thread.meta.update",
             "thread.activity.append",
             "thread.activity.append",
@@ -6272,7 +6276,17 @@ it.layer(NodeServices.layer)("server router seam", (it) => {
           setupActivities.map((command) => command.activity.kind),
           ["setup-script.requested", "setup-script.started"],
         );
-        const finalCommand = dispatchedCommands[4];
+        const contextCommand = dispatchedCommands[1];
+        assertTrue(contextCommand?.type === "thread.context-binding.add");
+        if (contextCommand?.type === "thread.context-binding.add") {
+          assert.equal(contextCommand.threadId, ThreadId.make("thread-bootstrap"));
+          assert.equal(
+            contextCommand.sourceThreadId,
+            ThreadId.make("thread-bootstrap-context-source"),
+          );
+          assert.equal(contextCommand.mode, "snapshot");
+        }
+        const finalCommand = dispatchedCommands[5];
         assertTrue(finalCommand?.type === "thread.turn.start");
         if (finalCommand?.type === "thread.turn.start") {
           assert.equal(finalCommand.bootstrap, undefined);

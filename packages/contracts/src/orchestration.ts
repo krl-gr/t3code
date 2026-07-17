@@ -661,6 +661,13 @@ const ThreadTurnStartBootstrapCreateThread = Schema.Struct({
   interactionMode: ProviderInteractionMode,
   branch: Schema.NullOr(TrimmedNonEmptyString),
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
+  contextSources: Schema.optional(
+    Schema.Array(
+      Schema.Struct({
+        sourceThreadId: ThreadId,
+      }),
+    ).check(Schema.isMaxLength(THREAD_CONTEXT_MAX_BINDINGS)),
+  ),
   createdAt: IsoDateTime,
 });
 

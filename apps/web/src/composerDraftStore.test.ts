@@ -596,6 +596,10 @@ describe("composerDraftStore element contexts", () => {
     const persistApi = useComposerDraftStore.persist as unknown as {
       getOptions: () => {
         partialize: (state: ReturnType<typeof useComposerDraftStore.getState>) => unknown;
+        merge: (
+          persistedState: unknown,
+          currentState: ReturnType<typeof useComposerDraftStore.getState>,
+        ) => ReturnType<typeof useComposerDraftStore.getState>;
       };
     };
     const persisted = persistApi.getOptions().partialize(useComposerDraftStore.getState()) as {
@@ -676,6 +680,69 @@ describe("composerDraftStore review comments", () => {
     expect(useComposerDraftStore.getState().getComposerDraft(draftId)?.reviewComments).toEqual([
       comment,
     ]);
+  });
+});
+
+describe("composerDraftStore pending chat contexts", () => {
+  const threadId = ThreadId.make("thread-pending-chat-context");
+  const threadRef = scopeThreadRef(TEST_ENVIRONMENT_ID, threadId);
+  const sourceIds = [1, 2, 3, 4, 5].map((index) => ThreadId.make(`thread-context-source-${index}`));
+
+  beforeEach(() => {
+    resetComposerDraftStore();
+  });
+
+  it("deduplicates pending sources, rejects self references, and enforces the limit", () => {
+    const store = useComposerDraftStore.getState();
+
+    expect(store.addPendingChatContext(threadRef, threadId)).toBe(false);
+    expect(store.addPendingChatContext(threadRef, sourceIds[0]!)).toBe(true);
+    expect(store.addPendingChatContext(threadRef, sourceIds[0]!)).toBe(false);
+    expect(store.addPendingChatContext(threadRef, sourceIds[1]!)).toBe(true);
+    expect(store.addPendingChatContext(threadRef, sourceIds[2]!)).toBe(true);
+    expect(store.addPendingChatContext(threadRef, sourceIds[3]!)).toBe(true);
+    expect(store.addPendingChatContext(threadRef, sourceIds[4]!)).toBe(false);
+
+    expect(draftFor(threadId, TEST_ENVIRONMENT_ID)?.pendingChatContextThreadIds).toEqual(
+      sourceIds.slice(0, 4),
+    );
+  });
+
+  it("persists, removes, and clears pending sources with composer content", () => {
+    const store = useComposerDraftStore.getState();
+    store.setPendingChatContexts(threadRef, [sourceIds[0]!, sourceIds[1]!]);
+    const persistApi = useComposerDraftStore.persist as unknown as {
+      getOptions: () => {
+        partialize: (state: ReturnType<typeof useComposerDraftStore.getState>) => unknown;
+        merge: (
+          persistedState: unknown,
+          currentState: ReturnType<typeof useComposerDraftStore.getState>,
+        ) => ReturnType<typeof useComposerDraftStore.getState>;
+      };
+    };
+    const persisted = persistApi.getOptions().partialize(useComposerDraftStore.getState()) as {
+      draftsByThreadKey?: Record<string, { pendingChatContextThreadIds?: string[] }>;
+    };
+
+    expect(
+      persisted.draftsByThreadKey?.[threadKeyFor(threadId, TEST_ENVIRONMENT_ID)]
+        ?.pendingChatContextThreadIds,
+    ).toEqual(sourceIds.slice(0, 2));
+
+    store.removePendingChatContext(threadRef, sourceIds[0]!);
+    expect(draftFor(threadId, TEST_ENVIRONMENT_ID)?.pendingChatContextThreadIds).toEqual([
+      sourceIds[1],
+    ]);
+
+    store.clearComposerContent(threadRef);
+    expect(draftFor(threadId, TEST_ENVIRONMENT_ID)).toBeUndefined();
+
+    resetComposerDraftStore();
+    const hydrated = persistApi.getOptions().merge(persisted, useComposerDraftStore.getState());
+    expect(
+      hydrated.draftsByThreadKey[threadKeyFor(threadId, TEST_ENVIRONMENT_ID)]
+        ?.pendingChatContextThreadIds,
+    ).toEqual(sourceIds.slice(0, 2));
   });
 });
 

@@ -51,6 +51,7 @@ import {
   AssetWorkspaceContextNotFoundError,
   AssetWorkspaceContextResolutionError,
   EnvironmentAuthorizationError,
+  ThreadContextBindingId,
   ThreadId,
   type TerminalAttachStreamEvent,
   type TerminalError,
@@ -848,6 +849,18 @@ const makeWsRpcLayer = (
                 createdAt: bootstrap.createThread.createdAt,
               });
               createdThread = true;
+
+              for (const contextSource of bootstrap.createThread.contextSources ?? []) {
+                yield* orchestrationEngine.dispatch({
+                  type: "thread.context-binding.add",
+                  commandId: yield* serverCommandId("bootstrap-thread-context-add"),
+                  threadId: command.threadId,
+                  bindingId: ThreadContextBindingId.make(`ctx-${yield* randomUUID}`),
+                  sourceThreadId: contextSource.sourceThreadId,
+                  mode: "snapshot",
+                  createdAt: command.createdAt,
+                });
+              }
             }
 
             if (bootstrap?.prepareWorktree) {

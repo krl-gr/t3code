@@ -267,6 +267,48 @@ it.effect("accepts ask interaction mode in thread.create commands", () =>
   }),
 );
 
+it.effect("decodes pending chat context sources in first-turn bootstrap", () =>
+  Effect.gen(function* () {
+    const parsed = yield* decodeOrchestrationCommand({
+      type: "thread.turn.start",
+      commandId: "cmd-bootstrap-context",
+      threadId: "thread-target",
+      message: {
+        messageId: "message-first",
+        role: "user",
+        text: "Use the attached conversation.",
+        attachments: [],
+      },
+      bootstrap: {
+        createThread: {
+          projectId: "project-1",
+          title: "New thread",
+          modelSelection: {
+            provider: "codex",
+            model: "gpt-5.4",
+          },
+          runtimeMode: "full-access",
+          interactionMode: "default",
+          branch: null,
+          worktreePath: null,
+          contextSources: [{ sourceThreadId: "thread-source" }],
+          createdAt: "2026-01-01T00:00:00.000Z",
+        },
+      },
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+
+    if (parsed.type !== "thread.turn.start") {
+      throw new Error(`Expected thread.turn.start command, received ${parsed.type}`);
+    }
+    assert.strictEqual(parsed.bootstrap?.createThread?.contextSources?.length, 1);
+    assert.strictEqual(
+      parsed.bootstrap?.createThread?.contextSources?.[0]?.sourceThreadId,
+      "thread-source",
+    );
+  }),
+);
+
 it.effect("accepts ask interaction mode in thread interaction mode commands", () =>
   Effect.gen(function* () {
     const parsed = yield* decodeOrchestrationCommand({
