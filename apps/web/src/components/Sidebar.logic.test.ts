@@ -16,6 +16,7 @@ import {
   resolveSidebarNewThreadSeedContext,
   resolveSidebarNewThreadEnvMode,
   resolveSidebarStageBadgeLabel,
+  resolveThreadCompletionTimestamp,
   resolveThreadRowClassName,
   resolveThreadStatusPill,
   shouldClearThreadSelectionOnMouseDown,
@@ -25,6 +26,7 @@ import {
 import {
   EnvironmentId,
   OrchestrationLatestTurn,
+  type OrchestrationSession,
   ProjectId,
   ProviderInstanceId,
   ThreadId,
@@ -111,6 +113,19 @@ function makeLatestTurn(overrides?: {
   };
 }
 
+function makeReadySession(updatedAt = "2026-03-09T10:05:00.000Z"): OrchestrationSession {
+  return {
+    threadId: ThreadId.make("thread-1"),
+    status: "ready",
+    providerName: null,
+    providerInstanceId: ProviderInstanceId.make("codex"),
+    runtimeMode: DEFAULT_RUNTIME_MODE,
+    activeTurnId: null,
+    lastError: null,
+    updatedAt,
+  };
+}
+
 describe("hasUnseenCompletion", () => {
   it("returns true when a thread completed after its last visit", () => {
     expect(
@@ -138,6 +153,27 @@ describe("hasUnseenCompletion", () => {
         session: null,
       }),
     ).toBe(true);
+  });
+
+  it("uses a settled session timestamp when a quick turn has no latest turn", () => {
+    const session = makeReadySession();
+    expect(resolveThreadCompletionTimestamp({ latestTurn: null, session })).toBe(session.updatedAt);
+    expect(
+      hasUnseenCompletion({
+        hasActionableProposedPlan: false,
+        hasPendingApprovals: false,
+        hasPendingUserInput: false,
+        interactionMode: "default",
+        latestTurn: null,
+        lastVisitedAt: "2026-03-09T10:04:00.000Z",
+        session,
+      }),
+    ).toBe(true);
+  });
+
+  it("does not treat an active session as a completed thread", () => {
+    const session = { ...makeReadySession(), status: "running" as const };
+    expect(resolveThreadCompletionTimestamp({ latestTurn: null, session })).toBeNull();
   });
 });
 

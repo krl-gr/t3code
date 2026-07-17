@@ -169,6 +169,7 @@ import {
   isTrailingDoubleClick,
   resolveSidebarNewThreadSeedContext,
   resolveSidebarNewThreadEnvMode,
+  resolveThreadCompletionTimestamp,
   resolveThreadRowClassName,
   resolveThreadStatusPill,
   orderItemsByPreferredIds,
@@ -1665,7 +1666,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       if (clicked === "mark-unread") {
         for (const threadKey of threadKeys) {
           const thread = sidebarThreadByKeyRef.current.get(threadKey);
-          markThreadUnread(threadKey, thread?.latestTurn?.completedAt);
+          markThreadUnread(threadKey, thread ? resolveThreadCompletionTimestamp(thread) : null);
         }
         clearSelection();
         return;
@@ -2055,7 +2056,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       }
 
       if (clicked === "mark-unread") {
-        markThreadUnread(threadKey, thread.latestTurn?.completedAt);
+        markThreadUnread(threadKey, resolveThreadCompletionTimestamp(thread));
         return;
       }
       if (clicked === "copy-path") {

@@ -159,9 +159,27 @@ export function useThreadJumpHintVisibility(): {
   };
 }
 
+export function resolveThreadCompletionTimestamp(
+  thread: Pick<SidebarThreadSummary, "latestTurn" | "session">,
+): string | null {
+  if (thread.latestTurn?.completedAt) {
+    return thread.latestTurn.completedAt;
+  }
+
+  // Quick turns without file changes may never materialize a latestTurn in the
+  // shell. Once such a session settles, its updatedAt is the only completion
+  // timestamp available to the sidebar.
+  if (thread.session?.status === "ready" || thread.session?.status === "idle") {
+    return thread.session.updatedAt;
+  }
+
+  return null;
+}
+
 export function hasUnseenCompletion(thread: ThreadStatusInput): boolean {
-  if (!thread.latestTurn?.completedAt) return false;
-  const completedAt = Date.parse(thread.latestTurn.completedAt);
+  const completionTimestamp = resolveThreadCompletionTimestamp(thread);
+  if (!completionTimestamp) return false;
+  const completedAt = Date.parse(completionTimestamp);
   if (Number.isNaN(completedAt)) return false;
   if (!thread.lastVisitedAt) return true;
 
