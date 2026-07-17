@@ -1681,6 +1681,8 @@ describe("composerDraftStore provider-scoped option updates", () => {
 describe("composerDraftStore runtime and interaction settings", () => {
   const threadId = ThreadId.make("thread-settings");
   const threadRef = scopeThreadRef(TEST_ENVIRONMENT_ID, threadId);
+  const projectRef = scopeProjectRef(TEST_ENVIRONMENT_ID, ProjectId.make("project-settings"));
+  const draftId = DraftId.make("draft-settings");
 
   beforeEach(() => {
     resetComposerDraftStore();
@@ -1694,12 +1696,37 @@ describe("composerDraftStore runtime and interaction settings", () => {
     expect(draftFor(threadId, TEST_ENVIRONMENT_ID)?.runtimeMode).toBe("approval-required");
   });
 
-  it("stores interaction mode overrides in the composer draft", () => {
+  it("stores Ask interaction mode overrides in the composer draft", () => {
     const store = useComposerDraftStore.getState();
 
-    store.setInteractionMode(threadRef, "plan");
+    store.setInteractionMode(threadRef, "ask");
 
-    expect(draftFor(threadId, TEST_ENVIRONMENT_ID)?.interactionMode).toBe("plan");
+    expect(draftFor(threadId, TEST_ENVIRONMENT_ID)?.interactionMode).toBe("ask");
+  });
+
+  it("preserves Ask mode for composer and new-thread drafts during hydration", () => {
+    const store = useComposerDraftStore.getState();
+    store.setProjectDraftThreadId(projectRef, draftId, {
+      threadId,
+      interactionMode: "ask",
+    });
+    store.setInteractionMode(draftId, "ask");
+
+    const persistApi = useComposerDraftStore.persist as unknown as {
+      getOptions: () => {
+        partialize: (state: ReturnType<typeof useComposerDraftStore.getState>) => unknown;
+        merge: (
+          persistedState: unknown,
+          currentState: ReturnType<typeof useComposerDraftStore.getState>,
+        ) => ReturnType<typeof useComposerDraftStore.getState>;
+      };
+    };
+    const options = persistApi.getOptions();
+    const persisted = options.partialize(useComposerDraftStore.getState());
+    const hydrated = options.merge(persisted, useComposerDraftStore.getInitialState());
+
+    expect(hydrated.draftsByThreadKey[draftId]?.interactionMode).toBe("ask");
+    expect(hydrated.draftThreadsByThreadKey[draftId]?.interactionMode).toBe("ask");
   });
 
   it("removes empty settings-only drafts when overrides are cleared", () => {
