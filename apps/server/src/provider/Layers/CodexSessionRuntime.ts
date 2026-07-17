@@ -103,7 +103,19 @@ export type CodexTurnStartParamsWithCollaborationMode =
 
 export type CodexResumeCursor = typeof CodexResumeCursorSchema.Type;
 type CodexServiceTier = NonNullable<EffectCodexSchema.V2ThreadStartParams["serviceTier"]>;
-type CodexDynamicToolSpec = ExperimentalDynamicToolSpec;
+type CodexDynamicToolFunctionSpec = {
+  readonly type: "function";
+  readonly name: string;
+  readonly description: string;
+  readonly inputSchema: Record<string, unknown>;
+};
+type CodexDynamicToolNamespaceSpec = {
+  readonly type: "namespace";
+  readonly name: string;
+  readonly description: string;
+  readonly tools: ReadonlyArray<CodexDynamicToolFunctionSpec>;
+};
+type CodexDynamicToolSpec = CodexDynamicToolFunctionSpec | CodexDynamicToolNamespaceSpec;
 type CodexThreadStartParamsWithDynamicTools = EffectCodexSchema.V2ThreadStartParams & {
   readonly dynamicTools?: ReadonlyArray<CodexDynamicToolSpec>;
 };
@@ -321,6 +333,42 @@ function runtimeModeToThreadConfig(input: RuntimeMode): {
         sandbox: "danger-full-access",
       };
   }
+}
+
+export function buildCodexDynamicTools(
+  specs: ReadonlyArray<ExperimentalDynamicToolSpec>,
+): ReadonlyArray<CodexDynamicToolSpec> {
+  const functions: CodexDynamicToolFunctionSpec[] = [];
+  const namespaces = new Map<string, CodexDynamicToolFunctionSpec[]>();
+
+  for (const spec of specs) {
+    const tool: CodexDynamicToolFunctionSpec = {
+      type: "function",
+      name: spec.name,
+      description: spec.description,
+      inputSchema: spec.inputSchema,
+    };
+    if (spec.namespace === undefined) {
+      functions.push(tool);
+      continue;
+    }
+    const namespaceTools = namespaces.get(spec.namespace);
+    if (namespaceTools === undefined) {
+      namespaces.set(spec.namespace, [tool]);
+    } else {
+      namespaceTools.push(tool);
+    }
+  }
+
+  return [
+    ...functions,
+    ...[...namespaces].map(([name, tools]) => ({
+      type: "namespace" as const,
+      name,
+      description: `Tools in the '${name}' namespace.`,
+      tools,
+    })),
+  ];
 }
 
 function buildThreadStartParams(input: {
@@ -1404,7 +1452,7 @@ export const makeCodexSessionRuntime = (
         requestedModel,
         serviceTier: options.serviceTier,
         resumeThreadId: readResumeCursorThreadId(options.resumeCursor),
-        dynamicTools: registeredDynamicTools,
+        dynamicTools: buildCodexDynamicTools(registeredDynamicTools),
       });
 
       const providerThreadId = opened.thread.id;

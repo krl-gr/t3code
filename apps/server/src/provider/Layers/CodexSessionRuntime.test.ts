@@ -14,6 +14,7 @@ import {
   CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS,
 } from "../CodexDeveloperInstructions.ts";
 import {
+  buildCodexDynamicTools,
   buildTurnStartParams,
   hasConfiguredMcpServer,
   isRecoverableThreadResumeError,
@@ -352,7 +353,61 @@ describe("openCodexThread", () => {
     }),
   );
 
-  it.effect("sends dynamic tools through raw thread/start", () =>
+  it("converts flat registrations to canonical Codex dynamic tools", () => {
+    NodeAssert.deepStrictEqual(
+      buildCodexDynamicTools([
+        {
+          type: "function",
+          name: "standalone_tool",
+          description: "A standalone tool.",
+          inputSchema: { type: "object" },
+        },
+        {
+          type: "function",
+          namespace: "upcomputer.tasks",
+          name: "task_context",
+          description: "Resolve task context.",
+          inputSchema: { type: "object" },
+        },
+        {
+          type: "function",
+          namespace: "upcomputer.tasks",
+          name: "task_get",
+          description: "Load one task.",
+          inputSchema: { type: "object" },
+        },
+      ]),
+      [
+        {
+          type: "function",
+          name: "standalone_tool",
+          description: "A standalone tool.",
+          inputSchema: { type: "object" },
+        },
+        {
+          type: "namespace",
+          name: "upcomputer.tasks",
+          description: "Tools in the 'upcomputer.tasks' namespace.",
+          tools: [
+            {
+              type: "function",
+              name: "task_context",
+              description: "Resolve task context.",
+              inputSchema: { type: "object" },
+            },
+            {
+              type: "function",
+              name: "task_get",
+              description: "Load one task.",
+              inputSchema: { type: "object" },
+            },
+          ],
+        },
+      ],
+    );
+  });
+
+  it.effect("sends canonical dynamic tools through raw thread/start", () =>
     Effect.gen(function* () {
       const calls: Array<{ kind: "typed" | "raw"; method: string; payload: unknown }> = [];
       const started = makeThreadOpenResponse("dynamic-thread");
@@ -382,11 +437,17 @@ describe("openCodexThread", () => {
         resumeThreadId: undefined,
         dynamicTools: [
           {
-            type: "function",
-            namespace: "upcomputer.tasks",
-            name: "task_context",
-            description: "Resolve task context.",
-            inputSchema: { type: "object" },
+            type: "namespace",
+            name: "upcomputer.tasks",
+            description: "Task management tools.",
+            tools: [
+              {
+                type: "function",
+                name: "task_context",
+                description: "Resolve task context.",
+                inputSchema: { type: "object" },
+              },
+            ],
           },
         ],
       });
@@ -403,11 +464,17 @@ describe("openCodexThread", () => {
           model: "gpt-5.3-codex",
           dynamicTools: [
             {
-              type: "function",
-              namespace: "upcomputer.tasks",
-              name: "task_context",
-              description: "Resolve task context.",
-              inputSchema: { type: "object" },
+              type: "namespace",
+              name: "upcomputer.tasks",
+              description: "Task management tools.",
+              tools: [
+                {
+                  type: "function",
+                  name: "task_context",
+                  description: "Resolve task context.",
+                  inputSchema: { type: "object" },
+                },
+              ],
             },
           ],
         },
