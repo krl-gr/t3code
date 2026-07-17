@@ -5,7 +5,7 @@ import type {
   ResolvedKeybindingsConfig,
   ThreadId,
 } from "@t3tools/contracts";
-import { FileDiffIcon, PanelRightIcon, TerminalSquareIcon } from "lucide-react";
+import { FileDiffIcon, TerminalSquareIcon } from "lucide-react";
 import {
   memo,
   type ReactNode,
@@ -30,6 +30,7 @@ import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { usePrimaryEnvironmentId } from "~/state/environments";
 import { useUiStateStore } from "~/uiStateStore";
 import GitActionsControl from "../GitActionsControl";
+import { SidebarRightIcon } from "./SidebarRightIcon";
 import ProjectScriptsControl, {
   type NewProjectScriptInput,
   type ProjectScriptActionResult,
@@ -269,7 +270,7 @@ export const ChatContextActions = memo(function ChatContextActions(props: ChatCo
                   />
                 }
               >
-                <PanelRightIcon className="size-4" />
+                <SidebarRightIcon className="size-4" />
               </TooltipTrigger>
               <TooltipPopup side="top">Toggle right panel</TooltipPopup>
             </Tooltip>
@@ -429,7 +430,7 @@ export const ChatContextActions = memo(function ChatContextActions(props: ChatCo
                 actionId="rightPanel.toggle"
                 checked={pinnedContextActionIds.has("rightPanel.toggle")}
                 disabled={!props.rightPanelAvailable}
-                icon={<PanelRightIcon className="size-4" />}
+                icon={<SidebarRightIcon className="size-4" />}
                 shortcutLabel={shortcutLabelForCommand(props.keybindings, "rightPanel.toggle")}
                 onCheckedChange={setContextQuickActionPinned}
                 onSelect={props.onToggleRightPanel}

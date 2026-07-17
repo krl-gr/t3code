@@ -1,6 +1,7 @@
-import { Maximize2Icon, Minimize2Icon, PanelBottomIcon, PanelRightIcon } from "lucide-react";
+import { Maximize2Icon, Minimize2Icon, PanelBottomIcon } from "lucide-react";
 import { memo } from "react";
 
+import { SidebarRightIcon } from "./SidebarRightIcon";
 import { Toggle } from "../ui/toggle";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 
@@ -86,7 +87,7 @@ export const RightPanelVisibilityControl = memo(function RightPanelVisibilityCon
             size="sm"
             disabled={!available}
           >
-            <PanelRightIcon className="size-3.5" />
+            <SidebarRightIcon className="size-3.5" />
           </Toggle>
         }
       />
