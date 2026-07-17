@@ -5103,7 +5103,12 @@ function ChatViewContent(props: ChatViewProps) {
   ) : null;
 
   return (
-    <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden bg-app-content-background">
+    <div
+      className={cn(
+        "relative flex min-h-0 min-w-0 flex-1 overflow-hidden bg-app-content-background",
+        !shouldUsePlanSidebarSheet && rightPanelOpen && activeThreadRef && "border-t border-border",
+      )}
+    >
       {showHeaderControls && rightPanelOpen && !shouldUsePlanSidebarSheet
         ? panelLayoutControls
         : null}
