@@ -126,6 +126,9 @@ function DockviewWatermark(_props: IWatermarkPanelProps) {
   return <NoActiveThreadContent />;
 }
 
+const DOCKVIEW_HEADER_ICON_BUTTON_CLASS =
+  "inline-flex size-8! items-center justify-center rounded-full !bg-transparent !text-muted-foreground transition-colors hover:!bg-transparent hover:!text-foreground focus-visible:outline-none focus-visible:!ring-0 focus-visible:ring-offset-0 active:!bg-transparent dark:!text-white/50 dark:hover:!text-white/86 [&_svg]:text-current!";
+
 function DockviewHeaderIconButton(props: {
   "aria-label": string;
   children: ReactNode;
@@ -136,10 +139,7 @@ function DockviewHeaderIconButton(props: {
   return (
     <button
       aria-label={props["aria-label"]}
-      className={cn(
-        "inline-flex size-8 items-center justify-center rounded-full text-[#7a7a7a] transition-colors hover:bg-white/[0.05] hover:text-[#bab9ba] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#3a3a3a]",
-        props.className,
-      )}
+      className={cn(DOCKVIEW_HEADER_ICON_BUTTON_CLASS, props.className)}
       onClick={(event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -221,7 +221,7 @@ function DockviewPrefixHeaderActions(props: IDockviewHeaderActionsProps) {
       )}
     >
       <SidebarTrigger
-        className="size-8 rounded-full !bg-transparent text-muted-foreground hover:!bg-transparent hover:text-foreground focus-visible:!ring-0 focus-visible:ring-offset-0 active:!bg-transparent dark:text-white/50 dark:hover:text-white/86"
+        className={DOCKVIEW_HEADER_ICON_BUTTON_CLASS}
         onPointerDown={(event) => event.stopPropagation()}
       />
     </div>
@@ -337,7 +337,7 @@ function DockviewRightHeaderActions(props: IDockviewHeaderActionsProps) {
             render={
               <button
                 aria-label="More workspace tabs"
-                className="inline-flex size-8 items-center justify-center rounded-full text-[#7a7a7a] transition-colors hover:bg-white/[0.05] hover:text-[#bab9ba] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#3a3a3a]"
+                className={DOCKVIEW_HEADER_ICON_BUTTON_CLASS}
                 onPointerDown={(event) => event.stopPropagation()}
                 title="More workspace tabs"
                 type="button"
@@ -372,7 +372,6 @@ function DockviewRightHeaderActions(props: IDockviewHeaderActionsProps) {
       ) : null}
       <DockviewHeaderIconButton
         aria-label="New workspace tab"
-        className="!bg-transparent !text-muted-foreground hover:!bg-transparent hover:!text-foreground focus-visible:!ring-0 dark:!text-white/50 dark:hover:!text-white/86"
         onClick={() => onCreateDraftPanel(props.group.id)}
         title={
           newThreadShortcutLabel
