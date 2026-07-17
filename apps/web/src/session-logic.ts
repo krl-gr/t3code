@@ -12,6 +12,7 @@ import {
   type ThreadId,
   type TurnId,
 } from "@t3tools/contracts";
+import { extractProposedPlanMarkdown } from "@t3tools/shared/interactionMode";
 
 import type {
   ChatMessage,
@@ -1337,17 +1338,42 @@ function compareActivityLifecycleRank(kind: string): number {
   return 1;
 }
 
+function isMessageReplacedByProposedPlan(
+  message: ChatMessage,
+  proposedPlans: ReadonlyArray<ProposedPlan>,
+): boolean {
+  if (message.role !== "assistant" || message.turnId === null) {
+    return false;
+  }
+
+  const sourceText = message.text.trim();
+  if (!sourceText.startsWith("<proposed_plan>") || !sourceText.endsWith("</proposed_plan>")) {
+    return false;
+  }
+
+  const extractedPlan = extractProposedPlanMarkdown(sourceText);
+  if (extractedPlan === undefined) {
+    return false;
+  }
+
+  return proposedPlans.some(
+    (plan) => plan.turnId === message.turnId && plan.planMarkdown.trim() === extractedPlan,
+  );
+}
+
 export function deriveTimelineEntries(
   messages: ReadonlyArray<ChatMessage>,
   proposedPlans: ReadonlyArray<ProposedPlan>,
   workEntries: ReadonlyArray<WorkLogEntry>,
 ): TimelineEntry[] {
-  const messageRows: TimelineEntry[] = messages.map((message) => ({
-    id: message.id,
-    kind: "message",
-    createdAt: message.createdAt,
-    message,
-  }));
+  const messageRows: TimelineEntry[] = messages
+    .filter((message) => !isMessageReplacedByProposedPlan(message, proposedPlans))
+    .map((message) => ({
+      id: message.id,
+      kind: "message",
+      createdAt: message.createdAt,
+      message,
+    }));
   const proposedPlanRows: TimelineEntry[] = proposedPlans.map((proposedPlan) => ({
     id: proposedPlan.id,
     kind: "proposed-plan",

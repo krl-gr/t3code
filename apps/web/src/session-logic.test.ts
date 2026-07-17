@@ -1537,6 +1537,72 @@ describe("deriveTimelineEntries", () => {
       },
     });
   });
+
+  it("replaces a raw proposed-plan assistant message with its plan card", () => {
+    const turnId = TurnId.make("turn-plan");
+    const entries = deriveTimelineEntries(
+      [
+        {
+          id: MessageId.make("assistant:turn-plan"),
+          role: "assistant",
+          text: "<proposed_plan>\n# Ship it\n\n- step 1\n</proposed_plan>",
+          createdAt: "2026-02-23T00:00:01.000Z",
+          turnId,
+          updatedAt: "2026-02-23T00:00:01.000Z",
+          streaming: false,
+        },
+      ],
+      [
+        {
+          id: "plan:thread-1:turn:turn-plan",
+          turnId,
+          planMarkdown: "# Ship it\n\n- step 1",
+          implementedAt: null,
+          implementationThreadId: null,
+          createdAt: "2026-02-23T00:00:01.003Z",
+          updatedAt: "2026-02-23T00:00:01.003Z",
+        },
+      ],
+      [],
+    );
+
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({
+      kind: "proposed-plan",
+      proposedPlan: { planMarkdown: "# Ship it\n\n- step 1" },
+    });
+  });
+
+  it("keeps assistant text when it contains content outside the proposed-plan block", () => {
+    const turnId = TurnId.make("turn-plan");
+    const entries = deriveTimelineEntries(
+      [
+        {
+          id: MessageId.make("assistant:turn-plan"),
+          role: "assistant",
+          text: "Review this plan:\n<proposed_plan># Ship it</proposed_plan>",
+          createdAt: "2026-02-23T00:00:01.000Z",
+          turnId,
+          updatedAt: "2026-02-23T00:00:01.000Z",
+          streaming: false,
+        },
+      ],
+      [
+        {
+          id: "plan:thread-1:turn:turn-plan",
+          turnId,
+          planMarkdown: "# Ship it",
+          implementedAt: null,
+          implementationThreadId: null,
+          createdAt: "2026-02-23T00:00:01.003Z",
+          updatedAt: "2026-02-23T00:00:01.003Z",
+        },
+      ],
+      [],
+    );
+
+    expect(entries.map((entry) => entry.kind)).toEqual(["message", "proposed-plan"]);
+  });
 });
 
 describe("deriveWorkLogEntries context window handling", () => {
