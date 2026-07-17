@@ -20,7 +20,8 @@ export const ComposerPendingApprovalActions = memo(function ComposerPendingAppro
     <>
       <Button
         size="sm"
-        variant="ghost"
+        variant="outline"
+        className="h-9 rounded-full px-4 text-muted-foreground before:rounded-full sm:h-8"
         disabled={isResponding}
         onClick={() => void onRespondToApproval(requestId, "cancel")}
       >
@@ -29,6 +30,7 @@ export const ComposerPendingApprovalActions = memo(function ComposerPendingAppro
       <Button
         size="sm"
         variant="destructive-outline"
+        className="h-9 rounded-full px-4 before:rounded-full sm:h-8"
         disabled={isResponding}
         onClick={() => void onRespondToApproval(requestId, "decline")}
       >
@@ -37,6 +39,7 @@ export const ComposerPendingApprovalActions = memo(function ComposerPendingAppro
       <Button
         size="sm"
         variant="outline"
+        className="h-9 rounded-full px-4 text-muted-foreground before:rounded-full sm:h-8"
         disabled={isResponding}
         onClick={() => void onRespondToApproval(requestId, "acceptForSession")}
       >
@@ -45,6 +48,7 @@ export const ComposerPendingApprovalActions = memo(function ComposerPendingAppro
       <Button
         size="sm"
         variant="default"
+        className="h-9 rounded-full px-5 before:rounded-full sm:h-8"
         disabled={isResponding}
         onClick={() => void onRespondToApproval(requestId, "accept")}
       >

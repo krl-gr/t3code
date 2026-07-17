@@ -2549,7 +2549,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
             className={cn(
               "relative px-3 pb-2 sm:px-6",
               hasComposerHeader ? "pt-2.5 sm:pt-5" : "pt-3.5 sm:pt-6",
-              isComposerCollapsedMobile && "hidden",
+              (isComposerCollapsedMobile || isComposerApprovalState) && "hidden",
             )}
           >
             {composerMenuOpen && !isComposerApprovalState && (

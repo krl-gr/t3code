@@ -1,5 +1,7 @@
 import { memo } from "react";
 import { type PendingApproval } from "../../session-logic";
+import { cn } from "~/lib/utils";
+import { SIDEBAR_MUTED_TEXT_CLASS } from "../sidebar/sidebarTextStyles";
 
 interface ComposerPendingApprovalPanelProps {
   approval: PendingApproval;
@@ -15,15 +17,25 @@ export const ComposerPendingApprovalPanel = memo(function ComposerPendingApprova
       ? "Command approval requested"
       : approval.requestKind === "file-read"
         ? "File-read approval requested"
-        : "File-change approval requested";
+        : approval.requestKind === "file-change"
+          ? "File-change approval requested"
+          : "Approval requested";
+  const approvalDetail = approval.detail?.trim();
 
   return (
-    <div className="px-4 py-3.5 sm:px-5 sm:py-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="uppercase text-sm tracking-[0.2em]">PENDING APPROVAL</span>
-        <span className="text-sm font-medium">{approvalSummary}</span>
+    <div className="px-5 py-4 sm:px-6">
+      <div className="flex min-w-0 flex-wrap items-baseline gap-x-1.5 gap-y-1 text-base leading-6 sm:text-sm sm:leading-5">
+        <span className="font-medium text-foreground">
+          {approvalSummary}
+          {approvalDetail ? ":" : ""}
+        </span>
+        {approvalDetail ? (
+          <span className={cn("min-w-0 break-words", SIDEBAR_MUTED_TEXT_CLASS)}>
+            {approvalDetail}
+          </span>
+        ) : null}
         {pendingCount > 1 ? (
-          <span className="text-xs text-muted-foreground">1/{pendingCount}</span>
+          <span className={cn("text-sm", SIDEBAR_MUTED_TEXT_CLASS)}>1/{pendingCount}</span>
         ) : null}
       </div>
     </div>
