@@ -16,7 +16,8 @@ export interface UseResizableWidthOptions {
   readonly storageKey: string;
   readonly defaultWidth: number;
   readonly minWidth: number;
-  readonly maxWidth: number;
+  /** May be resolved lazily when the available width is owned by a resizable container. */
+  readonly maxWidth: number | (() => number);
   /** Notifies layout owners while live pointer resizing is in progress. */
   readonly onResizeStateChange?: (resizing: boolean) => void;
   /**
@@ -44,7 +45,10 @@ export interface ResizableWidthHandlers {
  * lifts the pointer.
  */
 export function useResizableWidth(options: UseResizableWidthOptions): {
+  /** Width constrained by the currently available maximum. */
   readonly width: number;
+  /** User-selected width before a transient container constraint is applied. */
+  readonly preferredWidth: number;
   readonly handlers: ResizableWidthHandlers;
 } {
   const { storageKey, defaultWidth, minWidth, maxWidth, edge, onResizeStateChange } = options;
@@ -52,7 +56,8 @@ export function useResizableWidth(options: UseResizableWidthOptions): {
   const clamp = useCallback(
     (value: number): number => {
       if (!Number.isFinite(value)) return defaultWidth;
-      return Math.max(minWidth, Math.min(maxWidth, value));
+      const resolvedMaxWidth = typeof maxWidth === "function" ? maxWidth() : maxWidth;
+      return Math.max(minWidth, Math.min(resolvedMaxWidth, value));
     },
     [defaultWidth, maxWidth, minWidth],
   );
@@ -209,6 +214,7 @@ export function useResizableWidth(options: UseResizableWidthOptions): {
 
   return {
     width: clampedWidth,
+    preferredWidth: width,
     handlers: { onPointerDown, onPointerMove, onPointerUp, onPointerCancel },
   };
 }

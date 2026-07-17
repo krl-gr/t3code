@@ -355,7 +355,10 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
       {...(props.onResizeStateChange ? { onResizeStateChange: props.onResizeStateChange } : {})}
     >
       <div
-        className={cn("workspace-topbar gap-1 pl-2", props.mode === "inline" ? "pr-2" : "pr-3")}
+        className={cn(
+          "workspace-topbar gap-1 pl-2",
+          props.mode === "inline" || props.mode === "local-overlay" ? "pr-2" : "pr-3",
+        )}
         data-right-panel-tabbar
       >
         <ScrollArea

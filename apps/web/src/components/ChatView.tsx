@@ -114,7 +114,8 @@ import { useTurnDiffSummaries } from "../hooks/useTurnDiffSummaries";
 import { isCommandPaletteOpen } from "../commandPaletteContext";
 import { buildTemporaryWorktreeBranchName } from "@t3tools/shared/git";
 import { useMediaQuery } from "../hooks/useMediaQuery";
-import { RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY } from "../rightPanelLayout";
+import { useRightPanelLayoutMode } from "../hooks/useRightPanelLayoutMode";
+import { RIGHT_PANEL_GLOBAL_SHEET_MEDIA_QUERY } from "../rightPanelLayout";
 import {
   selectActiveRightPanel,
   selectActiveRightPanelSurface,
@@ -1126,6 +1127,7 @@ function ChatViewContent(props: ChatViewProps) {
     null,
   );
   const [isRightPanelResizing, setIsRightPanelResizing] = useState(false);
+  const [isRightPanelLayoutTransitioning, setIsRightPanelLayoutTransitioning] = useState(false);
   const [respondingRequestIds, setRespondingRequestIds] = useState<ApprovalRequestId[]>([]);
   const [respondingUserInputRequestIds, setRespondingUserInputRequestIds] = useState<
     ApprovalRequestId[]
@@ -1135,7 +1137,15 @@ function ChatViewContent(props: ChatViewProps) {
   >({});
   const [pendingUserInputQuestionIndexByRequestId, setPendingUserInputQuestionIndexByRequestId] =
     useState<Record<string, number>>({});
-  const shouldUsePlanSidebarSheet = useMediaQuery(RIGHT_PANEL_INLINE_LAYOUT_MEDIA_QUERY);
+  const [chatViewElement, setChatViewElement] = useState<HTMLDivElement | null>(null);
+  const viewportUsesRightPanelSheet = useMediaQuery(RIGHT_PANEL_GLOBAL_SHEET_MEDIA_QUERY);
+  const rightPanelLayoutMode = useRightPanelLayoutMode(
+    chatViewElement,
+    viewportUsesRightPanelSheet,
+  );
+  const shouldUsePlanSidebarSheet = rightPanelLayoutMode === "sheet";
+  const shouldUseLocalRightPanelOverlay = rightPanelLayoutMode === "local-overlay";
+  const previousRightPanelLayoutModeRef = useRef(rightPanelLayoutMode);
   // Tracks whether the user explicitly dismissed the sidebar for the active turn.
   const planSidebarDismissedForTurnRef = useRef<string | null>(null);
   // When set, the thread-change reset effect will open the sidebar instead of closing it.
@@ -1169,6 +1179,23 @@ function ChatViewContent(props: ChatViewProps) {
   const attachmentPreviewPromotionInFlightByMessageIdRef = useRef<Record<string, true>>({});
   const sendInFlightRef = useRef(false);
   const terminalUiOpenByThreadRef = useRef<Record<string, boolean>>({});
+
+  useLayoutEffect(() => {
+    if (previousRightPanelLayoutModeRef.current === rightPanelLayoutMode) return;
+    previousRightPanelLayoutModeRef.current = rightPanelLayoutMode;
+    setIsRightPanelLayoutTransitioning(true);
+
+    let settleFrame = 0;
+    const layoutFrame = window.requestAnimationFrame(() => {
+      settleFrame = window.requestAnimationFrame(() => {
+        setIsRightPanelLayoutTransitioning(false);
+      });
+    });
+    return () => {
+      window.cancelAnimationFrame(layoutFrame);
+      if (settleFrame !== 0) window.cancelAnimationFrame(settleFrame);
+    };
+  }, [rightPanelLayoutMode]);
 
   useLayoutEffect(() => {
     if (!composerOverlayElement) return;
@@ -5104,10 +5131,12 @@ function ChatViewContent(props: ChatViewProps) {
 
   return (
     <div
+      ref={setChatViewElement}
       className={cn(
         "relative flex min-h-0 min-w-0 flex-1 overflow-hidden bg-app-content-background",
         !shouldUsePlanSidebarSheet && rightPanelOpen && activeThreadRef && "border-t border-border",
       )}
+      style={{ containerType: "inline-size" }}
     >
       {showHeaderControls && rightPanelOpen && !shouldUsePlanSidebarSheet
         ? panelLayoutControls
@@ -5204,7 +5233,9 @@ function ChatViewContent(props: ChatViewProps) {
                 onAnchorReady={onTimelineAnchorReady}
                 onAnchorSizeChanged={onTimelineAnchorSizeChanged}
                 contentInsetEndAdjustment={composerOverlayHeight}
-                preserveVisibleContentPositionOnResize={isRightPanelResizing}
+                preserveVisibleContentPositionOnResize={
+                  isRightPanelResizing || isRightPanelLayoutTransitioning
+                }
                 onIsAtEndChange={onIsAtEndChange}
                 onManualNavigation={cancelTimelineLiveFollowForUserNavigation}
               />
@@ -5429,7 +5460,7 @@ function ChatViewContent(props: ChatViewProps) {
 
       {!shouldUsePlanSidebarSheet && rightPanelOpen && activeThreadRef ? (
         <RightPanelTabs
-          mode="inline"
+          mode={shouldUseLocalRightPanelOverlay ? "local-overlay" : "inline"}
           onResizeStateChange={setIsRightPanelResizing}
           layoutControls={embeddedRightPanelLayoutControls}
           maximized={rightPanelMaximized}
