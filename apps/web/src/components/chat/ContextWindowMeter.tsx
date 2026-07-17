@@ -25,7 +25,7 @@ export function ContextWindowMeter(props: {
   const totalProcessedTokens = usage.totalProcessedTokens ?? null;
   const showTotalProcessed = totalProcessedTokens !== null && totalProcessedTokens > 0;
   const isOverloaded = normalizedPercentage > 90;
-  const usageColor = isOverloaded ? "var(--color-red-500)" : "var(--color-blue-500)";
+  const usageColor = isOverloaded ? "var(--color-red-500)" : "var(--color-muted-foreground)";
 
   return (
     <Popover>
