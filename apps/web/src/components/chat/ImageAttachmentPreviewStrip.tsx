@@ -34,7 +34,7 @@ export function AttachmentRemoveButton({
       type="button"
       aria-label={ariaLabel}
       className={cn(
-        "absolute right-0 top-0 z-10 inline-flex size-7 -translate-y-1/2 translate-x-1/2 items-center justify-center rounded-full border border-border/70 bg-background text-muted-foreground shadow-sm transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "absolute right-0 top-0 z-10 inline-flex size-[22px] -translate-y-1/2 translate-x-1/2 items-center justify-center rounded-full border border-border/70 bg-white text-muted-foreground shadow-sm transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:border-transparent dark:bg-[#525252] dark:text-white dark:shadow-none dark:hover:bg-[#666666] dark:hover:text-white",
         className,
       )}
       onClick={onClick}

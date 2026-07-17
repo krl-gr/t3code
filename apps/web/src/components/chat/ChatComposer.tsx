@@ -2638,7 +2638,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                         render={
                           <span
                             className={cn(
-                              "relative mr-3.5 inline-flex h-8 max-w-full items-center overflow-visible rounded-md border border-border/70 bg-background/55 py-0 pl-2.5 pr-5 shadow-xs/5",
+                              "relative mr-3.5 inline-flex h-8 max-w-full items-center overflow-visible rounded-md border border-border/70 bg-background/55 py-0 pl-2.5 pr-5 shadow-xs/5 dark:border-white/12 dark:bg-transparent dark:shadow-none",
                               SIDEBAR_MUTED_TEXT_CLASS,
                               SIDEBAR_LABEL_TEXT_CLASS,
                             )}
@@ -2679,7 +2679,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                         render={
                           <span
                             className={cn(
-                              "relative mr-3.5 inline-flex h-8 max-w-full items-center overflow-visible rounded-md border border-border/70 bg-background/55 py-0 pl-2.5 pr-5 shadow-xs/5",
+                              "relative mr-3.5 inline-flex h-8 max-w-full items-center overflow-visible rounded-md border border-border/70 bg-background/55 py-0 pl-2.5 pr-5 shadow-xs/5 dark:border-white/12 dark:bg-transparent dark:shadow-none",
                               SIDEBAR_MUTED_TEXT_CLASS,
                               SIDEBAR_LABEL_TEXT_CLASS,
                             )}

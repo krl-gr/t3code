@@ -10,8 +10,9 @@ import {
 } from "./contextQuickActions";
 
 describe("context quick actions", () => {
-  it("uses the UpComputer context-bar defaults", () => {
-    expect(sanitizeContextQuickActionIds(undefined)).toEqual(DEFAULT_CONTEXT_QUICK_ACTION_IDS);
+  it("defaults to Git and right-panel actions", () => {
+    expect(DEFAULT_CONTEXT_QUICK_ACTION_IDS).toEqual(["git.quick", "rightPanel.toggle"]);
+    expect(sanitizeContextQuickActionIds(undefined)).toEqual(["git.quick", "rightPanel.toggle"]);
   });
 
   it("keeps valid actions in user order and removes duplicates", () => {

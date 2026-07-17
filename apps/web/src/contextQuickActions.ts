@@ -12,13 +12,7 @@ export function contextOpenEditorActionId(editorId: EditorId): ContextOpenEditor
 
 const EDITOR_ID_SET = new Set<string>(EDITORS.map((editor) => editor.id));
 
-export const DEFAULT_CONTEXT_QUICK_ACTION_IDS = [
-  "git.quick",
-  CONTEXT_PREFERRED_OPEN_QUICK_ACTION_ID,
-  "terminal.toggle",
-  "diff.toggle",
-  "rightPanel.toggle",
-] as const;
+export const DEFAULT_CONTEXT_QUICK_ACTION_IDS = ["git.quick", "rightPanel.toggle"] as const;
 
 export const CONTEXT_NON_EDITOR_QUICK_ACTION_IDS = [
   "git.quick",
