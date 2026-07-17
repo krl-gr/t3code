@@ -201,13 +201,7 @@ describe("parsePersistedState", () => {
         "environment:thread-1": "2026-02-25T12:35:00.000Z",
       },
       defaultAdvertisedEndpointKey: "desktop-core:lan:http",
-      contextQuickActionIds: [
-        "git.quick",
-        "open.preferred",
-        "terminal.toggle",
-        "diff.toggle",
-        "rightPanel.toggle",
-      ],
+      contextQuickActionIds: ["git.quick", "rightPanel.toggle"],
       projectQuickActionIdsByProjectKey: {},
       threadChangedFilesExpandedById: {
         "environment:thread-1": {
