@@ -958,6 +958,9 @@ export interface DesktopBridge {
   // info (omits instances whose backend hasn't produced a config yet).
   // The primary backend is identified by id === PRIMARY_LOCAL_ENVIRONMENT_ID.
   getLocalEnvironmentBootstraps: () => readonly DesktopEnvironmentBootstrap[];
+  // Non-blocking variant for renderer UI refreshes. The synchronous method
+  // remains available for bootstrap code that must resolve before HTTP setup.
+  getLocalEnvironmentBootstrapsAsync?: () => Promise<readonly DesktopEnvironmentBootstrap[]>;
   getLocalEnvironmentBearerToken: () => Promise<string>;
   getClientSettings: () => Promise<ClientSettings | null>;
   setClientSettings: (settings: ClientSettings) => Promise<void>;

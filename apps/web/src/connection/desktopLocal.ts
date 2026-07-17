@@ -102,3 +102,12 @@ export function readDesktopSecondaryBootstrapsResult(): DesktopSecondaryBootstra
 export function readDesktopSecondaryBootstraps(): ReadonlyArray<DesktopEnvironmentBootstrap> {
   return desktopSecondaryBootstrapsReader.readSnapshot();
 }
+
+/** Read secondary topology without blocking the renderer's main thread. */
+export async function readDesktopSecondaryBootstrapsAsync(): Promise<
+  ReadonlyArray<DesktopEnvironmentBootstrap>
+> {
+  const readBootstraps = window.desktopBridge?.getLocalEnvironmentBootstrapsAsync;
+  if (readBootstraps === undefined) return [];
+  return (await readBootstraps()).filter((entry) => entry.id !== PRIMARY_LOCAL_ENVIRONMENT_ID);
+}

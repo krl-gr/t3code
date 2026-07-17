@@ -1,7 +1,8 @@
 import type { DesktopEnvironmentBootstrap } from "@t3tools/contracts";
 import { useEffect, useState } from "react";
 
-import { readDesktopSecondaryBootstraps } from "./desktopLocal";
+import { isWindowsPlatform } from "../lib/utils";
+import { readDesktopSecondaryBootstrapsAsync } from "./desktopLocal";
 
 const DESKTOP_LOCAL_BOOTSTRAP_POLL_MS = 2_000;
 
@@ -13,15 +14,34 @@ const DESKTOP_LOCAL_BOOTSTRAP_POLL_MS = 2_000;
  * renderer consumer reads the same topology.
  */
 export function useDesktopLocalBootstraps(): ReadonlyArray<DesktopEnvironmentBootstrap> {
-  const [bootstraps, setBootstraps] = useState<ReadonlyArray<DesktopEnvironmentBootstrap>>(
-    readDesktopSecondaryBootstraps,
-  );
+  const [bootstraps, setBootstraps] = useState<ReadonlyArray<DesktopEnvironmentBootstrap>>([]);
 
   useEffect(() => {
-    const read = () => setBootstraps(readDesktopSecondaryBootstraps());
-    read();
-    const interval = setInterval(read, DESKTOP_LOCAL_BOOTSTRAP_POLL_MS);
-    return () => clearInterval(interval);
+    // Secondary desktop backends are WSL-only. Avoid even scheduling topology
+    // reads on macOS/Linux, where this list is permanently empty.
+    if (!isWindowsPlatform(navigator.platform)) return;
+
+    let cancelled = false;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+
+    const read = async () => {
+      try {
+        const next = await readDesktopSecondaryBootstrapsAsync();
+        if (!cancelled) setBootstraps(next);
+      } catch {
+        // Preserve the last successful snapshot across transient IPC failures.
+      } finally {
+        // Schedule after completion so a busy main process cannot accumulate
+        // overlapping IPC requests.
+        if (!cancelled) timeout = setTimeout(read, DESKTOP_LOCAL_BOOTSTRAP_POLL_MS);
+      }
+    };
+
+    void read();
+    return () => {
+      cancelled = true;
+      if (timeout !== undefined) clearTimeout(timeout);
+    };
   }, []);
 
   return bootstraps;

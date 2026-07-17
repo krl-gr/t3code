@@ -4,7 +4,7 @@ import * as Option from "effect/Option";
 
 import * as DesktopBackendManager from "../../backend/DesktopBackendManager.ts";
 import * as DesktopBackendPool from "../../backend/DesktopBackendPool.ts";
-import { getLocalEnvironmentBootstraps } from "./window.ts";
+import { getLocalEnvironmentBootstraps, getLocalEnvironmentBootstrapsAsync } from "./window.ts";
 
 const readyWslConfig: DesktopBackendManager.DesktopBackendStartConfig = {
   executablePath: "wsl.exe",
@@ -49,6 +49,7 @@ describe("getLocalEnvironmentBootstraps", () => {
   it.effect("publishes the concrete running distro without replacing the stable instance id", () =>
     Effect.gen(function* () {
       const result = yield* getLocalEnvironmentBootstraps.handler();
+      const asyncResult = yield* getLocalEnvironmentBootstrapsAsync.handler(undefined);
 
       assert.deepEqual(result, [
         {
@@ -60,6 +61,7 @@ describe("getLocalEnvironmentBootstraps", () => {
           bootstrapToken: "bootstrap-token",
         },
       ]);
+      assert.deepEqual(asyncResult, result);
     }).pipe(Effect.provide(DesktopBackendPool.layerTest([defaultWslInstance]))),
   );
 
