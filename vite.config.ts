@@ -21,8 +21,8 @@ export default defineConfig({
     testTimeout: 60_000,
   },
   staged: {
-    // Formatter only for now — no lint or typecheck on commit.
-    "*": "vp fmt",
+    // Oxfmt does not support Astro files, so only pass supported file types.
+    "*.{js,jsx,ts,tsx,json,jsonc,css,scss,md,mdx,yml,yaml}": "vp fmt",
   },
   fmt: {
     ignorePatterns: [

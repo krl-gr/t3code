@@ -9,19 +9,12 @@ import { GITHUB_REPOSITORY_URL } from "../lib/site";
     <div class="wande-shell hero-shell">
       <div class="hero-copy">
         <div>
-          <div class="eyebrow hero-eyebrow">Open source · Local first</div>
-          <h1 class="hero-title display">The computer<br />for your agents.</h1>
+          <h1 class="hero-title display">The visual workspace<br />for all your agents.</h1>
         </div>
         <div class="hero-bottomline">
           <p class="hero-sub">
-            Run every coding agent from one focused workspace, then review and ship the result.
+            Bring Codex, Claude Code, OpenCode, Grok Build, Pi, and more into one local, open-source workspace.
           </p>
-          <div class="hero-actions">
-            <a id="download-btn" href="https://github.com/krl-gr/upcomputer/releases" class="btn btn-primary btn-lg">
-              <span id="download-label">Download for macOS</span>
-            </a>
-            <a class="hero-source-link" href={GITHUB_REPOSITORY_URL} target="_blank" rel="noopener noreferrer">View source ↗</a>
-          </div>
         </div>
       </div>
 
@@ -1209,11 +1202,6 @@ import { GITHUB_REPOSITORY_URL } from "../lib/site";
     gap: 64px;
   }
 
-  .hero-eyebrow {
-    margin-bottom: 20px;
-    color: rgba(255, 255, 255, 0.6);
-  }
-
   .hero-title {
     max-width: 900px;
     margin: 0;
@@ -1235,17 +1223,6 @@ import { GITHUB_REPOSITORY_URL } from "../lib/site";
     text-align: left;
     color: rgba(255, 255, 255, 0.72);
     font-size: 17px;
-  }
-
-  .hero-actions {
-    flex: none;
-    flex-direction: row;
-    align-items: center;
-    margin: 0;
-  }
-
-  .hero-source-link {
-    color: rgba(255, 255, 255, 0.72);
   }
 
   .hero-preview,
@@ -1539,7 +1516,6 @@ import { GITHUB_REPOSITORY_URL } from "../lib/site";
     .hero-copy { min-height: auto; padding: 62px 24px 34px; gap: 44px; }
     .hero-title { margin: 0; font-size: clamp(48px, 15vw, 70px); }
     .hero-bottomline { align-items: flex-start; flex-direction: column; gap: 26px; }
-    .hero-actions { margin: 0; flex-direction: row; align-items: center; }
     .hero-preview,
     .hero-preview:hover { display: block; width: auto; margin: 0; padding: 0 14px 20px; transform: none; }
     .section-spacer { height: 33px; padding: 0 8px; }

@@ -34,7 +34,7 @@ const {
       <nav class="nav">
         <div class="nav-inner">
           <a href="/" class="nav-brand" aria-label="Up.computer home">
-            <span class="nav-brand-name">Up.computer</span>
+            <img class="nav-brand-icon" src="/icon.webp" alt="" width="32" height="32" />
           </a>
           <div class="nav-right">
             <a
@@ -47,7 +47,11 @@ const {
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                 <path d="M12 2.3l2.9 5.88 6.49.94-4.7 4.58 1.11 6.47L12 17.12l-5.8 3.05 1.11-6.47-4.7-4.58 6.49-.94L12 2.3z"/>
               </svg>
-              <span>GitHub</span>
+              <span class="nav-github-label">GitHub</span>
+              <strong id="github-star-count" hidden></strong>
+            </a>
+            <a class="btn btn-primary nav-download" href="https://github.com/krl-gr/upcomputer/releases">
+              Download
             </a>
           </div>
         </div>
@@ -84,6 +88,25 @@ const {
       };
       window.addEventListener("scroll", onScroll, { passive: true });
       onScroll();
+
+      const starCount = document.getElementById("github-star-count");
+      const formatStars = (count: number) =>
+        new Intl.NumberFormat("en", {
+          notation: count >= 1000 ? "compact" : "standard",
+          maximumFractionDigits: 1,
+        }).format(count);
+
+      fetch("https://api.github.com/repos/krl-gr/upcomputer")
+        .then((response) => {
+          if (!response.ok) throw new Error("GitHub request failed");
+          return response.json();
+        })
+        .then((repository) => {
+          if (!starCount || typeof repository.stargazers_count !== "number") return;
+          starCount.textContent = formatStars(repository.stargazers_count);
+          starCount.hidden = false;
+        })
+        .catch(() => {});
     </script>
   </body>
 </html>
@@ -286,21 +309,26 @@ const {
   }
 
   .nav {
-    position: sticky;
-    top: 0;
+    position: fixed;
+    inset: 0 0 auto;
     z-index: 50;
-    backdrop-filter: blur(18px);
-    -webkit-backdrop-filter: blur(18px);
-    background: color-mix(in srgb, var(--bg) 75%, transparent);
+    background: transparent;
     border-bottom: 1px solid transparent;
-    transition: border-color 0.3s ease;
+    transition:
+      background 0.3s ease,
+      border-color 0.3s ease,
+      backdrop-filter 0.3s ease;
   }
 
   .nav.is-scrolled {
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    background: color-mix(in srgb, var(--bg) 78%, transparent);
     border-bottom-color: var(--border);
   }
 
   .nav-inner {
+    width: calc(100% - 24px);
     max-width: 1240px;
     margin: 0 auto;
     padding: 12px 32px;
@@ -308,6 +336,8 @@ const {
     align-items: center;
     justify-content: space-between;
     gap: 24px;
+    border-left: 1px solid transparent;
+    border-right: 1px solid transparent;
   }
 
   .nav-brand {
@@ -321,17 +351,24 @@ const {
     color: #fff;
   }
 
-  .nav-brand-name {
-    font-size: 16px;
-    font-weight: 650;
-    letter-spacing: -0.025em;
-    line-height: 1;
+  .nav-brand-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 7px;
+    object-fit: cover;
   }
 
   .nav-right {
     display: inline-flex;
     align-items: center;
     gap: 8px;
+  }
+
+  .nav-download {
+    min-height: 36px;
+    padding: 0 16px;
+    border-radius: 999px;
+    font-size: 13px;
   }
 
   .nav-stars {
@@ -424,9 +461,13 @@ const {
       padding-left: 20px;
       padding-right: 20px;
     }
+
+    .nav-inner {
+      width: calc(100% - 16px);
+    }
   }
 
-  @media (max-width: 420px) {
+  @media (max-width: 520px) {
     .nav-inner {
       gap: 12px;
     }
@@ -434,7 +475,17 @@ const {
     .nav-stars {
       height: 34px;
       gap: 6px;
-      padding: 0 12px;
+      padding: 0 11px;
+      font-size: 12px;
+    }
+
+    .nav-github-label {
+      display: none;
+    }
+
+    .nav-download {
+      min-height: 34px;
+      padding: 0 13px;
       font-size: 12px;
     }
   }
