@@ -19,7 +19,6 @@ import { GITHUB_REPOSITORY_URL } from "../lib/site";
       </div>
 
       <div class="hero-preview">
-        <div class="hero-glow" aria-hidden="true"></div>
         <figure class="hero-screenshot-frame">
           <img src="/updated-screenshot.webp" alt="Up.computer workspace" width="2508" height="1682" loading="eager" decoding="async" />
         </figure>
@@ -1242,16 +1241,23 @@ import { GITHUB_REPOSITORY_URL } from "../lib/site";
   .hero.wande-section {
     padding: 0 12px;
     overflow: hidden;
-    background:
-      radial-gradient(circle at 82% 5%, rgba(112, 82, 255, 0.34), transparent 32%),
-      radial-gradient(circle at 10% 35%, rgba(47, 112, 255, 0.18), transparent 38%),
-      #09090b;
+    border-bottom: 0;
+    background: #09090b url("/hero-monet.webp") center 42% / cover no-repeat;
+  }
+
+  .hero.wande-section::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: rgba(5, 5, 7, 0.58);
+    pointer-events: none;
   }
 
   .hero-shell {
     position: relative;
+    z-index: 1;
     padding-top: 74px;
-    background: rgba(9, 9, 11, 0.3);
+    background: transparent;
   }
 
   .hero-copy {
@@ -1295,14 +1301,6 @@ import { GITHUB_REPOSITORY_URL } from "../lib/site";
     margin: 0;
     padding: 0 48px 48px;
     transform: none;
-  }
-
-  .hero-glow {
-    position: absolute;
-    inset: 12% 4% 0;
-    border-radius: 50%;
-    background: rgba(104, 80, 255, 0.38);
-    filter: blur(90px);
   }
 
   .hero-screenshot-frame {
@@ -1364,22 +1362,7 @@ import { GITHUB_REPOSITORY_URL } from "../lib/site";
     height: 350px;
     overflow: hidden;
     border: 1px solid var(--border-strong);
-    background:
-      radial-gradient(circle at 50% 20%, rgba(112, 82, 255, 0.11), transparent 55%),
-      #0d0d10;
-  }
-
-  .choice-visual::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    opacity: 0.3;
-    background-image:
-      linear-gradient(var(--border) 1px, transparent 1px),
-      linear-gradient(90deg, var(--border) 1px, transparent 1px);
-    background-size: 36px 36px;
-    mask-image: linear-gradient(to bottom, black, transparent 85%);
+    background: #0d0d10;
   }
 
   .choice-copy {
