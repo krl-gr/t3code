@@ -29,8 +29,69 @@ import { GITHUB_REPOSITORY_URL } from "../lib/site";
 
   <div class="section-spacer" aria-hidden="true"><div></div></div>
 
-  <!-- ── Large product showcase ────────────────────────────────── -->
-  <section id="features" class="wande-section showcase-section">
+  <!-- ── Choose your agent path ────────────────────────────────── -->
+  <section class="wande-section choice-section">
+    <div class="wande-shell">
+      <div class="choice-head">
+        <h2>Use ours. Bring yours.<br />Or run both.</h2>
+        <p>Start with Up’s built-in agent or connect the harnesses you already use.</p>
+      </div>
+
+      <div class="choice-grid">
+        <article class="choice-card">
+          <div class="choice-visual agent-visual">
+            <div class="agent-visual-topline">
+              <span class="agent-pulse"></span>
+              <span>Up Agent · Powered by Pi</span>
+              <span class="agent-byok">BYOK</span>
+            </div>
+            <div class="agent-metrics">
+              <div class="agent-metric"><strong>2.4×</strong><span>more token-efficient</span></div>
+              <div class="agent-metric"><strong>4×</strong><span>faster than Codex</span></div>
+            </div>
+            <div class="agent-capabilities">
+              <span>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+                Computer use
+              </span>
+              <span>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 010 18M12 3a15 15 0 000 18"/></svg>
+                Browser use
+              </span>
+            </div>
+          </div>
+          <div class="choice-copy">
+            <h3>Up Agent</h3>
+            <p>Powered by Pi and your own model keys. Get native computer and browser use with a fast, token-efficient agent built into every workspace.</p>
+            <small>Performance compared in our internal benchmarks.</small>
+          </div>
+        </article>
+
+        <article class="choice-card">
+          <div class="choice-visual harness-visual">
+            <svg class="harness-lines" viewBox="0 0 600 300" preserveAspectRatio="none" aria-hidden="true">
+              <path d="M300 150L112 72M300 150L488 72M300 150L112 228M300 150L488 228" />
+            </svg>
+            <div class="harness-center"><img src="/icon.webp" alt="" /></div>
+            <div class="harness-node harness-node--claude"><img src="/harnesses/claude-ai-icon.svg" alt="" /><span>Claude Code</span></div>
+            <div class="harness-node harness-node--codex"><img src="/harnesses/openai_dark.svg" alt="" /><span>Codex</span></div>
+            <div class="harness-node harness-node--opencode"><img src="/harnesses/opencode-dark.svg" alt="" /><span>OpenCode</span></div>
+            <div class="harness-node harness-node--more"><span class="harness-more">+N</span><span>Any harness</span></div>
+            <div class="harness-orchestration">Cross-harness orchestration</div>
+          </div>
+          <div class="choice-copy">
+            <h3>Your favorite harnesses</h3>
+            <p>Install Up and your existing harnesses work automatically. Your credentials and context stay yours while Up orchestrates work across agents and harnesses.</p>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <div class="section-spacer" aria-hidden="true"><div></div></div>
+
+  <!-- Temporarily hidden: Set the pace for your agents -->
+  <section id="features" class="wande-section showcase-section" hidden>
     <div class="wande-shell">
       <div class="showcase-head">
         <h2>Set the pace for your agents</h2>
@@ -48,30 +109,30 @@ import { GITHUB_REPOSITORY_URL } from "../lib/site";
     </div>
   </section>
 
-  <div class="section-spacer" aria-hidden="true"><div></div></div>
+  <div class="section-spacer" aria-hidden="true" hidden><div></div></div>
 
   <!-- ── Alternating feature rows ──────────────────────────────── -->
   <section class="wande-section feature-rows-section">
     <div class="wande-shell feature-rows">
       <article class="feature-row">
-        <div class="feature-copy"><span class="feature-index">01</span><h2>Threads</h2><p>Keep each agent, task, and conversation in its own clear lane.</p></div>
-        <div class="feature-visual crop-left"><img src="/updated-screenshot.webp" alt="Agent threads" loading="lazy" /></div>
+        <div class="feature-copy"><span class="feature-index">01</span><h2>Arrange your workspace your way.</h2><p>Split, resize, stack, and move agent threads and tools. Keep every part of your workflow visible without switching windows.</p></div>
+        <div class="feature-visual crop-left"><img src="/updated-screenshot.webp" alt="Flexible agent workspace layout" loading="lazy" /></div>
       </article>
       <article class="feature-row feature-row--reverse">
-        <div class="feature-copy"><span class="feature-index">02</span><h2>Workspaces</h2><p>Move between projects without losing context, branches, or momentum.</p></div>
-        <div class="feature-visual crop-center"><img src="/updated-screenshot.webp" alt="Project workspace" loading="lazy" /></div>
+        <div class="feature-copy"><span class="feature-index">02</span><h2>Attach context. Fork any thread.</h2><p>Use threads from other agents as context, then fork any conversation to explore a new direction without losing the original work.</p></div>
+        <div class="feature-visual crop-center"><img src="/updated-screenshot.webp" alt="Agent context and thread forks" loading="lazy" /></div>
       </article>
       <article class="feature-row">
-        <div class="feature-copy"><span class="feature-index">03</span><h2>Review</h2><p>See what changed, decide what ships, and stay in control.</p></div>
-        <div class="feature-visual crop-right"><img src="/updated-screenshot.webp" alt="Review workflow" loading="lazy" /></div>
+        <div class="feature-copy"><span class="feature-index">03</span><h2>Everything you need, right beside your agents.</h2><p>Open the browser, terminal, file explorer, and diffs in one integrated side panel—everything you expect from a best-in-class agent environment.</p></div>
+        <div class="feature-visual crop-right"><img src="/updated-screenshot.webp" alt="Integrated browser, terminal, files, and diff panel" loading="lazy" /></div>
       </article>
     </div>
   </section>
 
   <div class="section-spacer" aria-hidden="true"><div></div></div>
 
-  <!-- ── Three-column preview grid ─────────────────────────────── -->
-  <section class="wande-section preview-section">
+  <!-- Temporarily hidden: More ways to work are coming -->
+  <section class="wande-section preview-section" hidden>
     <div class="wande-shell">
       <div class="preview-head"><h2>More ways to work are coming</h2><p>A structural preview of the next layer of Up.computer.</p></div>
       <div class="preview-grid">
@@ -82,11 +143,11 @@ import { GITHUB_REPOSITORY_URL } from "../lib/site";
     </div>
   </section>
 
-  <div class="section-spacer" aria-hidden="true"><div></div></div>
+  <div class="section-spacer" aria-hidden="true" hidden><div></div></div>
 
   <!-- ── Existing Up.computer / T3 sections ───────────────────── -->
-  <!-- ── Harnesses ─────────────────────────────────────────────── -->
-  <section id="harnesses" class="sec-harness">
+  <!-- Temporarily hidden: Bring your own sub -->
+  <section id="harnesses" class="sec-harness" hidden>
     <div class="container">
       <div class="section-head">
         <h2>Bring your own sub</h2>
@@ -136,8 +197,8 @@ import { GITHUB_REPOSITORY_URL } from "../lib/site";
     </div>
   </section>
 
-  <!-- ── Git ──────────────────────────────────────────────────── -->
-  <section id="git" class="sec-git">
+  <!-- Temporarily hidden: Commit, push, and create a PR -->
+  <section id="git" class="sec-git" hidden>
     <div class="container git-inner">
       <div class="git-visual">
         <div class="pr-card tile">
@@ -197,8 +258,8 @@ import { GITHUB_REPOSITORY_URL } from "../lib/site";
     </div>
   </section>
 
-  <!-- ── Open source ───────────────────────────────────────────── -->
-  <section id="open" class="sec-open">
+  <!-- Temporarily hidden: Open-source fork section -->
+  <section id="open" class="sec-open" hidden>
     <div class="container">
       <div class="section-head open-head">
         <div class="eyebrow">Open source</div>
@@ -1262,6 +1323,279 @@ import { GITHUB_REPOSITORY_URL } from "../lib/site";
     height: 100%;
   }
 
+  /* ── Agent choice ───────────────────────────────────────── */
+  .choice-head {
+    padding: 70px 48px 58px;
+    border-bottom: 1px solid var(--border-strong);
+  }
+
+  .choice-head h2 {
+    max-width: 1000px;
+    font-size: clamp(42px, 6.8vw, 88px);
+    font-weight: 500;
+    letter-spacing: -0.055em;
+    line-height: 0.96;
+  }
+
+  .choice-head p {
+    max-width: 660px;
+    margin-top: 26px;
+    color: var(--fg-muted);
+    font-size: 18px;
+  }
+
+  .choice-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .choice-card {
+    min-width: 0;
+    padding: 46px;
+    border-left: 1px solid var(--border-strong);
+  }
+
+  .choice-card:first-child {
+    border-left: 0;
+  }
+
+  .choice-visual {
+    position: relative;
+    height: 350px;
+    overflow: hidden;
+    border: 1px solid var(--border-strong);
+    background:
+      radial-gradient(circle at 50% 20%, rgba(112, 82, 255, 0.11), transparent 55%),
+      #0d0d10;
+  }
+
+  .choice-visual::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.3;
+    background-image:
+      linear-gradient(var(--border) 1px, transparent 1px),
+      linear-gradient(90deg, var(--border) 1px, transparent 1px);
+    background-size: 36px 36px;
+    mask-image: linear-gradient(to bottom, black, transparent 85%);
+  }
+
+  .choice-copy {
+    padding: 34px 2px 4px;
+  }
+
+  .choice-copy h3 {
+    font-size: 28px;
+    font-weight: 500;
+    letter-spacing: -0.03em;
+  }
+
+  .choice-copy p {
+    max-width: 520px;
+    margin-top: 15px;
+    color: var(--fg-muted);
+    font-size: 15px;
+    line-height: 1.65;
+  }
+
+  .choice-copy small {
+    display: block;
+    margin-top: 16px;
+    color: var(--fg-faint);
+    font-family: var(--font-mono);
+    font-size: 10px;
+  }
+
+  .agent-visual {
+    padding: 30px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+
+  .agent-visual-topline {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    color: var(--fg-muted);
+    font-family: var(--font-mono);
+    font-size: 11px;
+  }
+
+  .agent-pulse {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--ok);
+    box-shadow: 0 0 16px color-mix(in srgb, var(--ok) 70%, transparent);
+  }
+
+  .agent-byok {
+    margin-left: auto;
+    padding: 4px 8px;
+    border: 1px solid var(--border-strong);
+    border-radius: 999px;
+    color: var(--fg-dim);
+    font-size: 9px;
+    letter-spacing: 0.08em;
+  }
+
+  .agent-metrics {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+
+  .agent-metric {
+    min-width: 0;
+    padding: 22px 18px;
+    border: 1px solid var(--border-strong);
+    background: rgba(17, 17, 20, 0.78);
+    backdrop-filter: blur(8px);
+  }
+
+  .agent-metric strong {
+    display: block;
+    color: #fff;
+    font-size: clamp(34px, 4vw, 52px);
+    font-weight: 500;
+    letter-spacing: -0.055em;
+    line-height: 1;
+  }
+
+  .agent-metric span {
+    display: block;
+    margin-top: 10px;
+    color: var(--fg-muted);
+    font-size: 11px;
+  }
+
+  .agent-capabilities {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .agent-capabilities span {
+    padding: 7px 10px;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    border: 1px solid var(--border-strong);
+    border-radius: 999px;
+    background: rgba(9, 9, 11, 0.72);
+    color: var(--fg-muted);
+    font-size: 10px;
+  }
+
+  .agent-capabilities svg {
+    width: 12px;
+    height: 12px;
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 1.5;
+  }
+
+  .harness-lines {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  .harness-lines path {
+    fill: none;
+    stroke: rgba(255, 255, 255, 0.16);
+    stroke-width: 1;
+    stroke-dasharray: 4 5;
+  }
+
+  .harness-center,
+  .harness-node,
+  .harness-orchestration {
+    position: absolute;
+    z-index: 2;
+  }
+
+  .harness-center {
+    top: 50%;
+    left: 50%;
+    width: 62px;
+    height: 62px;
+    padding: 7px;
+    transform: translate(-50%, -50%);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 16px;
+    background: #15151a;
+    box-shadow: 0 0 52px rgba(112, 82, 255, 0.36);
+  }
+
+  .harness-center img {
+    width: 100%;
+    height: 100%;
+    border-radius: 10px;
+  }
+
+  .harness-node {
+    width: 116px;
+    height: 54px;
+    padding: 0 12px;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    border: 1px solid var(--border-strong);
+    background: rgba(17, 17, 20, 0.9);
+    color: var(--fg-muted);
+    font-size: 10px;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
+  }
+
+  .harness-node img,
+  .harness-more {
+    width: 22px;
+    height: 22px;
+    flex: none;
+    object-fit: contain;
+  }
+
+  .harness-more {
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    color: var(--accent);
+    font-family: var(--font-mono);
+    font-size: 9px;
+  }
+
+  .harness-node--claude { top: 15%; left: 6%; }
+  .harness-node--codex { top: 15%; right: 6%; }
+  .harness-node--opencode { bottom: 15%; left: 6%; }
+  .harness-node--more { right: 6%; bottom: 15%; }
+
+  .harness-orchestration {
+    left: 50%;
+    bottom: 16px;
+    padding: 5px 9px;
+    transform: translateX(-50%);
+    border: 1px solid var(--border-strong);
+    border-radius: 999px;
+    background: #0d0d10;
+    color: var(--fg-dim);
+    font-family: var(--font-mono);
+    font-size: 9px;
+    white-space: nowrap;
+  }
+
   .showcase-head {
     padding: 56px 48px 24px;
     display: flex;
@@ -1277,6 +1611,11 @@ import { GITHUB_REPOSITORY_URL } from "../lib/site";
     line-height: 1;
     letter-spacing: -0.04em;
     font-weight: 500;
+  }
+
+  .feature-copy h2 {
+    font-size: clamp(30px, 3vw, 42px);
+    line-height: 1.04;
   }
 
   .complexity-control {
@@ -1519,6 +1858,17 @@ import { GITHUB_REPOSITORY_URL } from "../lib/site";
     .hero-preview,
     .hero-preview:hover { display: block; width: auto; margin: 0; padding: 0 14px 20px; transform: none; }
     .section-spacer { height: 33px; padding: 0 8px; }
+    .choice-head { padding: 48px 24px 40px; }
+    .choice-head h2 { font-size: clamp(40px, 12vw, 58px); }
+    .choice-head p { margin-top: 20px; font-size: 16px; }
+    .choice-grid { grid-template-columns: 1fr; }
+    .choice-card { padding: 24px; border-left: 0; border-top: 1px solid var(--border-strong); }
+    .choice-card:first-child { border-top: 0; }
+    .choice-visual { height: 330px; }
+    .agent-visual { padding: 22px; }
+    .agent-metric { padding: 18px 13px; }
+    .agent-metric strong { font-size: 38px; }
+    .harness-node { width: 104px; padding: 0 9px; }
     .showcase-head { padding: 40px 24px 20px; align-items: flex-start; flex-direction: column; }
     .complexity-control { width: 100%; }
     .complexity-track { flex: 1; }
