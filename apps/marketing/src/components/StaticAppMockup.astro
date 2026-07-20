@@ -1,3 +1,4 @@
+<div class="mockup-viewport" data-static-app-viewport>
 <div class="app-mockup" aria-label="Static preview of the Up.computer interface">
   <aside class="mock-sidebar">
     <div class="window-controls" aria-hidden="true"><i></i><i></i><i></i></div>
@@ -31,7 +32,7 @@
         <svg class="section-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg>
       </div>
       <div class="thread-row active"><span>Restore dark theme regressions</span><time>18m</time></div>
-      <div class="thread-row plan"><span><strong>Plan Ready</strong>&nbsp; <em>Plan light theme...</em></span><time>29m</time></div>
+      <div class="thread-row plan"><span class="thread-main"><strong>Plan Ready</strong><em>Plan light theme...</em></span><time>29m</time></div>
       <div class="thread-row"><span>Add prompt shortcuts and actions</span><time>50m</time></div>
       <div class="thread-row"><span>First message blinking issue</span><time>54m</time></div>
       <div class="thread-row"><span>Unify folder icon text color</span><time>13h</time></div>
@@ -130,24 +131,38 @@
     </div>
   </section>
 </div>
+</div>
 
 <style>
+  .mockup-viewport {
+    --mock-scale: 1;
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+  }
+
   .app-mockup {
     --app-bg: #131313;
     --app-card: #1e1e1e;
     --app-fg: #f5f5f5;
     --app-muted: rgba(255, 255, 255, 0.5);
     --app-border: rgba(255, 255, 255, 0.09);
-    container-type: inline-size;
-    width: 100%;
-    height: 100%;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 1120px;
+    height: 750px;
+    transform: translate(-50%, -50%) scale(var(--mock-scale));
+    transform-origin: center;
+    will-change: transform;
     display: grid;
     grid-template-columns: 26% 74%;
     overflow: hidden;
     background: rgba(19, 19, 19, 0.96);
     color: var(--app-fg);
     font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    font-size: clamp(7px, 1.1cqw, 14px);
+    font-size: 14px;
     line-height: 1.45;
     text-align: left;
   }
@@ -174,7 +189,7 @@
     align-items: center;
     gap: 3.3%;
   }
-  .window-controls i { width: clamp(7px, 1.25cqw, 14px); aspect-ratio: 1; border-radius: 50%; }
+  .window-controls i { width: 14px; aspect-ratio: 1; border-radius: 50%; }
   .window-controls i:nth-child(1) { background: #ff5f57; }
   .window-controls i:nth-child(2) { background: #febc2e; }
   .window-controls i:nth-child(3) { background: #28c840; }
@@ -201,8 +216,9 @@
   .thread-row.active { color: rgba(255,255,255,.92); }
   .thread-row > span { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .thread-row time { color: rgba(255,255,255,.5); font-size: 14px; line-height: 1.625; }
-  .thread-row.plan strong { color: #bda1ff; font-weight: 400; }
-  .thread-row.plan em { color: rgba(255,255,255,.82); font-style: normal; }
+  .thread-row.plan .thread-main { display: flex; align-items: center; gap: 6px; }
+  .thread-row.plan strong { flex: none; color: rgba(196,181,253,.9); font-weight: 400; }
+  .thread-row.plan em { min-width: 0; overflow: hidden; color: rgba(255,255,255,.82); font-style: normal; text-overflow: ellipsis; white-space: nowrap; }
   .sidebar-settings { flex: none; padding: 8px 8px 12px; color: rgba(255,255,255,.82); }
   .settings-row { width: 100%; height: 32px; padding: 0 8px; display: grid !important; grid-template-columns: 16px minmax(0, 1fr); align-items: center; gap: 8px; border-radius: 8px; font-size: 14px; font-weight: 400; line-height: 1.625; }
   .settings-row > span { min-width: 0; white-space: nowrap; }
@@ -253,34 +269,27 @@
   .context-separator { width: 1px; height: 12px; flex: none; background: rgba(255,255,255,.06); }
   .open-editor { max-width: 144px; }
 
-  @container (max-width: 720px) {
-    .app-mockup { grid-template-columns: 30% 70%; }
-    .sidebar-actions, .sidebar-scroll { padding-left: 6px; padding-right: 6px; }
-    .sidebar-action, .sidebar-label, .project-row, .thread-row { height: 24px; padding-left: 6px; padding-right: 6px; gap: 6px; font-size: 10px; }
-    .project-mark, .sidebar-action svg { width: 12px; height: 12px; }
-    .section-chevron { width: 12px !important; min-width: 12px; max-width: 12px; height: 12px !important; min-height: 12px; max-height: 12px; flex-basis: 12px; }
-    .thread-row time { font-size: 10px; }
-    .thread-label { margin-top: 8px; }
-    .sidebar-settings { padding: 6px 6px 8px; }
-    .settings-row { height: 24px; padding: 0 6px; grid-template-columns: 12px minmax(0, 1fr); gap: 6px; font-size: 10px; }
-    .settings-row svg { width: 12px !important; min-width: 12px; max-width: 12px; height: 12px !important; min-height: 12px; max-height: 12px; }
-    .conversation { padding-inline: 4%; }
-    .composer-wrap { width: calc(100% - 24px); bottom: 8px; }
-    .composer { height: 84px; min-height: 72px; border-radius: 24px; }
-    .composer-placeholder { padding: 14px 14px 0; font-size: 10px; }
-    .composer-toolbar { height: 36px; padding: 0 10px 10px; }
-    .composer-options { font-size: 10px; }
-    .composer-options > span { height: 24px; padding: 0 6px; }
-    .composer-options > span:first-child, .composer-options > span:nth-of-type(2) { width: 24px; }
-    .send-group button { width: 24px; height: 24px; }
-    .send-group button svg { width: 11px; height: 11px; }
-    .branchbar { height: 30px; padding: 3px 8px; font-size: 10px; }
-    .context-icon, .context-text { height: 24px; }
-    .context-icon { width: 24px; }
-    .context-icon svg { width: 12px; height: 12px; }
-    .context-text { padding: 0 6px; }
-    .context-text svg { width: 11px; height: 11px; }
-    .branchbar-actions .open-editor, .branchbar-actions .context-separator:first-of-type, .branchbar-actions .context-icon:nth-of-type(1), .branchbar-actions .context-separator:nth-of-type(2) { display: none; }
-    .composer-options span:nth-of-type(n+4), .composer-options i:nth-of-type(n+4) { display: none; }
-  }
 </style>
+
+<script>
+  const DESIGN_WIDTH = 1120;
+  const DESIGN_HEIGHT = 750;
+
+  const resizeMockup = (viewport: HTMLElement) => {
+    const scale = Math.max(
+      viewport.clientWidth / DESIGN_WIDTH,
+      viewport.clientHeight / DESIGN_HEIGHT,
+    );
+    viewport.style.setProperty("--mock-scale", String(scale));
+  };
+
+  const viewports = document.querySelectorAll<HTMLElement>("[data-static-app-viewport]");
+  const observer = new ResizeObserver((entries) => {
+    for (const entry of entries) resizeMockup(entry.target as HTMLElement);
+  });
+
+  for (const viewport of viewports) {
+    resizeMockup(viewport);
+    observer.observe(viewport);
+  }
+</script>
