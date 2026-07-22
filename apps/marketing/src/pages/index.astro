@@ -1,4 +1,5 @@
 ---
+import MultiChatMockup from "../components/MultiChatMockup.astro";
 import StaticAppMockup from "../components/StaticAppMockup.astro";
 import Layout from "../layouts/Layout.astro";
 import { GITHUB_REPOSITORY_URL } from "../lib/site";
@@ -116,15 +117,15 @@ import { GITHUB_REPOSITORY_URL } from "../lib/site";
     <div class="wande-shell feature-rows">
       <article class="feature-row">
         <div class="feature-copy"><span class="feature-index">01</span><h2>Arrange your workspace your way.</h2><p>Split, resize, stack, and move agent threads and tools. Keep every part of your workflow visible without switching windows.</p></div>
-        <div class="feature-visual crop-left"><img src="/updated-screenshot.webp" alt="Flexible agent workspace layout" loading="lazy" /></div>
+        <div class="feature-visual multi-chat-visual"><MultiChatMockup /></div>
       </article>
       <article class="feature-row feature-row--reverse">
         <div class="feature-copy"><span class="feature-index">02</span><h2>Attach context. Fork any thread.</h2><p>Use threads from other agents as context, then fork any conversation to explore a new direction without losing the original work.</p></div>
-        <div class="feature-visual crop-center"><img src="/updated-screenshot.webp" alt="Agent context and thread forks" loading="lazy" /></div>
+        <div class="feature-visual context-attach-visual"><div class="feature-app-frame"><StaticAppMockup attachmentMenuOpen /></div></div>
       </article>
       <article class="feature-row">
         <div class="feature-copy"><span class="feature-index">03</span><h2>Everything you need, right beside your agents.</h2><p>Open the browser, terminal, file explorer, and diffs in one integrated side panel—everything you expect from a best-in-class agent environment.</p></div>
-        <div class="feature-visual crop-right"><img src="/updated-screenshot.webp" alt="Integrated browser, terminal, files, and diff panel" loading="lazy" /></div>
+        <div class="feature-visual integrated-panel-visual"><div class="feature-app-frame"><StaticAppMockup rightPanelOpen /></div></div>
       </article>
     </div>
   </section>
@@ -1735,6 +1736,33 @@ import { GITHUB_REPOSITORY_URL } from "../lib/site";
     background:
       radial-gradient(circle at center, rgba(112, 82, 255, 0.22), transparent 55%),
       #0d0d10;
+  }
+
+  .multi-chat-visual,
+  .context-attach-visual,
+  .integrated-panel-visual {
+    background: #09090b url("/hero-monet.webp") center 42% / cover no-repeat;
+  }
+
+  .multi-chat-visual::before,
+  .context-attach-visual::before,
+  .integrated-panel-visual::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    background: rgba(5, 5, 7, 0.58);
+    pointer-events: none;
+  }
+
+  .feature-app-frame {
+    position: absolute;
+    inset: 7% 6%;
+    z-index: 1;
+    overflow: hidden;
+    border: 1px solid rgba(255,255,255,.18);
+    border-radius: 16px;
+    box-shadow: 0 40px 90px rgba(0,0,0,.65);
   }
 
   .feature-visual img {

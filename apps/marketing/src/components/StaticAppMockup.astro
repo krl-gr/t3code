@@ -1,4 +1,13 @@
-<div class="mockup-viewport" data-static-app-viewport>
+---
+interface Props {
+  attachmentMenuOpen?: boolean;
+  rightPanelOpen?: boolean;
+}
+
+const { attachmentMenuOpen = false, rightPanelOpen = false } = Astro.props;
+---
+
+<div class:list={["mockup-viewport", { "attachment-open": attachmentMenuOpen, "right-panel-open": rightPanelOpen }]} data-static-app-viewport>
 <div class="app-mockup" aria-label="Static preview of the Up.computer interface">
   <aside class="mock-sidebar">
     <div class="window-controls" aria-hidden="true"><i></i><i></i><i></i></div>
@@ -61,6 +70,22 @@
       <span>＋</span>
     </header>
 
+    {rightPanelOpen && (
+      <aside class="mock-right-panel">
+        <div class="panel-controls" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="m15 3 6 0 0 6"></path><path d="m9 21-6 0 0-6"></path><path d="m21 3-7 7"></path><path d="m3 21 7-7"></path></svg>
+          <span><svg viewBox="0 0 16 16"><path class="filled-panel-icon" d="M12.154 2.004C13.739 2.084 15 3.395 15 5v6c0 1.605-1.261 2.916-2.846 2.996L12 14H4c-1.657 0-3-1.343-3-3V5c0-1.657 1.343-3 3-3h8l.154.004ZM4 3.25c-.967 0-1.75.784-1.75 1.75v6c0 .967.783 1.75 1.75 1.75h8c.967 0 1.75-.783 1.75-1.75V5c0-.966-.783-1.75-1.75-1.75H4Zm8 1.125c.345 0 .625.28.625.625v6a.625.625 0 1 1-1.25 0V5c0-.345.28-.625.625-.625Z"></path></svg></span>
+        </div>
+        <div class="panel-empty-copy"><strong>Open a surface</strong><p>Choose what to show in the right panel.</p></div>
+        <div class="surface-grid">
+          <div class="surface-card"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"></circle><path d="M3.6 9h16.8M3.6 15h16.8M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"></path></svg><strong>Browser</strong><p>Open a local app or URL.</p></div>
+          <div class="surface-card"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="m7 9 3 3-3 3M13 15h4"></path></svg><strong>Terminal</strong><p>Start a shell in this workspace.</p></div>
+          <div class="surface-card"><svg viewBox="0 0 24 24"><path d="M15 2h-4a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V8"></path><path d="M16.7 2.7A2.4 2.4 0 0 0 15 2v5a1 1 0 0 0 1 1h5"></path><path d="M5 7a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h8a2 2 0 0 0 1.7-1"></path></svg><strong>Files</strong><p>Browse and read workspace files.</p></div>
+          <div class="surface-card muted"><svg viewBox="0 0 24 24"><path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7Z"></path><path d="M14 2v5h5M9 13h6M12 10v6"></path></svg><strong>Diff</strong><p>Review changes in this thread.</p></div>
+        </div>
+      </aside>
+    )}
+
     <div class="conversation">
       <div class="code-card compact">
         <code><span class="orange-text">bg-card</span><span class="blue-text">/70</span><br /><span class="orange-text">from-card</span><span class="blue-text">/95</span> <span class="orange-text">via-card</span><span class="blue-text">/80</span></code>
@@ -87,6 +112,22 @@
 
     <div class="composer-wrap">
       <div class="composer">
+        {attachmentMenuOpen && (
+          <div class="attachment-menu" aria-label="Attachment options">
+            <div class="attachment-item">
+              <span class="attachment-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 5h6"></path><path d="M19 2v6"></path><path d="M21 11.5V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7.5"></path><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"></path><circle cx="9" cy="9" r="2"></circle></svg></span>
+              <span><strong>Images</strong><small>Attach one or more images to this message.</small></span>
+            </div>
+            <div class="attachment-item">
+              <span class="attachment-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 2h-4a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V8"></path><path d="M16.706 2.706A2.4 2.4 0 0 0 15 2v5a1 1 0 0 0 1 1h5a2.4 2.4 0 0 0-.706-1.706z"></path><path d="M5 7a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h8a2 2 0 0 0 1.732-1"></path></svg></span>
+              <span><strong>Files or folders</strong><small>Add workspace paths as context using the desktop picker.</small></span>
+            </div>
+            <div class="attachment-item selected">
+              <span class="attachment-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6a9 9 0 0 0-9 9V3"></path><circle cx="18" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle></svg></span>
+              <span><strong>Chat context</strong><small>Attach a bounded snapshot of another conversation.</small></span>
+            </div>
+          </div>
+        )}
         <div class="composer-placeholder">Ask anything, @tag files/folders, $use skills, or / for commands</div>
         <div class="composer-toolbar">
           <div class="composer-options"><span>＋</span><i></i><span class="composer-branch-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6a9 9 0 0 0-9 9V3"></path><circle cx="18" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle></svg></span><i></i><span>Ask</span><i></i><span>Codex · GPT-5.5</span><i></i><span>Extra High · Fast</span><i></i><span>Full access</span></div>
@@ -230,6 +271,24 @@
   .mock-header strong { font-size: 1.02em; font-weight: 550; }
   .mock-header > span { margin-left: auto; color: rgba(255,255,255,.58); font-size: 1.5em; font-weight: 200; }
 
+  .mock-right-panel { position: absolute; z-index: 2; top: 7.5%; right: 0; bottom: 0; width: 34%; overflow: hidden; border-left: 1px solid var(--app-border); background: rgba(19,19,19,.99); }
+  .panel-controls { height: 48px; padding: 8px 12px; display: flex; align-items: center; justify-content: flex-end; gap: 6px; color: rgba(255,255,255,.58); }
+  .panel-controls > svg { width: 32px; height: 32px; padding: 8px; }
+  .panel-controls > span { width: 32px; height: 32px; display: inline-grid; place-items: center; border-radius: 8px; background: rgba(255,255,255,.045); }
+  .panel-controls span svg { width: 16px; height: 16px; }
+  .panel-controls .filled-panel-icon { fill: currentColor; stroke: none; }
+  .panel-empty-copy { position: absolute; top: calc(50% - 168px); right: 16px; left: 16px; text-align: center; }
+  .panel-empty-copy strong { color: rgba(255,255,255,.92); font-size: 15px; font-weight: 550; line-height: 1.4; }
+  .panel-empty-copy p { margin-top: 6px; color: rgba(255,255,255,.5); font-size: 12px; line-height: 1.5; }
+  .surface-grid { position: absolute; top: calc(50% - 99px); right: 16px; left: 16px; display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; }
+  .surface-card { min-width: 0; height: 128px; padding: 16px; display: flex; flex-direction: column; align-items: flex-start; border: 1px solid rgba(255,255,255,.09); border-radius: 12px; background: rgba(255,255,255,.012); }
+  .surface-card > svg { width: 20px; height: 20px; margin-bottom: 18px; color: rgba(255,255,255,.88); stroke-width: 1.8 !important; }
+  .surface-card strong { color: rgba(255,255,255,.9); font-size: 14px; font-weight: 550; line-height: 1.4; }
+  .surface-card p { margin-top: 5px; color: rgba(255,255,255,.5); font-size: 11px; line-height: 1.45; }
+  .surface-card.muted { opacity: .42; }
+  .right-panel-open .conversation { right: 34%; }
+  .right-panel-open .composer-wrap { right: calc(34% + 20px); left: 20px; width: auto; max-width: none; transform: none; }
+
   .conversation { position: absolute; inset: 7.5% 0 19% 0; padding: 3% 3.5% 8%; overflow: hidden; color: rgba(255,255,255,.82); }
   .conversation p { margin: 1.8% 0; font-size: .94em; line-height: 1.55; }
   .conversation a { padding: .12em .38em; border: 1px solid rgba(255,255,255,.12); border-radius: 5px; color: rgba(255,255,255,.82); text-decoration: underline; text-underline-offset: 2px; }
@@ -241,7 +300,16 @@
   .message-time { display: block; margin-top: 2%; color: rgba(255,255,255,.3); }
 
   .composer-wrap { position: absolute; z-index: 3; width: calc(100% - 40px); max-width: 832px; bottom: 12px; left: 50%; transform: translateX(-50%); }
-  .composer { height: 112px; min-height: 96px; display: flex; flex-direction: column; border-radius: 32px; background: #1e1e1e; box-shadow: inset -1px -1px 1px rgba(255,255,255,.06), inset 1px 1px 1px rgba(255,255,255,.12), 0 4px 14.4px rgba(9,9,9,.08); }
+  .composer { position: relative; height: 112px; min-height: 96px; display: flex; flex-direction: column; border-radius: 32px; background: #1e1e1e; box-shadow: inset -1px -1px 1px rgba(255,255,255,.06), inset 1px 1px 1px rgba(255,255,255,.12), 0 4px 14.4px rgba(9,9,9,.08); }
+  .attachment-menu { position: absolute; z-index: 5; bottom: 48px; left: 16px; width: 448px; padding: 6px; overflow: hidden; border: 1px solid rgba(255,255,255,.1); border-radius: 16px; background: #171717; box-shadow: 0 18px 50px rgba(0,0,0,.55); }
+  .attachment-item { min-height: 60px; padding: 10px; display: flex; align-items: flex-start; gap: 12px; border-radius: 12px; }
+  .attachment-item.selected { background: rgba(255,255,255,.055); }
+  .attachment-icon { width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; flex: none; border-radius: 8px; background: rgba(255,255,255,.04); color: rgba(255,255,255,.5); }
+  .attachment-icon svg { width: 16px; height: 16px; stroke-width: 2 !important; stroke-linecap: round; stroke-linejoin: round; }
+  .attachment-item > span:last-child { min-width: 0; display: grid; gap: 1px; }
+  .attachment-item strong { color: rgba(255,255,255,.92); font-size: 14px; font-weight: 500; line-height: 1.5; }
+  .attachment-item small { overflow: hidden; color: rgba(255,255,255,.5); font-size: 12px; line-height: 1.5; text-overflow: ellipsis; white-space: nowrap; }
+  .attachment-open .composer-options > span:first-child { border-radius: 8px; background: rgba(255,255,255,.1); color: rgba(255,255,255,.92); }
   .composer-placeholder { min-height: 0; flex: 1; padding: 24px 24px 0; color: rgba(255,255,255,.5); font-size: 14px; line-height: 1.625; }
   .composer-toolbar { height: 48px; padding: 0 16px 16px; display: flex; align-items: center; justify-content: space-between; gap: 8px; color: rgba(255,255,255,.5); }
   .composer-options { min-width: 0; flex: 1; display: flex; align-items: center; gap: 2px; overflow: hidden; white-space: nowrap; font-size: 14px; line-height: 1.625; }
