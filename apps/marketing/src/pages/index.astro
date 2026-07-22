@@ -41,31 +41,23 @@ import { GITHUB_REPOSITORY_URL } from "../lib/site";
       <div class="choice-grid">
         <article class="choice-card">
           <div class="choice-copy choice-list-copy">
+            <div class="choice-brand choice-brand--up"><img src="/icon.webp" alt="" /></div>
             <h3>Up Agent</h3>
-            <p>Powered by Pi and your own model keys. Get native computer and browser use with a fast, token-efficient agent built into every workspace.</p>
-            <ul class="choice-list">
-              <li><span></span>Powered by Pi</li>
-              <li><span></span>Built in, with easy setup</li>
-              <li><span></span>2.4× more token-efficient</li>
-              <li><span></span>4× faster than Codex</li>
-              <li><span></span>Native computer use</li>
-              <li><span></span>Native browser use</li>
-            </ul>
+            <p>Powered by Pi and your own model keys. Get native computer and browser use with a fast, token-efficient agent built in. No extra CLI downloads or configuration required.</p>
           </div>
         </article>
 
         <article class="choice-card">
           <div class="choice-copy choice-list-copy">
-            <h3>Your favorite harnesses</h3>
-            <p>Install Up and your existing harnesses work automatically. Your credentials and context stay yours while Up orchestrates work across agents and harnesses.</p>
-            <ul class="choice-list choice-list--harnesses">
-              <li><span class="harness-list-icon"><img src="/harnesses/openai_dark.svg" alt="" /></span>Codex</li>
-              <li><span class="harness-list-icon"><img src="/harnesses/claude-ai-icon.svg" alt="" /></span>Claude Code</li>
-              <li><span class="harness-list-icon"><img src="/harnesses/opencode-dark.svg" alt="" /></span>OpenCode</li>
-              <li><span class="harness-list-icon grok-list-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4l16 16M14.5 4H20v5.5M4 20l6.5-6.5" /></svg></span>Grok Build</li>
-              <li><span class="harness-list-icon cursor-list-icon"><img src="/harnesses/cursor_light.svg" alt="" /></span>Cursor</li>
-              <li><span class="harness-list-icon more-list-icon">+N</span>More agent CLIs</li>
-            </ul>
+            <div class="choice-brand harness-stack" aria-label="Codex, Claude Code, OpenCode, Grok Build, and Cursor">
+              <span><img src="/harnesses/openai_dark.svg" alt="" /></span>
+              <span><img src="/harnesses/claude-ai-icon.svg" alt="" /></span>
+              <span><img src="/harnesses/opencode-dark.svg" alt="" /></span>
+              <span class="grok-stack-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.26905 15.284 17.2479 9.36086c.3912-.29039.9502-.17712 1.1366.27392.981 2.37872.5427 5.23732-1.409 7.20012-1.9517 1.9627-4.6673 2.3931-7.1494 1.4128l-2.7115 1.2625c3.8891 2.6732 8.6117 2.0121 11.5628-.9577 2.3408-2.354 3.0658-5.5628 2.3879-8.4564l.0061.0062c-.983-4.25087.2417-5.94997 2.7504-9.42439.0594-.08238.1188-.16476.1782-.2492l-3.3013 3.31995v-.0103L9.267 15.2861"></path><path d="M7.62249 16.7237c-2.79136-2.6815-2.31009-6.83148.07168-9.22465 1.76124-1.77119 4.64683-2.49408 7.16583-1.43137l2.7053-1.2563c-.4874-.35424-1.112-.73525-1.8288-1.00299-3.2399-1.34075-7.1187-.67347-9.75237 1.97302-2.53332 2.54763-3.32998 6.46489-1.96194 9.80749 1.02193 2.4982-.6533 4.2652-2.34082 6.0488C1.08337 22.2699.483318 22.9022 0 23.5716l7.62045-6.8459"></path></svg></span>
+              <span class="cursor-stack-icon"><img src="/harnesses/cursor_light.svg" alt="" /></span>
+            </div>
+            <h3>Your favorite agent CLIs</h3>
+            <p>Install Up and your existing agent CLIs work automatically. No additional subscription required. Orchestrate different agents together in one workspace.</p>
           </div>
         </article>
       </div>
@@ -99,15 +91,15 @@ import { GITHUB_REPOSITORY_URL } from "../lib/site";
   <section class="wande-section feature-rows-section">
     <div class="wande-shell feature-rows">
       <article class="feature-row">
-        <div class="feature-copy"><span class="feature-index">01</span><h2>Arrange your workspace your way.</h2><p>Split, resize, stack, and move agent threads and tools. Keep every part of your workflow visible without switching windows.</p></div>
+        <div class="feature-copy"><span class="feature-index">01</span><h2>Arrange your workspace your way.</h2><p>Split, resize, stack, and move agent threads and tools. Build a workspace that adapts to any workflow.</p></div>
         <div class="feature-visual multi-chat-visual"><MultiChatMockup /></div>
       </article>
       <article class="feature-row feature-row--reverse">
-        <div class="feature-copy"><span class="feature-index">02</span><h2>Attach context. Fork any thread.</h2><p>Use threads from other agents as context, then fork any conversation to explore a new direction without losing the original work.</p></div>
+        <div class="feature-copy"><span class="feature-index">02</span><h2>Fork any thread. Attach threads as context.</h2><p>Use threads from other agents as context to get a second opinion, review their work, or continue in a new direction.</p></div>
         <div class="feature-visual context-attach-visual"><div class="feature-app-frame"><StaticAppMockup attachmentMenuOpen /></div></div>
       </article>
       <article class="feature-row">
-        <div class="feature-copy"><span class="feature-index">03</span><h2>Everything you need, right beside your agents.</h2><p>Open the browser, terminal, file explorer, and diffs in one integrated side panel—everything you expect from a best-in-class agent environment.</p></div>
+        <div class="feature-copy"><span class="feature-index">03</span><h2>Everything you expect from a best-in-class agent environment.</h2><p>Open the browser, terminal, file explorer, and diffs in one integrated side panel.</p></div>
         <div class="feature-visual integrated-panel-visual"><div class="feature-app-frame"><StaticAppMockup rightPanelOpen /></div></div>
       </article>
     </div>
@@ -315,8 +307,7 @@ import { GITHUB_REPOSITORY_URL } from "../lib/site";
         Your agents deserve better than a terminal.
       </h2>
       <p class="cta-sub">
-        Up.computer includes the built-in Up agent runtime. Install it, sign in or bring your own
-        provider key, and let your agents get to work—no separate harness setup required.
+        Up.computer is free, open source, and fast. Built on t3code’s foundation, it rethinks the entire experience of working with agents, from starting a thread to managing an entire workspace. Working with agents has never felt this good.
       </p>
       <div class="cta-actions">
         <a id="cta-download-btn" class="btn btn-primary btn-lg" href="https://github.com/krl-gr/upcomputer/releases">
@@ -1379,6 +1370,54 @@ import { GITHUB_REPOSITORY_URL } from "../lib/site";
   .choice-list-copy {
     padding: 4px 2px 10px;
   }
+
+  .choice-brand {
+    height: 32px;
+    margin-bottom: 30px;
+  }
+
+  .choice-brand--up img {
+    width: 32px;
+    height: 32px;
+    display: block;
+    border-radius: 8px;
+  }
+
+  .harness-stack {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .harness-stack > span {
+    width: 32px;
+    height: 32px;
+    display: inline-grid;
+    place-items: center;
+    flex: none;
+  }
+
+  .harness-stack img,
+  .harness-stack svg {
+    width: 32px;
+    height: 32px;
+    object-fit: contain;
+  }
+
+  .grok-stack-icon {
+    color: rgba(255,255,255,.9);
+  }
+
+  .grok-stack-icon svg {
+    fill: currentColor;
+    stroke: none;
+  }
+
+  .cursor-stack-icon img {
+    filter: invert(1);
+    opacity: .9;
+  }
+
 
   .choice-list {
     margin: 30px 0 0;
