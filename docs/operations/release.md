@@ -1,14 +1,16 @@
 # Release Checklist
 
-This document covers the unified release workflow for stable and nightly desktop releases.
+This document covers public Core and nightly builds. Official Up.computer distributions are
+composed and released from the private distribution repository. That workflow exclusively owns
+ordinary stable tags and releases in the `vX.Y.Z` namespace.
 
-## What the workflow does
+## What the Core workflow does
 
-- Workflow: `.github/workflows/release.yml`
+- Workflow: `.github/workflows/release.yml` (**Core Release**)
 - Triggers:
-  - push tag matching `v*.*.*` for stable releases
   - scheduled nightly check every three hours
-  - manual `workflow_dispatch` for either channel
+  - manual `workflow_dispatch` for either a Core or nightly build
+- A manual Core version `X.Y.Z` is published as `core-vX.Y.Z`; this workflow cannot create `vX.Y.Z`.
 - Runs quality gates first: lint, typecheck, test.
 - Reads the shared production T3 Connect relay URL and Clerk client configuration before packaging clients.
 - Builds four artifacts in parallel for both channels:
@@ -17,10 +19,9 @@ This document covers the unified release workflow for stable and nightly desktop
   - Linux `x64` AppImage
   - Windows `x64` NSIS installer
 - Publishes one GitHub Release with all produced files.
-  - Stable tags with a suffix after `X.Y.Z` (for example `1.2.3-alpha.1`) are published as GitHub prereleases.
-  - Only plain stable `X.Y.Z` releases are marked as the repository's latest release.
+  - Core releases use `core-vX.Y.Z` and are never marked as the repository's latest release.
   - Nightly runs are always GitHub prereleases and never marked latest.
-  - Automatically generated release notes are pinned to the previous tag in the same channel, so stable compares to the previous stable tag and nightly compares to the previous nightly tag.
+  - Automatically generated release notes compare only with the previous tag in the same namespace.
 - Includes Electron auto-update metadata (for example `latest*.yml`, `nightly*.yml`, and `*.blockmap`) in release assets.
 - Publishes the CLI package (`apps/server`, npm package `t3`) with OIDC trusted publishing from the same workflow file:
   - stable releases publish npm dist-tag `latest`
@@ -192,7 +193,8 @@ Checklist:
    - Workflow file: `.github/workflows/release.yml`
    - Environment (if used): match your npm trusted publishing config
 3. Ensure npm account and org policies allow trusted publishing for the package.
-4. Create release tag `vX.Y.Z` and push; workflow will:
+4. Dispatch **Core Release** with `channel=stable` and `version=X.Y.Z`; the workflow will:
+   - create the separate `core-vX.Y.Z` release tag
    - set `apps/server/package.json` version to `X.Y.Z`
    - build web + server
    - run `npm publish --access public --tag latest`
@@ -203,11 +205,10 @@ Checklist:
 Use this first to validate the release pipeline.
 
 1. Confirm no signing secrets are required for this test.
-2. Create a test tag:
-   - `git tag v0.0.0-test.1`
-   - `git push origin v0.0.0-test.1`
+2. Dispatch **Core Release** with `channel=stable` and an unused prerelease version such as
+   `0.0.0-test.1`.
 3. Wait for `.github/workflows/release.yml` to finish.
-4. Verify the GitHub Release contains all platform artifacts.
+4. Verify the `core-v0.0.0-test.1` GitHub Release contains all platform artifacts.
 5. Download each artifact and sanity-check installation on each OS.
 
 ## 2) Apple signing + notarization setup (macOS)
@@ -219,44 +220,28 @@ Required secrets used by the workflow:
 - `APPLE_API_KEY`
 - `APPLE_API_KEY_ID`
 - `APPLE_API_ISSUER`
-- `MACOS_PROVISIONING_PROFILE` (base64-encoded provisioning profile with Associated Domains)
-
-Required repository variables:
-
-- `APPLE_TEAM_ID`
-
-Optional repository variables:
-
-- `CLERK_PASSKEY_RP_DOMAINS`: comma-separated RP-domain override. By default, the build derives the
-  domain from the production Clerk publishable key.
 
 Checklist:
 
-1. Apple Developer account access:
-   - Team has rights to create Developer ID certificates.
-2. Create an explicit App ID for `computer.up.upcomputer` and enable Associated Domains.
-3. Create a `Developer ID Application` certificate and a compatible provisioning profile for that
-   App ID with Associated Domains enabled.
-4. Export the certificate + private key as `.p12` from Keychain.
-5. Base64-encode the `.p12` and store as `CSC_LINK`.
-6. Base64-encode the provisioning profile and store it as `MACOS_PROVISIONING_PROFILE`.
-7. Store the `.p12` export password as `CSC_KEY_PASSWORD`, and set `APPLE_TEAM_ID` to the
-   10-character Apple Developer Team ID.
-8. In App Store Connect, create an API key (Team key).
-9. Add API key values:
+1. Confirm the Apple Developer team can use Developer ID distribution.
+2. Create or reuse the explicit App ID `computer.up.upcomputer`.
+3. Create or reuse a `Developer ID Application` certificate.
+4. Export the certificate and private key as `.p12` from Keychain.
+5. Base64-encode the `.p12` and store it as `CSC_LINK`.
+6. Store the `.p12` export password as `CSC_KEY_PASSWORD`.
+7. In App Store Connect, create or reuse a Team API key for notarization.
+8. Add API key values:
    - `APPLE_API_KEY`: contents of the downloaded `.p8`
    - `APPLE_API_KEY_ID`: Key ID
    - `APPLE_API_ISSUER`: Issuer ID
-10. Complete the Clerk Native API and AASA setup in [T3 Connect Clerk Setup](../cloud/t3-connect-clerk.md#desktop-passkeys).
-11. Re-run a tag release and confirm macOS artifacts are signed/notarized and contain the expected
-    `com.apple.developer.associated-domains` entitlement.
+9. Re-run a manual Core release and confirm the app signature, notarization ticket, and Gatekeeper
+   assessment all succeed.
 
 Notes:
 
 - `APPLE_API_KEY` is stored as raw key text in secrets.
-- The workflow writes it to a temporary `AuthKey_<id>.p8` file at runtime.
-- The workflow decodes `MACOS_PROVISIONING_PROFILE`, validates it with `security cms`, and passes it
-  to the desktop packager.
+- The workflow writes it to a permission-restricted temporary `AuthKey_<id>.p8` file at runtime.
+- This release does not enable passkey entitlements and does not require a provisioning profile.
 
 ## 3) Azure Trusted Signing setup (Windows)
 
@@ -288,8 +273,8 @@ Checklist:
 
 1. Ensure `main` is green in CI.
 2. Bump app version as needed.
-3. Create release tag: `vX.Y.Z`.
-4. Push tag.
+3. Dispatch **Core Release** with `channel=stable` and the chosen version.
+4. Confirm the resulting tag is `core-vX.Y.Z`, never `vX.Y.Z`.
 5. Verify workflow steps:
    - preflight passes
    - all matrix builds pass
@@ -299,9 +284,8 @@ Checklist:
 ## 5) Troubleshooting
 
 - macOS build unsigned when expected signed:
-  - Check all Apple secrets plus `APPLE_TEAM_ID` are populated and non-empty.
-  - Confirm the provisioning profile belongs to `APPLE_TEAM_ID.computer.up.upcomputer` and includes
-    Associated Domains.
+  - Check all five Apple signing/notarization secrets are populated and non-empty.
+  - Confirm the Developer ID certificate is valid and the App Store Connect key can notarize.
 - Windows build unsigned when expected signed:
   - Check all Azure ATS and auth secrets are populated and non-empty.
 - Build fails with signing error:

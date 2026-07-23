@@ -85,6 +85,7 @@ export class PreviousReleaseTagGitHubOutputAppendError extends Schema.TaggedErro
 }
 
 interface StableVersion {
+  readonly namespace: "official" | "core";
   readonly major: number;
   readonly minor: number;
   readonly patch: number;
@@ -144,10 +145,12 @@ const compareStableVersions = (left: StableVersion, right: StableVersion): numbe
 };
 
 const parseStableTag = (tag: string): StableVersion | undefined => {
-  const match = /^v(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/.exec(tag);
+  const match = /^(core-)?v(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/.exec(
+    tag,
+  );
   if (!match) return undefined;
 
-  const [, major, minor, patch, prerelease] = match;
+  const [, corePrefix, major, minor, patch, prerelease] = match;
   if (!major || !minor || !patch) return undefined;
 
   const prereleaseIdentifiers = prerelease ? prerelease.split(".") : [];
@@ -157,6 +160,7 @@ const parseStableTag = (tag: string): StableVersion | undefined => {
   if (prereleaseIdentifiers[0] === "nightly") return undefined;
 
   return {
+    namespace: corePrefix ? "core" : "official",
     major: Number(major),
     minor: Number(minor),
     patch: Number(patch),
@@ -207,6 +211,7 @@ export const resolvePreviousReleaseTag = (
         .filter(
           (entry): entry is { tag: string; parsed: StableVersion } => entry.parsed !== undefined,
         )
+        .filter((entry) => entry.parsed.namespace === current.namespace)
         .filter((entry) => compareStableVersions(entry.parsed, current) < 0)
         .toSorted((left, right) => compareStableVersions(right.parsed, left.parsed));
 

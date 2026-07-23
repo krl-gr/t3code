@@ -7,7 +7,7 @@ interface Props {
 const { attachmentMenuOpen = false, rightPanelOpen = false } = Astro.props;
 ---
 
-<div class:list={["mockup-viewport", { "attachment-open": attachmentMenuOpen, "right-panel-open": rightPanelOpen }]} data-static-app-viewport>
+<div class:list={["mockup-viewport", { "attachment-open": attachmentMenuOpen, "right-panel-open": rightPanelOpen }]} data-static-app-viewport aria-hidden="true" inert>
 <div class="app-mockup" aria-label="Static preview of the Up.computer interface">
   <aside class="mock-sidebar">
     <div class="window-controls" aria-hidden="true"><i></i><i></i><i></i></div>
@@ -32,22 +32,22 @@ const { attachmentMenuOpen = false, rightPanelOpen = false } = Astro.props;
         <span>Projects</span>
         <svg class="section-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg>
       </div>
-      <div class="project-row active"><b class="project-mark orange">T</b><span>t3code</span></div>
+      <div class="project-row active"><b class="project-mark orange">A</b><span>Acme App</span></div>
       <div class="project-row"><b class="project-mark purple">D</b><span>Documents</span></div>
-      <div class="project-row"><b class="project-mark mint">U</b><span>UICodex</span></div>
+      <div class="project-row"><b class="project-mark mint">S</b><span>SDK</span></div>
 
       <div class="sidebar-label thread-label">
-        <span>t3code’s threads</span>
+        <span>Acme App threads</span>
         <svg class="section-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg>
       </div>
-      <div class="thread-row active"><span>Restore dark theme regressions</span><time>18m</time></div>
-      <div class="thread-row plan"><span class="thread-main"><strong>Plan Ready</strong><em>Plan light theme...</em></span><time>29m</time></div>
+      <div class="thread-row active"><span>Polish dark theme</span><time>18m</time></div>
+      <div class="thread-row plan"><span class="thread-main"><strong>Plan Ready</strong><em>Plan light theme</em></span><time>29m</time></div>
       <div class="thread-row"><span>Add prompt shortcuts and actions</span><time>50m</time></div>
-      <div class="thread-row"><span>First message blinking issue</span><time>54m</time></div>
+      <div class="thread-row"><span>Refine message animation</span><time>54m</time></div>
       <div class="thread-row"><span>Unify folder icon text color</span><time>13h</time></div>
       <div class="thread-row"><span>Code review changes</span><time>13h</time></div>
       <div class="thread-row"><span>Response animation types</span><time>13h</time></div>
-      <div class="thread-row"><span>Fix working indicator first blink</span><time>14h</time></div>
+      <div class="thread-row"><span>Polish working indicator</span><time>14h</time></div>
       <div class="thread-row"><span>Premium chat streaming animation</span><time>15h</time></div>
       <div class="thread-row"><span>GPT vs Opus comparison</span><time>15h</time></div>
     </div>
@@ -66,7 +66,7 @@ const { attachmentMenuOpen = false, rightPanelOpen = false } = Astro.props;
   <section class="mock-main">
     <header class="mock-header">
       <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"></rect><path d="M8 4v16"></path></svg>
-      <strong>Restore dark theme regressions</strong>
+      <strong>Polish dark theme</strong>
       <span>＋</span>
     </header>
 
@@ -97,7 +97,7 @@ const { attachmentMenuOpen = false, rightPanelOpen = false } = Astro.props;
         <code><span class="orange-text">bg-card</span><span class="blue-text">/70</span> <span class="orange-text">not-dark:bg-</span><span class="yellow-text">[#EFEFEF]</span><span class="blue-text">/95</span><br /><span class="orange-text">from-card</span><span class="blue-text">/95</span> <span class="orange-text">via-card</span><span class="blue-text">/80</span> <span class="orange-text">not-dark:from-</span><span class="yellow-text">[#EFEFEF]</span><span class="blue-text">/95</span></code>
       </div>
 
-      <p>In <a href="#">⚛ ComposerPrimaryActions.tsx · L54</a>, the send button helper changed both themes because the new colors are unscoped. Dark’s previous button was:</p>
+      <p>In <code>ComposerPrimaryActions.tsx · L54</code>, the send button helper changed both themes because the new colors are unscoped. Dark’s previous button was:</p>
 
       <div class="code-card">
         <code><span class="orange-text">bg-</span><span class="gray-text">[#d4d4d4]</span> <span class="orange-text">text-</span><span class="blue-text">[#171717]</span><br /><span class="orange-text">shadow-</span><span class="purple-text">[inset_0_-1px_1px_rgba(0,0,0,0.17),inset_0_1px_1px_white]</span></code>

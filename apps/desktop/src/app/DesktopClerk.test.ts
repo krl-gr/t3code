@@ -65,7 +65,7 @@ describe("DesktopClerk", () => {
         [
           {
             storage: storageAdapter,
-            passkeys: true,
+            passkeys: false,
             renderer: { scheme: "upcomputer-dev", host: "app" },
           },
         ],
@@ -138,7 +138,7 @@ describe("DesktopClerk", () => {
       [
         {
           storage: storageAdapter,
-          passkeys: true,
+          passkeys: false,
           renderer: { scheme, host: "app" },
         },
       ],

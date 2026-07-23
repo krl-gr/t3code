@@ -18,12 +18,12 @@ with an issue before a pull request.
 
 ## Install
 
-This public repository produces **Upcomputer Core**, the MIT-licensed core-only
+This public repository produces **Up.computer Core**, the MIT-licensed core-only
 composition. Build it from source using the instructions below.
 
-The normal official Upcomputer installer is assembled by a separate private
+The normal official Up.computer installer is assembled by a separate private
 release pipeline from this exact public core plus bundled first-party
-extensions. It is still one Upcomputer application, but the complete official
+extensions. It is still one Up.computer application, but the complete official
 binary is not represented by this public source tree alone.
 
 The official installer includes the built-in **Up** agent runtime, so a user can install

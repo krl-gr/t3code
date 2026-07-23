@@ -4,7 +4,7 @@ Up.computer is derived from the open-source T3 Code project maintained by T3 Too
 
 <https://github.com/pingdotgg/t3code>
 
-The public Upcomputer Core source is distributed under the MIT License in [LICENSE](./LICENSE).
+The public Up.computer Core source is distributed under the MIT License in [LICENSE](./LICENSE).
 Official Up.computer installers may also contain proprietary first-party extensions and separately
 licensed third-party software; the installer is not represented by this public source tree alone.
 

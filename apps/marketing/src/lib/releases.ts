@@ -1,30 +1,11 @@
 const REPO = "krl-gr/upcomputer";
 
+export const RELEASE_VERSION = "0.0.29";
+export const RELEASE_TAG = `v${RELEASE_VERSION}`;
 export const RELEASES_URL = `https://github.com/${REPO}/releases`;
+export const RELEASE_URL = `${RELEASES_URL}/tag/${RELEASE_TAG}`;
 
-const API_URL = `https://api.github.com/repos/${REPO}/releases/latest`;
-const CACHE_KEY = "upcomputer-latest-release";
-
-export interface ReleaseAsset {
-  name: string;
-  browser_download_url: string;
-}
-
-export interface Release {
-  tag_name: string;
-  html_url: string;
-  assets: ReleaseAsset[];
-}
-
-export async function fetchLatestRelease(): Promise<Release> {
-  const cached = sessionStorage.getItem(CACHE_KEY);
-  if (cached) return JSON.parse(cached);
-
-  const data = await fetch(API_URL).then((r) => r.json());
-
-  if (data?.assets) {
-    sessionStorage.setItem(CACHE_KEY, JSON.stringify(data));
-  }
-
-  return data;
+export function releaseAssetUrl(suffix: string): string {
+  const assetName = `Up.computer-${RELEASE_VERSION}-${suffix}`;
+  return `${RELEASES_URL}/download/${RELEASE_TAG}/${assetName}`;
 }

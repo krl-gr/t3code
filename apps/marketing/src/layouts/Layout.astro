@@ -7,9 +7,11 @@ interface Props {
 }
 
 const {
-  title = "Up.computer",
-  description = "Up.computer — The local control plane for coding agents.",
+  title = "Up.computer — Visual workspace for AI agents",
+  description = "Run Up Agent or bring your existing agent CLIs into one visual desktop workspace.",
 } = Astro.props;
+const canonicalUrl = new URL(Astro.url.pathname, "https://up.computer");
+const socialImageUrl = new URL("/updated-screenshot.webp", canonicalUrl);
 ---
 
 <html lang="en">
@@ -17,6 +19,17 @@ const {
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content={description} />
+    <link rel="canonical" href={canonicalUrl} />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Up.computer" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonicalUrl} />
+    <meta property="og:image" content={socialImageUrl} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={socialImageUrl} />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -35,6 +48,7 @@ const {
         <div class="nav-inner">
           <a href="/" class="nav-brand" aria-label="Up.computer home">
             <img class="nav-brand-icon" src="/icon.webp" alt="" width="32" height="32" />
+            <span class="nav-alpha">Alpha</span>
           </a>
           <div class="nav-right">
             <a
@@ -50,7 +64,7 @@ const {
               <span class="nav-github-label">GitHub</span>
               <strong id="github-star-count" hidden></strong>
             </a>
-            <a class="btn btn-primary nav-download" href="https://github.com/krl-gr/upcomputer/releases">
+            <a class="btn btn-primary nav-download" href="/download">
               Download
             </a>
           </div>
@@ -65,9 +79,10 @@ const {
         <div class="footer-inner">
           <div class="footer-brand">
             <img src="/icon.webp" alt="" />
-            <span>&copy; {new Date().getFullYear()} UpComputer</span>
+            <span>&copy; {new Date().getFullYear()} Up.computer</span>
           </div>
           <div class="footer-links">
+            <a href="https://github.com/pingdotgg/t3code" target="_blank" rel="noopener noreferrer">Built from T3 Code</a>
             <a href={GITHUB_REPOSITORY_URL} target="_blank" rel="noopener noreferrer">GitHub</a>
             <a href="/download">Download</a>
             <a href="/privacy">Privacy</a>
@@ -342,6 +357,7 @@ const {
   .nav-brand {
     display: inline-flex;
     align-items: center;
+    gap: 9px;
     color: var(--fg);
     transition: color 0.2s ease;
   }
@@ -355,6 +371,19 @@ const {
     height: 32px;
     border-radius: 7px;
     object-fit: cover;
+  }
+
+  .nav-alpha {
+    padding: 3px 7px;
+    border: 1px solid var(--border-strong);
+    border-radius: 999px;
+    color: var(--warn);
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    line-height: 1;
+    text-transform: uppercase;
   }
 
   .nav-right {
