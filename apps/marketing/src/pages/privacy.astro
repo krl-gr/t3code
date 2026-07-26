@@ -24,12 +24,22 @@ import Layout from "../layouts/Layout.astro";
       receive and observe the data you send to them.
     </p>
 
-    <h2>Diagnostics and telemetry</h2>
+    <h2>Diagnostics and analytics</h2>
     <p>
-      The current public Alpha does not configure an endpoint for remote product telemetry. The app
-      can create local diagnostic data, including logs and traces, to operate and troubleshoot the
-      product. That data remains on your device unless you choose to share it. If remote telemetry
-      is enabled in a later release, this policy will be updated before that release is published.
+      The app sends anonymous operational and product events to PostHog using an
+      installation-scoped identifier. These events can include the app version, operating system,
+      processor architecture, configured provider type, selected model, interaction mode, and
+      aggregate counts. They do not include repository contents, prompts, responses, credentials,
+      file paths, or account identifiers. The app can also create local logs and traces for
+      operation and troubleshooting.
+    </p>
+    <p>
+      The website uses PostHog for cookieless page views, Core Web Vitals, and explicit interactions
+      such as GitHub, changelog, and download clicks. Website analytics does not use general
+      interaction autocapture, session replay, persistent browser identifiers, or person profiles,
+      and it respects browser Do Not Track.
+      If you later answer an article poll, the selected response and article context will be sent
+      only after you submit it.
     </p>
 
     <h2>Website and third parties</h2>
@@ -51,7 +61,7 @@ import Layout from "../layouts/Layout.astro";
 
     <h2>Changes</h2>
     <p>
-      This policy may change as the alpha product evolves. Material updates will be published on
+      This policy may change as the product evolves. Material updates will be published on
       this page with a new effective date.
     </p>
   </LegalPage>

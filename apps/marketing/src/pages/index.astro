@@ -2,22 +2,20 @@
 import MultiChatMockup from "../components/MultiChatMockup.astro";
 import StaticAppMockup from "../components/StaticAppMockup.astro";
 import Layout from "../layouts/Layout.astro";
+import { SOFTWARE_APPLICATION_STRUCTURED_DATA } from "../lib/site";
 ---
 
-<Layout>
+<Layout structuredData={SOFTWARE_APPLICATION_STRUCTURED_DATA}>
   <!-- ── Wande-inspired hero ───────────────────────────────────── -->
   <section class="hero wande-section">
     <div class="wande-shell hero-shell">
       <div class="hero-copy">
         <div>
-          <p class="hero-alpha">Public Alpha</p>
           <h1 class="hero-title display">The visual workspace<br />for AI agents.</h1>
         </div>
         <div class="hero-bottomline">
           <p class="hero-sub">
-            Bring your agent CLIs and subscriptions. Or run standalone with Up Agent, powered by
-            <a href="https://github.com/badlogic/pi-mono" target="_blank" rel="noopener noreferrer">Pi</a>
-            and your model keys.
+            Bring your agent CLIs and subscriptions. Or run standalone with Up Agent and your model keys.
           </p>
         </div>
       </div>
@@ -45,7 +43,7 @@ import Layout from "../layouts/Layout.astro";
           <div class="choice-copy choice-list-copy">
             <div class="choice-brand choice-brand--up"><img src="/icon.webp" alt="" /></div>
             <h3>Up Agent</h3>
-            <p>Powered by Pi and your own model keys. Get first-party browser and computer use without installing a separate third-party agent CLI.</p>
+            <p>Use your own model keys. Get first-party browser and computer use without installing a separate third-party agent CLI.</p>
           </div>
         </article>
 
@@ -77,11 +75,11 @@ import Layout from "../layouts/Layout.astro";
       </article>
       <article class="feature-row feature-row--reverse">
         <div class="feature-copy"><span class="feature-index">02</span><h2>Fork any thread. Attach threads as context.</h2><p>Use threads from other agents as context to get a second opinion, review their work, or continue in a new direction.</p></div>
-        <div class="feature-visual context-attach-visual"><div class="feature-app-frame"><StaticAppMockup attachmentMenuOpen /></div></div>
+        <div class="feature-visual context-attach-visual"><div class="feature-app-frame"><StaticAppMockup attachmentMenuOpen fit="contain" /></div></div>
       </article>
       <article class="feature-row">
         <div class="feature-copy"><span class="feature-index">03</span><h2>Keep the tools around the work.</h2><p>Open the browser, terminal, file explorer, and diffs in one integrated side panel.</p></div>
-        <div class="feature-visual integrated-panel-visual"><div class="feature-app-frame"><StaticAppMockup rightPanelOpen /></div></div>
+        <div class="feature-visual integrated-panel-visual"><div class="feature-app-frame"><StaticAppMockup rightPanelOpen fit="contain" /></div></div>
       </article>
     </div>
   </section>
@@ -95,13 +93,17 @@ import Layout from "../layouts/Layout.astro";
         Your agents deserve better than a terminal.
       </h2>
       <p class="cta-sub">
-        Up.computer is free to use, with an MIT-licensed open-source core and first-party extensions in the official distribution. This Alpha runs locally; remote T3 Connect access is not included yet.
+        Up.computer is free to use, with an MIT-licensed open-source core and first-party extensions in the official distribution. The current release runs locally; remote access is not included yet.
       </p>
       <div class="cta-actions">
-        <a class="btn btn-primary btn-lg" href="/download">
-          Download Alpha
+        <a
+          class="btn btn-primary btn-lg"
+          href="/download"
+          data-analytics-event="marketing_download_cta_clicked"
+          data-analytics-placement="homepage_final_cta"
+        >
+          Download
         </a>
-        <a class="btn btn-ghost btn-lg" href="https://github.com/krl-gr/upcomputer/releases" target="_blank" rel="noopener noreferrer">Release notes</a>
       </div>
     </div>
   </section>
@@ -963,20 +965,6 @@ import Layout from "../layouts/Layout.astro";
     gap: 64px;
   }
 
-  .hero-alpha {
-    width: fit-content;
-    margin-bottom: 18px;
-    padding: 5px 9px;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 999px;
-    color: var(--warn);
-    font-family: var(--font-mono);
-    font-size: 10px;
-    font-weight: 600;
-    letter-spacing: 0.13em;
-    text-transform: uppercase;
-  }
-
   .hero-title {
     max-width: 900px;
     margin: 0;
@@ -1521,7 +1509,7 @@ import Layout from "../layouts/Layout.astro";
   }
 
   .feature-row {
-    min-height: 560px;
+    min-height: 0;
     display: grid;
     grid-template-columns: 1fr 2fr;
     border-bottom: 1px solid var(--border-strong);
@@ -1581,6 +1569,15 @@ import Layout from "../layouts/Layout.astro";
     background: #09090b url("/hero-monet.webp") center 42% / cover no-repeat;
   }
 
+  .multi-chat-visual {
+    aspect-ratio: 8 / 5;
+  }
+
+  .context-attach-visual,
+  .integrated-panel-visual {
+    aspect-ratio: 1120 / 750;
+  }
+
   .multi-chat-visual::before,
   .context-attach-visual::before,
   .integrated-panel-visual::before {
@@ -1594,11 +1591,12 @@ import Layout from "../layouts/Layout.astro";
 
   .feature-app-frame {
     position: absolute;
-    inset: 7% 6%;
+    inset: 6%;
     z-index: 1;
     overflow: hidden;
     border: 1px solid rgba(255,255,255,.18);
     border-radius: 16px;
+    background: rgba(9, 9, 11, 0.72);
     box-shadow: 0 40px 90px rgba(0,0,0,.65);
   }
 
@@ -1693,6 +1691,14 @@ import Layout from "../layouts/Layout.astro";
   .stack-preview i:nth-child(2) { top: 68px; }
   .stack-preview i:nth-child(3) { top: 107px; }
 
+  @media (max-width: 1180px) {
+    .feature-row,
+    .feature-row--reverse { min-height: auto; display: flex; flex-direction: column; }
+    .feature-row--reverse .feature-copy { order: 0; border-left: 0; }
+    .feature-copy { min-height: 280px; padding: 92px 40px 40px; border-right: 0; border-bottom: 1px solid var(--border-strong); }
+    .feature-index { left: 40px; }
+  }
+
   @media (max-width: 820px) {
     .hero.wande-section,
     .wande-section { padding-left: 8px; padding-right: 8px; }
@@ -1720,12 +1726,8 @@ import Layout from "../layouts/Layout.astro";
     .showcase-note { padding: 0 24px 32px; }
     .showcase-visual { min-height: 390px; padding: 28px 24px 0; }
     .showcase-visual img { min-width: 650px; }
-    .feature-row,
-    .feature-row--reverse { min-height: auto; display: flex; flex-direction: column; }
-    .feature-row--reverse .feature-copy { order: 0; border-left: 0; }
-    .feature-copy { min-height: 280px; padding: 92px 24px 40px; border-right: 0; border-bottom: 1px solid var(--border-strong); }
+    .feature-copy { padding: 92px 24px 40px; }
     .feature-index { left: 24px; }
-    .feature-visual { min-height: 370px; }
     .feature-visual img { top: 10%; height: 80%; }
     .crop-left img { left: 6%; }
     .crop-right img { right: 6%; }

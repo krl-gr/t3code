@@ -191,26 +191,3 @@ import MiniPaneComposer from "./MiniPaneComposer.astro";
   .new-thread-message { position: absolute; top: 43%; width: 100%; color: rgba(255,255,255,.3); font-size: 14px; font-weight: 550; line-height: 1.625; text-align: center; }
 
 </style>
-
-<script>
-  const MULTI_DESIGN_WIDTH = 1440;
-  const MULTI_DESIGN_HEIGHT = 900;
-  const MULTI_INSET = 34;
-
-  const resizeMultiChat = (viewport: HTMLElement) => {
-    const scale = Math.min(
-      Math.max(0, viewport.clientWidth - MULTI_INSET * 2) / MULTI_DESIGN_WIDTH,
-      Math.max(0, viewport.clientHeight - MULTI_INSET * 2) / MULTI_DESIGN_HEIGHT,
-    );
-    viewport.style.setProperty("--multi-scale", String(scale));
-  };
-
-  const multiViewports = document.querySelectorAll<HTMLElement>("[data-multi-chat-viewport]");
-  const multiObserver = new ResizeObserver((entries) => {
-    for (const entry of entries) resizeMultiChat(entry.target as HTMLElement);
-  });
-  for (const viewport of multiViewports) {
-    resizeMultiChat(viewport);
-    multiObserver.observe(viewport);
-  }
-</script>

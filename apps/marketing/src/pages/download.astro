@@ -5,11 +5,17 @@ import { RELEASES_URL, RELEASE_TAG, RELEASE_URL, releaseAssetUrl } from "../lib/
 
 <Layout title="Download — Up.computer" description="Download Up.computer for macOS, Windows, or Linux.">
   <div class="download-page">
-  <p class="alpha-badge">Alpha</p>
   <h1 class="heading">Download Up.computer</h1>
   <p class="subheading">
     <span>Latest ({RELEASE_TAG})</span>
-    <a class="changelog-link" href={RELEASE_URL} target="_blank" rel="noopener noreferrer">View changelog<span aria-hidden="true"> &#8599;</span></a>
+    <a
+      class="changelog-link"
+      href={RELEASE_URL}
+      target="_blank"
+      rel="noopener noreferrer"
+      data-analytics-event="marketing_changelog_clicked"
+      data-analytics-placement="download_page"
+    >View changelog<span aria-hidden="true"> &#8599;</span></a>
   </p>
 
   <div class="platforms" id="platforms">
@@ -20,11 +26,27 @@ import { RELEASES_URL, RELEASE_TAG, RELEASE_URL, releaseAssetUrl } from "../lib/
         <h2 class="platform-name">macOS</h2>
       </div>
       <div class="download-cards">
-        <a class="download-card" href={releaseAssetUrl("arm64.dmg")}>
+        <a
+          class="download-card"
+          href={releaseAssetUrl("arm64.dmg")}
+          data-analytics-event="marketing_download_clicked"
+          data-analytics-platform="macos"
+          data-analytics-architecture="arm64"
+          data-analytics-format="dmg"
+          data-analytics-release={RELEASE_TAG}
+        >
           <span class="card-arch">Apple Silicon (arm64)</span>
           <span class="card-format">.dmg</span>
         </a>
-        <a class="download-card" href={releaseAssetUrl("x64.dmg")}>
+        <a
+          class="download-card"
+          href={releaseAssetUrl("x64.dmg")}
+          data-analytics-event="marketing_download_clicked"
+          data-analytics-platform="macos"
+          data-analytics-architecture="x64"
+          data-analytics-format="dmg"
+          data-analytics-release={RELEASE_TAG}
+        >
           <span class="card-arch">Intel (x64)</span>
           <span class="card-format">.dmg</span>
         </a>
@@ -38,13 +60,21 @@ import { RELEASES_URL, RELEASE_TAG, RELEASE_URL, releaseAssetUrl } from "../lib/
         <h2 class="platform-name">Windows</h2>
       </div>
       <div class="download-cards">
-        <a class="download-card" href={releaseAssetUrl("x64.exe")}>
+        <a
+          class="download-card"
+          href={releaseAssetUrl("x64.exe")}
+          data-analytics-event="marketing_download_clicked"
+          data-analytics-platform="windows"
+          data-analytics-architecture="x64"
+          data-analytics-format="exe"
+          data-analytics-release={RELEASE_TAG}
+        >
           <span class="card-arch">Windows 10, 11</span>
           <span class="card-format">.exe</span>
         </a>
       </div>
       <p class="platform-note warning-note">
-        Windows Alpha is currently unsigned. If Microsoft Defender SmartScreen appears, choose
+        The Windows installer is currently unsigned. If Microsoft Defender SmartScreen appears, choose
         <strong>More info</strong>, then <strong>Run anyway</strong>.
       </p>
     </section>
@@ -56,7 +86,15 @@ import { RELEASES_URL, RELEASE_TAG, RELEASE_URL, releaseAssetUrl } from "../lib/
         <h2 class="platform-name">Linux</h2>
       </div>
       <div class="download-cards">
-        <a class="download-card" href={releaseAssetUrl("x86_64.AppImage")}>
+        <a
+          class="download-card"
+          href={releaseAssetUrl("x86_64.AppImage")}
+          data-analytics-event="marketing_download_clicked"
+          data-analytics-platform="linux"
+          data-analytics-architecture="x86_64"
+          data-analytics-format="appimage"
+          data-analytics-release={RELEASE_TAG}
+        >
           <span class="card-arch">x86_64</span>
           <span class="card-format">AppImage</span>
         </a>
@@ -66,7 +104,13 @@ import { RELEASES_URL, RELEASE_TAG, RELEASE_URL, releaseAssetUrl } from "../lib/
 
   <p class="releases-link">
     Looking for older versions? Check the
-    <a href={RELEASES_URL} target="_blank" rel="noopener noreferrer">
+    <a
+      href={RELEASES_URL}
+      target="_blank"
+      rel="noopener noreferrer"
+      data-analytics-event="marketing_releases_clicked"
+      data-analytics-placement="download_page"
+    >
       GitHub releases page<span aria-hidden="true"> &#8599;</span>
     </a>
   </p>
@@ -85,19 +129,6 @@ import { RELEASES_URL, RELEASE_TAG, RELEASE_URL, releaseAssetUrl } from "../lib/
   }
 
   /* ── Heading ── */
-
-  .alpha-badge {
-    margin-bottom: 0.75rem;
-    padding: 0.3rem 0.65rem;
-    border: 1px solid var(--border-strong);
-    border-radius: 999px;
-    color: var(--warn);
-    font-family: var(--font-mono);
-    font-size: 0.7rem;
-    font-weight: 600;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-  }
 
   .heading {
     font-weight: 500;

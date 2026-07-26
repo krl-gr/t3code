@@ -4,11 +4,13 @@ import { GITHUB_REPOSITORY_URL } from "../lib/site";
 interface Props {
   title?: string;
   description?: string;
+  structuredData?: Readonly<Record<string, unknown>>;
 }
 
 const {
   title = "Up.computer — Visual workspace for AI agents",
   description = "Run Up Agent or bring your existing agent CLIs into one visual desktop workspace.",
+  structuredData,
 } = Astro.props;
 const canonicalUrl = new URL(Astro.url.pathname, "https://up.computer");
 const socialImageUrl = new URL("/updated-screenshot.webp", canonicalUrl);
@@ -40,6 +42,9 @@ const socialImageUrl = new URL("/updated-screenshot.webp", canonicalUrl);
     <link rel="icon" type="image/png" href="/favicon-32x32.png" sizes="32x32" />
     <link rel="icon" type="image/png" href="/favicon-16x16.png" sizes="16x16" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    {structuredData && (
+      <script is:inline type="application/ld+json" set:html={JSON.stringify(structuredData)}></script>
+    )}
     <title>{title}</title>
   </head>
   <body>
@@ -48,7 +53,6 @@ const socialImageUrl = new URL("/updated-screenshot.webp", canonicalUrl);
         <div class="nav-inner">
           <a href="/" class="nav-brand" aria-label="Up.computer home">
             <img class="nav-brand-icon" src="/icon.webp" alt="" width="32" height="32" />
-            <span class="nav-alpha">Alpha</span>
           </a>
           <div class="nav-right">
             <a
@@ -57,6 +61,8 @@ const socialImageUrl = new URL("/updated-screenshot.webp", canonicalUrl);
               target="_blank"
               rel="noopener noreferrer"
               aria-label="Open Up.computer on GitHub"
+              data-analytics-event="marketing_github_clicked"
+              data-analytics-placement="header"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                 <path d="M12 2.3l2.9 5.88 6.49.94-4.7 4.58 1.11 6.47L12 17.12l-5.8 3.05 1.11-6.47-4.7-4.58 6.49-.94L12 2.3z"/>
@@ -64,7 +70,12 @@ const socialImageUrl = new URL("/updated-screenshot.webp", canonicalUrl);
               <span class="nav-github-label">GitHub</span>
               <strong id="github-star-count" hidden></strong>
             </a>
-            <a class="btn btn-primary nav-download" href="/download">
+            <a
+              class="btn btn-primary nav-download"
+              href="/download"
+              data-analytics-event="marketing_download_cta_clicked"
+              data-analytics-placement="header"
+            >
               Download
             </a>
           </div>
@@ -82,9 +93,18 @@ const socialImageUrl = new URL("/updated-screenshot.webp", canonicalUrl);
             <span>&copy; {new Date().getFullYear()} Up.computer</span>
           </div>
           <div class="footer-links">
-            <a href="https://github.com/pingdotgg/t3code" target="_blank" rel="noopener noreferrer">Built from T3 Code</a>
-            <a href={GITHUB_REPOSITORY_URL} target="_blank" rel="noopener noreferrer">GitHub</a>
-            <a href="/download">Download</a>
+            <a
+              href={GITHUB_REPOSITORY_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              data-analytics-event="marketing_github_clicked"
+              data-analytics-placement="footer"
+            >GitHub</a>
+            <a
+              href="/download"
+              data-analytics-event="marketing_download_cta_clicked"
+              data-analytics-placement="footer"
+            >Download</a>
             <a href="/privacy">Privacy</a>
             <a href="/terms">Terms</a>
             <a href="/security">Security</a>
@@ -93,35 +113,7 @@ const socialImageUrl = new URL("/updated-screenshot.webp", canonicalUrl);
       </footer>
     </div>
 
-    <script>
-      const nav = document.querySelector(".nav");
-      const onScroll = () => {
-        if (!nav) return;
-        if (window.scrollY > 12) nav.classList.add("is-scrolled");
-        else nav.classList.remove("is-scrolled");
-      };
-      window.addEventListener("scroll", onScroll, { passive: true });
-      onScroll();
-
-      const starCount = document.getElementById("github-star-count");
-      const formatStars = (count: number) =>
-        new Intl.NumberFormat("en", {
-          notation: count >= 1000 ? "compact" : "standard",
-          maximumFractionDigits: 1,
-        }).format(count);
-
-      fetch("https://api.github.com/repos/krl-gr/upcomputer")
-        .then((response) => {
-          if (!response.ok) throw new Error("GitHub request failed");
-          return response.json();
-        })
-        .then((repository) => {
-          if (!starCount || typeof repository.stargazers_count !== "number") return;
-          starCount.textContent = formatStars(repository.stargazers_count);
-          starCount.hidden = false;
-        })
-        .catch(() => {});
-    </script>
+    <script src="../scripts/site.ts"></script>
   </body>
 </html>
 
@@ -371,19 +363,6 @@ const socialImageUrl = new URL("/updated-screenshot.webp", canonicalUrl);
     height: 32px;
     border-radius: 7px;
     object-fit: cover;
-  }
-
-  .nav-alpha {
-    padding: 3px 7px;
-    border: 1px solid var(--border-strong);
-    border-radius: 999px;
-    color: var(--warn);
-    font-family: var(--font-mono);
-    font-size: 9px;
-    font-weight: 600;
-    letter-spacing: 0.12em;
-    line-height: 1;
-    text-transform: uppercase;
   }
 
   .nav-right {

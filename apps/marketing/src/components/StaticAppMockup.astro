@@ -2,12 +2,13 @@
 interface Props {
   attachmentMenuOpen?: boolean;
   rightPanelOpen?: boolean;
+  fit?: "cover" | "contain";
 }
 
-const { attachmentMenuOpen = false, rightPanelOpen = false } = Astro.props;
+const { attachmentMenuOpen = false, rightPanelOpen = false, fit = "cover" } = Astro.props;
 ---
 
-<div class:list={["mockup-viewport", { "attachment-open": attachmentMenuOpen, "right-panel-open": rightPanelOpen }]} data-static-app-viewport aria-hidden="true" inert>
+<div class:list={["mockup-viewport", { "attachment-open": attachmentMenuOpen, "right-panel-open": rightPanelOpen }]} data-static-app-viewport data-static-app-fit={fit} aria-hidden="true" inert>
 <div class="app-mockup" aria-label="Static preview of the Up.computer interface">
   <aside class="mock-sidebar">
     <div class="window-controls" aria-hidden="true"><i></i><i></i><i></i></div>
@@ -338,26 +339,3 @@ const { attachmentMenuOpen = false, rightPanelOpen = false } = Astro.props;
   .open-editor { max-width: 144px; }
 
 </style>
-
-<script>
-  const DESIGN_WIDTH = 1120;
-  const DESIGN_HEIGHT = 750;
-
-  const resizeMockup = (viewport: HTMLElement) => {
-    const scale = Math.max(
-      viewport.clientWidth / DESIGN_WIDTH,
-      viewport.clientHeight / DESIGN_HEIGHT,
-    );
-    viewport.style.setProperty("--mock-scale", String(scale));
-  };
-
-  const viewports = document.querySelectorAll<HTMLElement>("[data-static-app-viewport]");
-  const observer = new ResizeObserver((entries) => {
-    for (const entry of entries) resizeMockup(entry.target as HTMLElement);
-  });
-
-  for (const viewport of viewports) {
-    resizeMockup(viewport);
-    observer.observe(viewport);
-  }
-</script>

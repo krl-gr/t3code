@@ -10,7 +10,8 @@
     "typecheck": "astro check"
   },
   "dependencies": {
-    "astro": "^7.0.3"
+    "astro": "^7.0.3",
+    "posthog-js": "^1.407.2"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.7",
