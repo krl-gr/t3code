@@ -364,14 +364,14 @@ describe("openCodexThread", () => {
         },
         {
           type: "function",
-          namespace: "upcomputer.tasks",
+          namespace: "upcomputer_tasks",
           name: "task_context",
           description: "Resolve task context.",
           inputSchema: { type: "object" },
         },
         {
           type: "function",
-          namespace: "upcomputer.tasks",
+          namespace: "upcomputer_tasks",
           name: "task_get",
           description: "Load one task.",
           inputSchema: { type: "object" },
@@ -386,8 +386,8 @@ describe("openCodexThread", () => {
         },
         {
           type: "namespace",
-          name: "upcomputer.tasks",
-          description: "Tools in the 'upcomputer.tasks' namespace.",
+          name: "upcomputer_tasks",
+          description: "Tools in the 'upcomputer_tasks' namespace.",
           tools: [
             {
               type: "function",
@@ -438,7 +438,7 @@ describe("openCodexThread", () => {
         dynamicTools: [
           {
             type: "namespace",
-            name: "upcomputer.tasks",
+            name: "upcomputer_tasks",
             description: "Task management tools.",
             tools: [
               {
@@ -465,7 +465,7 @@ describe("openCodexThread", () => {
           dynamicTools: [
             {
               type: "namespace",
-              name: "upcomputer.tasks",
+              name: "upcomputer_tasks",
               description: "Task management tools.",
               tools: [
                 {

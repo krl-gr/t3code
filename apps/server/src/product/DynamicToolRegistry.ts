@@ -11,6 +11,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
 const OWNER_ID = /^[a-z0-9]+(?:[._-][a-z0-9]+)*$/;
+const DYNAMIC_TOOL_NAMESPACE = /^[a-zA-Z0-9_-]+$/;
 const TOOL_NAME = /^[a-z][a-z0-9_]*$/;
 
 export interface ExperimentalDynamicToolSpec {
@@ -263,10 +264,10 @@ function validateTool(ownerId: string, spec: ExperimentalDynamicToolSpec): void 
       spec.name,
     );
   }
-  if (spec.namespace !== undefined && !OWNER_ID.test(spec.namespace)) {
+  if (spec.namespace !== undefined && !DYNAMIC_TOOL_NAMESPACE.test(spec.namespace)) {
     throw new DynamicToolRegistryError(
       "invalid-tool-namespace",
-      `Dynamic tool '${spec.name}' has invalid namespace '${spec.namespace}'.`,
+      `Dynamic tool '${spec.name}' namespace '${spec.namespace}' must contain only letters, numbers, underscores, and hyphens.`,
       ownerId,
       spec.name,
     );
