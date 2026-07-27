@@ -25,6 +25,11 @@ export const DEFAULT_SIDEBAR_THREAD_SORT_ORDER: SidebarThreadSortOrder = "update
 // `sidebarV2Enabled` beta flag; here it is a third view mode instead, so the
 // sidebar has exactly one piece of state and no way to be both "v2 enabled"
 // and "focused" at the same time.
+//
+// The mode is currently parked in the web client (see FLAT_VIEW_ENABLED in
+// AppSidebarLayout). The literal stays regardless: dropping it would make an
+// already-persisted "v2" fail to decode, and `withDecodingDefault` only covers
+// a missing key, not an unknown value.
 export const SidebarViewMode = Schema.Literals(["nested", "focused", "v2"]);
 export type SidebarViewMode = typeof SidebarViewMode.Type;
 export const DEFAULT_SIDEBAR_VIEW_MODE: SidebarViewMode = "nested";

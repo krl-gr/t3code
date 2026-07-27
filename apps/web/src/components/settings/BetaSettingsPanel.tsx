@@ -117,7 +117,7 @@ export function BetaSettingsPanel() {
         ) : (
           <SettingsRow
             title="Sidebar v2"
-            description="One flat thread list in creation order. Active work renders as rich cards; settled threads collapse to compact rows. Pick it under View in the sidebar menu; its auto-settle options appear here once it is on."
+            description="One flat thread list in creation order. Temporarily unavailable: the sidebar's view switcher lives inside the classic sidebar, so selecting this mode left no way back. It returns once the switcher moves into the shared sidebar chrome."
           />
         )}
       </SettingsSection>

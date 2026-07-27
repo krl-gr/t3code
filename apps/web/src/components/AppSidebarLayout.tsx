@@ -19,6 +19,16 @@ function resolveThreadSidebarMaximumWidth(viewportWidth: number): number {
   );
 }
 
+/**
+ * Flat view (upstream's SidebarV2) is parked.
+ *
+ * The view switcher lives inside the v1 sidebar, and this layout swaps that
+ * whole component out in v2 — so choosing Flat view removed the only control
+ * that could leave it. Re-enable once the switcher moves into the shared
+ * `sidebar/SidebarChrome`, which both sidebars already render.
+ */
+const FLAT_VIEW_ENABLED = false;
+
 export function AppSidebarLayout({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const sidebarViewMode = useClientSettings((settings) => settings.sidebarViewMode);
@@ -26,7 +36,7 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
   // and is the same for every view mode — so v1 stays mounted there.
   const pathname = useLocation({ select: (location) => location.pathname });
   const isOnSettings = pathname === "/settings" || pathname.startsWith("/settings/");
-  const showSidebarV2 = sidebarViewMode === "v2" && !isOnSettings;
+  const showSidebarV2 = FLAT_VIEW_ENABLED && sidebarViewMode === "v2" && !isOnSettings;
 
   useEffect(() => {
     const onMenuAction = window.desktopBridge?.onMenuAction;

@@ -143,16 +143,7 @@ import {
   DialogTitle,
 } from "./ui/dialog";
 import { Input } from "./ui/input";
-import {
-  Menu,
-  MenuGroup,
-  MenuGroupLabel,
-  MenuItem,
-  MenuPopup,
-  MenuRadioGroup,
-  MenuRadioItem,
-  MenuTrigger,
-} from "./ui/menu";
+import { Menu, MenuGroup, MenuGroupLabel, MenuItem, MenuPopup, MenuTrigger } from "./ui/menu";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "./ui/select";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "./ui/collapsible";
@@ -2615,20 +2606,6 @@ type SortableProjectHandleProps = Pick<
 const FOCUSED_PROJECT_PREVIEW_COUNT = 3;
 const FOCUSED_THREAD_PREVIEW_COUNT = 30;
 
-const SIDEBAR_VIEW_MODE_LABELS: Record<SidebarViewMode, string> = {
-  nested: "Classic view",
-  focused: "Focus view",
-  v2: "Flat view",
-};
-
-const SIDEBAR_VIEW_MODE_DESCRIPTIONS: Record<SidebarViewMode, string> = {
-  nested: "Projects with their threads nested underneath",
-  focused: "One project at a time, with more of its threads",
-  v2: "Every thread in one list, settled work collapsed",
-};
-
-const SIDEBAR_VIEW_MODES: readonly SidebarViewMode[] = ["nested", "focused", "v2"];
-
 function SidebarViewModeButton({
   viewMode,
   onViewModeChange,
@@ -2636,53 +2613,31 @@ function SidebarViewModeButton({
   viewMode: SidebarViewMode;
   onViewModeChange: (viewMode: SidebarViewMode) => void;
 }) {
-  // A menu rather than a cycle button: with three modes, a button labelled
-  // with the *next* mode turns picking a view into guesswork.
+  // Back to a one-click toggle between the two shipping modes. A stored "v2"
+  // lands here too: it reads as "Classic view" and one click writes "nested",
+  // so anyone who selected the parked Flat view gets out on the first press.
+  const nextViewMode = viewMode === "nested" ? "focused" : "nested";
+
   return (
-    <Menu>
-      <MenuTrigger
-        render={
-          <SidebarMenuButton
-            size="sm"
-            className={cn(
-              "h-8 w-full justify-start gap-2 px-2 hover:bg-accent hover:text-foreground focus-visible:ring-1 focus-visible:ring-inset dark:hover:text-white/86",
-              SIDEBAR_MUTED_TEXT_CLASS,
-            )}
-          />
-        }
+    <SidebarMenuButton
+      size="sm"
+      className={cn(
+        "h-8 w-full justify-start gap-2 px-2 hover:bg-accent hover:text-foreground focus-visible:ring-1 focus-visible:ring-inset dark:hover:text-white/86",
+        SIDEBAR_MUTED_TEXT_CLASS,
+      )}
+      onClick={() => onViewModeChange(nextViewMode)}
+    >
+      <ArrowRightIcon className="size-4" />
+      <span
+        className={cn(
+          "flex-1 truncate text-left",
+          SIDEBAR_LABEL_COLOR_CLASS,
+          SIDEBAR_LABEL_TEXT_CLASS,
+        )}
       >
-        <ArrowRightIcon className="size-4" />
-        <span
-          className={cn(
-            "flex-1 truncate text-left",
-            SIDEBAR_LABEL_COLOR_CLASS,
-            SIDEBAR_LABEL_TEXT_CLASS,
-          )}
-        >
-          {SIDEBAR_VIEW_MODE_LABELS[viewMode]}
-        </span>
-      </MenuTrigger>
-      <MenuPopup align="start" side="bottom" className="min-w-64">
-        <MenuGroup>
-          <MenuGroupLabel>View</MenuGroupLabel>
-          <MenuRadioGroup
-            value={viewMode}
-            onValueChange={(value) => onViewModeChange(value as SidebarViewMode)}
-          >
-            {SIDEBAR_VIEW_MODES.map((mode) => (
-              <MenuRadioItem key={mode} value={mode}>
-                <span className="flex min-w-0 flex-col">
-                  <span className="truncate">{SIDEBAR_VIEW_MODE_LABELS[mode]}</span>
-                  <span className="truncate text-muted-foreground text-xs">
-                    {SIDEBAR_VIEW_MODE_DESCRIPTIONS[mode]}
-                  </span>
-                </span>
-              </MenuRadioItem>
-            ))}
-          </MenuRadioGroup>
-        </MenuGroup>
-      </MenuPopup>
-    </Menu>
+        {viewMode === "nested" ? "Focus view" : "Classic view"}
+      </span>
+    </SidebarMenuButton>
   );
 }
 

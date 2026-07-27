@@ -86,17 +86,15 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
                     isActive={isActive}
                     className={
                       isActive
-                        ? "h-8 items-center gap-2 rounded-md bg-sidebar-row-active px-2 py-1.5 text-left text-sm font-medium text-sidebar-foreground"
-                        : "h-8 items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm font-medium text-sidebar-muted-foreground/80 hover:bg-sidebar-row-hover hover:text-sidebar-foreground"
+                        ? "h-8 gap-2 px-2 text-left hover:bg-accent data-[active=true]:bg-accent data-[active=true]:text-foreground dark:hover:text-white/86 dark:data-[active=true]:bg-white/[0.06] dark:data-[active=true]:text-white/82"
+                        : `h-8 gap-2 px-2 text-left hover:bg-accent hover:text-foreground dark:hover:text-white/86 ${SIDEBAR_MUTED_TEXT_CLASS}`
                     }
                     onClick={() => handleSectionClick(item.to)}
                   >
                     <Icon className="size-4 shrink-0" />
                     <span
                       className={
-                        isActive
-                          ? "size-4 shrink-0 text-sidebar-foreground"
-                          : "size-4 shrink-0 text-sidebar-muted-foreground/60"
+                        SIDEBAR_LABEL_TEXT_CLASS + " truncate text-foreground/72 dark:text-white/82"
                       }
                     >
                       {item.label}

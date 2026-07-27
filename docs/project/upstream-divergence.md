@@ -42,8 +42,8 @@ t3code's terms of service on up.computer next to ours.
 
 | #   | Zone                          | Decision                                                                                                                                                                                                                                                                                         |
 | --- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 1   | Sidebar v2 (#4026)            | Taken whole as a third view mode. `SidebarViewMode` is `nested \| focused \| v2`; upstream's `sidebarV2Enabled` is **removed** so one field holds the state.                                                                                                                                     |
-| 2   | View switcher                 | Menu with three radio items (Classic / Focus / Flat), not a cycle button. Trigger shows the current mode.                                                                                                                                                                                        |
+| 1   | Sidebar v2 (#4026)            | Merged whole and wired as a third view mode, but **parked** in the client (`FLAT_VIEW_ENABLED` in `AppSidebarLayout`). `SidebarViewMode` stays `nested \| focused \| v2` — dropping the literal would break decoding for anyone who already selected it. Upstream's `sidebarV2Enabled` is removed so one field holds the state.                                                                                                                                     |
+| 2   | View switcher                 | One-click toggle between Classic and Focus. The three-item menu was reverted: the switcher lives inside the v1 sidebar, which v2 replaces wholesale, so selecting Flat view removed the only way back. A stored `"v2"` reads as Classic and one click writes `nested`, so it self-heals.                                                                                                                                                                                        |
 | 3   | `BetaSettingsPanel`           | Their "Sidebar v2" switch removed — the View menu is the only entry. Auto-settle rows stay, gated on `sidebarViewMode === "v2"`.                                                                                                                                                                 |
 | 4   | Surface grain                 | Off. `--surface-grain: none` in our theme kills both `body` and the `surface-grain` utility, web and Electron.                                                                                                                                                                                   |
 | 5   | Sidebar surface               | Ours: `.t3-sidebar-glass`, blur 28px. Not their flat `bg-sidebar`.                                                                                                                                                                                                                               |
@@ -82,6 +82,19 @@ time: grep for the symbol, do not trust the absence of markers.
 | `OpenCodeAdapter` session title  | The reverse case: we _kept_ our forced title and suppressed upstream's auto-generated thread names. Their behaviour is better; taken.                                                                    |
 
 ## Structural notes
+
+- **A mode switcher must not live inside the thing it switches.** The view
+  control sat in `Sidebar.tsx`; `AppSidebarLayout` swaps that whole component
+  for `SidebarV2`, so picking Flat view deleted its own escape hatch. The fix,
+  when Flat view comes back, is to move the control into
+  `sidebar/SidebarChrome.tsx` — already ours and already rendered by **both**
+  sidebars, so it costs nothing in `SidebarV2.tsx`.
+- **Crossed hunk sides produce nonsense, not conflicts.** In
+  `SettingsSidebarNav.tsx` upstream's hunk styled the *icon* and ours styled the
+  *label*; resolving to theirs put `size-4 shrink-0` on the label span and the
+  first nav item ("General") clipped to "G..". Typecheck and lint both pass on
+  that. When two sides of a hunk describe different elements, resolve by
+  element, not by side.
 
 - **Migration numbering.** Our migration 33 (`ProjectionThreadContext`) shipped in
   Alpha 0.0.29. Upstream's 33/34 pair was renumbered to 34/35. Any future
