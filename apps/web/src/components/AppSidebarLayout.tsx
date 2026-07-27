@@ -50,6 +50,11 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
       <Sidebar
         side="left"
         collapsible="offcanvas"
+        // Our own hook for view-scoped styling. Deliberately not upstream's
+        // `data-sidebar-version`: that attribute carries their whole sidebar
+        // palette and an opaque background, which would override our tokens
+        // and hide the glass.
+        data-sidebar-mode={sidebarViewMode}
         className="border-r border-black/[0.04] bg-transparent text-foreground dark:border-white/[0.03]"
         resizable={{
           maxWidth: resolveThreadSidebarMaximumWidth(window.innerWidth),
