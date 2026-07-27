@@ -36,6 +36,8 @@ export interface NewThreadOptions {
   envMode?: DraftThreadEnvMode;
   startFromOrigin?: boolean;
   forceNewDraft?: boolean;
+  /** Replace the current history entry instead of pushing a new one. */
+  replace?: boolean;
 }
 
 export interface CreatedDraftThread {
@@ -217,6 +219,7 @@ export function useNewThreadHandler() {
         await router.navigate({
           to: "/draft/$draftId",
           params: { draftId: created.draftId },
+          replace: options?.replace ?? false,
         });
       })();
     },

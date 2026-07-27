@@ -1,4 +1,4 @@
-import { FolderGit2Icon, FolderGitIcon, FolderIcon } from "lucide-react";
+import { FolderGit2Icon, FolderGitIcon, FolderIcon, HistoryIcon } from "lucide-react";
 import { type ComponentProps, memo, useMemo } from "react";
 
 import { cn } from "../lib/utils";
@@ -19,11 +19,15 @@ import {
   SelectValue,
 } from "./ui/select";
 
+export const PREVIOUS_WORKTREE_SELECT_VALUE = "previous-worktree";
+
 interface BranchToolbarEnvModeSelectorProps {
   envLocked: boolean;
   effectiveEnvMode: EnvMode;
   activeWorktreePath: string | null;
   onEnvModeChange: (mode: EnvMode) => void;
+  previousWorktreeLabel?: string | null;
+  onUsePreviousWorktree?: () => void;
 }
 
 function ContextBarSelectTrigger({ className, ...props }: ComponentProps<typeof SelectTrigger>) {
@@ -44,13 +48,19 @@ export const BranchToolbarEnvModeSelector = memo(function BranchToolbarEnvModeSe
   effectiveEnvMode,
   activeWorktreePath,
   onEnvModeChange,
+  previousWorktreeLabel,
+  onUsePreviousWorktree,
 }: BranchToolbarEnvModeSelectorProps) {
+  const showPreviousWorktree = Boolean(previousWorktreeLabel && onUsePreviousWorktree);
   const envModeItems = useMemo(
     () => [
       { value: "local", label: resolveCurrentWorkspaceLabel(activeWorktreePath) },
       { value: "worktree", label: resolveEnvModeLabel("worktree") },
+      ...(showPreviousWorktree && previousWorktreeLabel
+        ? [{ value: PREVIOUS_WORKTREE_SELECT_VALUE, label: previousWorktreeLabel }]
+        : []),
     ],
-    [activeWorktreePath],
+    [activeWorktreePath, previousWorktreeLabel, showPreviousWorktree],
   );
 
   if (envLocked) {
@@ -66,7 +76,13 @@ export const BranchToolbarEnvModeSelector = memo(function BranchToolbarEnvModeSe
     <Select
       modal={false}
       value={effectiveEnvMode}
-      onValueChange={(value) => onEnvModeChange(value as EnvMode)}
+      onValueChange={(value: string | null) => {
+        if (value === PREVIOUS_WORKTREE_SELECT_VALUE) {
+          onUsePreviousWorktree?.();
+          return;
+        }
+        onEnvModeChange(value as EnvMode);
+      }}
       items={envModeItems}
     >
       <ContextBarSelectTrigger variant="ghost" size="xs" aria-label="Workspace">
@@ -92,6 +108,14 @@ export const BranchToolbarEnvModeSelector = memo(function BranchToolbarEnvModeSe
               {resolveEnvModeLabel("worktree")}
             </span>
           </SelectItem>
+          {showPreviousWorktree && previousWorktreeLabel ? (
+            <SelectItem value={PREVIOUS_WORKTREE_SELECT_VALUE}>
+              <span className="inline-flex items-center gap-1.5">
+                <HistoryIcon className="size-3" />
+                {previousWorktreeLabel}
+              </span>
+            </SelectItem>
+          ) : null}
         </SelectGroup>
       </SelectPopup>
     </Select>

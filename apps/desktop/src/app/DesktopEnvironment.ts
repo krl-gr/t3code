@@ -186,7 +186,12 @@ const make = Effect.fn("desktop.environment.make")(function* (
     appVersion: input.appVersion,
   });
   const displayName = branding.displayName;
-  const stateDir = path.join(baseDir, isDevelopment ? "dev" : "userdata");
+  // An explicitly configured base dir is already the state root -- don't push
+  // dev runs into a `dev` subdirectory underneath it.
+  const stateDir = path.join(
+    baseDir,
+    isDevelopment && Option.isNone(configuredBaseDir) ? "dev" : "userdata",
+  );
   const userDataDirName = isDevelopment ? "Up.computer (Dev)" : "Up.computer";
   const legacyUserDataDirNames = isDevelopment
     ? ["t3code-dev", "T3 Code (Dev)"]

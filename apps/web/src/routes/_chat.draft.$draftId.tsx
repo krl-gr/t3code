@@ -38,6 +38,7 @@ function DraftChatThreadRouteView() {
     if (!canonicalThreadRef) {
       return;
     }
+
     void navigate({
       to: "/$environmentId/$threadId",
       params: buildThreadRouteParams(canonicalThreadRef),

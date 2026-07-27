@@ -1,13 +1,12 @@
 import type { EnvironmentId } from "@t3tools/contracts";
-import type { CSSProperties } from "react";
+import { isProjectFaviconFallbackUrl } from "@t3tools/shared/projectFavicon";
+import type { ComponentType, CSSProperties } from "react";
 import { useState } from "react";
 import { useAssetUrl } from "../assets/assetUrls";
 import { cn } from "../lib/utils";
 
 const loadedProjectFaviconSrcs = new Set<string>();
 const PROJECT_AVATAR_COLOR_KEYS = ["pink", "mint", "orange", "purple", "cyan", "lime"] as const;
-const SERVER_PROJECT_FAVICON_FALLBACK_FILE = "__upcomputer_project_favicon_fallback__.svg";
-
 type ProjectAvatarColorKey = (typeof PROJECT_AVATAR_COLOR_KEYS)[number];
 
 function hashProjectAvatarSeed(seed: string): number {
@@ -42,14 +41,12 @@ export function resolveProjectAvatarLetter(label: string): string {
   return (projectName?.match(/[\p{L}\p{N}]/u)?.[0] ?? "P").toLocaleUpperCase();
 }
 
+/**
+ * Kept as a named export for call sites and tests; the actual shape is owned by
+ * `@t3tools/shared/projectFavicon`, which the asset route emits.
+ */
 export function isServerProjectFaviconFallbackUrl(src: string): boolean {
-  try {
-    return decodeURIComponent(new URL(src).pathname).endsWith(
-      `/${SERVER_PROJECT_FAVICON_FALLBACK_FILE}`,
-    );
-  } catch {
-    return false;
-  }
+  return isProjectFaviconFallbackUrl(src);
 }
 
 type ProjectFaviconInput = {
@@ -58,6 +55,11 @@ type ProjectFaviconInput = {
   label?: string | undefined;
   projectKey?: string | undefined;
   className?: string | undefined;
+  /**
+   * Accepted for upstream call sites (SidebarV2) and ignored: this fork always
+   * falls back to the coloured project avatar, never a generic icon.
+   */
+  fallbackIcon?: ComponentType<{ className?: string }> | undefined;
 };
 
 function ProjectAvatarFallback(input: Omit<ProjectFaviconInput, "environmentId">) {

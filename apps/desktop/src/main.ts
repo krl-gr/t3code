@@ -1,4 +1,10 @@
 // @effect-diagnostics nodeBuiltinImport:off - Clerk's Electron scheme must be registered synchronously before app readiness, outside the Effect runtime.
+for (const stream of [process.stdout, process.stderr]) {
+  stream.on("error", (err: NodeJS.ErrnoException) => {
+    if (err.code !== "EPIPE") throw err;
+  });
+}
+
 import * as NodeHttpClient from "@effect/platform-node/NodeHttpClient";
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";

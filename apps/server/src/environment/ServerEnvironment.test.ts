@@ -47,6 +47,7 @@ const makeServerConfig = Effect.fn(function* (baseDir: string) {
     desktopBootstrapToken: undefined,
     staticDir: undefined,
     devUrl: undefined,
+    devAllowedOrigins: [],
     noBrowser: false,
     startupPresentation: "browser",
   } satisfies ServerConfig.ServerConfig["Service"];
@@ -72,6 +73,7 @@ it.layer(NodeServices.layer)("ServerEnvironmentLive", (it) => {
       expect(first.environmentId).toBe(second.environmentId);
       expect(second.capabilities.repositoryIdentity).toBe(true);
       expect(second.product).toEqual(PRODUCT_MANIFEST);
+      expect(second.capabilities.connectionProbe).toBe(true);
     }),
   );
 

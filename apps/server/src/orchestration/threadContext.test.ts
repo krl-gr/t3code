@@ -64,6 +64,8 @@ function thread(input: {
     updatedAt: createdAt,
     archivedAt: null,
     deletedAt: input.deletedAt ?? null,
+    settledOverride: null,
+    settledAt: null,
     messages: input.messages ?? [],
     proposedPlans: [],
     contextBindings: input.contextBindings ?? [],

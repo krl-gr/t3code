@@ -37,7 +37,7 @@ export function ContextWindowMeter(props: {
           <button
             type="button"
             className={cn(
-              "inline-flex size-6 cursor-pointer items-center justify-center rounded-full border border-transparent text-muted-foreground outline-none transition-colors",
+              "inline-flex size-7 cursor-pointer items-center justify-center rounded-full border border-transparent text-muted-foreground outline-none transition-colors",
               "hover:bg-accent data-[pressed]:bg-accent",
               "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background",
             )}
@@ -47,7 +47,7 @@ export function ContextWindowMeter(props: {
                 : `Context window ${formatContextWindowTokens(usage.usedTokens)} tokens used`
             }
           >
-            <span className="relative flex size-4 items-center justify-center">
+            <span className="relative flex size-5 items-center justify-center">
               <svg
                 viewBox="0 0 24 24"
                 className="-rotate-90 absolute inset-0 size-full transform-gpu"
@@ -58,7 +58,7 @@ export function ContextWindowMeter(props: {
                   cy="12"
                   r={radius}
                   fill="none"
-                  stroke="color-mix(in oklab, var(--color-muted-foreground) 35%, transparent)"
+                  stroke="color-mix(in oklab, var(--color-muted-foreground) 24%, transparent)"
                   strokeWidth="3"
                 />
                 <circle
@@ -78,7 +78,12 @@ export function ContextWindowMeter(props: {
           </button>
         }
       />
-      <PopoverPopup tooltipStyle side="top" align="end" className="w-64 max-w-none p-0">
+      <PopoverPopup
+        tooltipStyle
+        side="top"
+        align="end"
+        className="dropdown-glass w-64 max-w-none border-0! bg-secondary! p-0 shadow-none! before:hidden"
+      >
         <div className="flex flex-col gap-2 p-3">
           <div className="flex items-center justify-between gap-3">
             <div className="font-medium text-muted-foreground text-xs">Context Window</div>

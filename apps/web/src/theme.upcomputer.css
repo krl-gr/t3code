@@ -31,12 +31,27 @@
 }
 
 :root {
+  /* No grain. Upstream paints a fractal-noise texture into every surface's
+   * background via this variable (and the `surface-grain` utility); resolving
+   * it to `none` switches all of them off at once, in web and in Electron. */
+  --surface-grain: none;
   --app-content-background: --alpha(var(--color-white) / 80%);
   --sidebar: --alpha(var(--color-white) / 25%);
   --sidebar-foreground: var(--foreground);
   --sidebar-accent: --alpha(var(--color-black) / 5%);
   --sidebar-accent-foreground: var(--foreground);
   --sidebar-border: --alpha(var(--color-black) / 10%);
+  /* Upstream splits sidebar rows into three surfaces (hover / active /
+   * selected) plus a control surface and a muted foreground. Their components
+   * reference those tokens, so the tokens stay -- pointed at the single accent
+   * this fork has always used, so every row state looks the same as before.
+   * These have to be restated in the dark block below: upstream's dark
+   * definitions live behind the `dark` variant and outrank a plain `:root`. */
+  --sidebar-row-hover: var(--sidebar-accent);
+  --sidebar-row-active: var(--sidebar-accent);
+  --sidebar-row-selected: var(--sidebar-accent);
+  --sidebar-control-surface: var(--sidebar-accent);
+  --sidebar-muted-foreground: var(--sidebar-accent-foreground);
   --project-avatar-background-pink: #feeef8;
   --project-avatar-background-mint: #e1fbf4;
   --project-avatar-background-orange: #fff1e7;
@@ -61,6 +76,11 @@
     --sidebar-accent: --alpha(var(--color-white) / 7%);
     --sidebar-accent-foreground: var(--foreground);
     --sidebar-border: --alpha(var(--color-white) / 10%);
+    --sidebar-row-hover: var(--sidebar-accent);
+    --sidebar-row-active: var(--sidebar-accent);
+    --sidebar-row-selected: var(--sidebar-accent);
+    --sidebar-control-surface: var(--sidebar-accent);
+    --sidebar-muted-foreground: var(--sidebar-accent-foreground);
     --project-avatar-background-pink: #501b3f;
     --project-avatar-background-mint: #033a34;
     --project-avatar-background-orange: #5f2a06;

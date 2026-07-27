@@ -13,6 +13,7 @@ import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 
 import packageJson from "../../package.json" with { type: "json" };
+import { resolveServerSelfUpdateCapability } from "../cloud/selfUpdate.ts";
 import * as ServerConfig from "../config.ts";
 import * as ProcessRunner from "../processRunner.ts";
 import { PRODUCT_MANIFEST } from "../productManifest.ts";
@@ -130,6 +131,9 @@ export const makeForProduct = (productManifest: ProductManifestSnapshot) =>
     const environmentId = EnvironmentId.make(environmentIdRaw);
     const cwdBaseName = path.basename(serverConfig.cwd).trim();
     const label = yield* resolveServerEnvironmentLabel({ cwdBaseName });
+    const serverSelfUpdate = yield* resolveServerSelfUpdateCapability({
+      desktopManaged: serverConfig.mode === "desktop",
+    });
 
     const descriptor: ExecutionEnvironmentDescriptor = {
       environmentId,
@@ -141,6 +145,10 @@ export const makeForProduct = (productManifest: ProductManifestSnapshot) =>
       serverVersion: packageJson.version,
       capabilities: {
         repositoryIdentity: true,
+        connectionProbe: true,
+        threadSettlement: true,
+        threadSnooze: true,
+        ...(serverSelfUpdate === null ? {} : { serverSelfUpdate }),
       },
       product: productManifest,
     };

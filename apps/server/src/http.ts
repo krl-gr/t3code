@@ -4,6 +4,7 @@ import {
   AuthOrchestrationReadScope,
   EnvironmentHttpApi,
 } from "@t3tools/contracts";
+import { isDevProxiedPath } from "@t3tools/shared/devProxy";
 import { decodeOtlpTraceRecords } from "@t3tools/shared/observability";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -25,11 +26,7 @@ import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
 import { OtlpTracer } from "effect/unstable/observability";
 
 import * as ServerConfig from "./config.ts";
-import {
-  ASSET_ROUTE_PREFIX,
-  FALLBACK_PROJECT_FAVICON_SVG,
-  resolveAsset,
-} from "./assets/AssetAccess.ts";
+import { ASSET_ROUTE_PREFIX, resolveAsset } from "./assets/AssetAccess.ts";
 import * as BrowserTraceCollector from "./observability/BrowserTraceCollector.ts";
 import * as EnvironmentAuth from "./auth/EnvironmentAuth.ts";
 import { traceRelayRequest } from "./cloud/traceRelayRequest.ts";
@@ -52,9 +49,17 @@ export const browserApiCorsLayer = Layer.unwrap(
     const devOrigin = config.devUrl?.origin;
     // Dev uses credentialed requests from Vite or the Electron custom origin, so both must be
     // explicit. Packaged desktop omits credentials and uses Effect's default wildcard origin.
+    //
+    // T3CODE_DEV_ALLOWED_ORIGINS covers dev servers reached from a second
+    // origin — a tailnet name, a LAN IP, a phone. Browser dev normally proxies
+    // through Vite and is same-origin (no preflight at all), so this is a
+    // safety net for the desktop renderer and any direct-to-backend caller.
     return HttpRouter.cors({
       ...(devOrigin
-        ? { allowedOrigins: [devOrigin, ...DESKTOP_RENDERER_ORIGINS], credentials: true }
+        ? {
+            allowedOrigins: [devOrigin, ...DESKTOP_RENDERER_ORIGINS, ...config.devAllowedOrigins],
+            credentials: true,
+          }
         : {}),
       allowedMethods: browserApiCorsAllowedMethods,
       allowedHeaders: browserApiCorsAllowedHeaders,
@@ -196,17 +201,6 @@ export const assetRouteLayer = HttpRouter.add(
     if (!asset) {
       return HttpServerResponse.text("Not Found", { status: 404 });
     }
-    if (asset.kind === "project-favicon-fallback") {
-      return HttpServerResponse.text(FALLBACK_PROJECT_FAVICON_SVG, {
-        status: 200,
-        contentType: "image/svg+xml",
-        headers: {
-          "Cache-Control": "private, max-age=3600",
-          "X-Content-Type-Options": "nosniff",
-        },
-      });
-    }
-
     return yield* HttpServerResponse.file(asset.path, {
       status: 200,
       headers: {
@@ -231,6 +225,10 @@ export const staticAndDevRouteLayer = HttpRouter.add(
     }
 
     const config = yield* ServerConfig.ServerConfig;
+    if (config.devUrl && isDevProxiedPath(url.value.pathname)) {
+      return HttpServerResponse.text("Not Found", { status: 404 });
+    }
+
     if (config.devUrl && isLoopbackHostname(url.value.hostname)) {
       return HttpServerResponse.redirect(resolveDevRedirectUrl(config.devUrl, url.value), {
         status: 302,

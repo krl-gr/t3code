@@ -3,6 +3,7 @@ import {
   ArchiveIcon,
   ArrowLeftIcon,
   BotIcon,
+  FlaskConicalIcon,
   GitBranchIcon,
   KeyboardIcon,
   Link2Icon,
@@ -19,6 +20,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "../ui/sidebar";
+import { T3ConnectSidebarAvatar, T3ConnectSidebarSignIn } from "../clerk/T3ConnectSidebarSignIn";
 import { SIDEBAR_LABEL_TEXT_CLASS, SIDEBAR_MUTED_TEXT_CLASS } from "../sidebar/sidebarTextStyles";
 import { WebFeatureSettingsNavigationItems } from "../product/WebFeatureSettingsNavigation";
 
@@ -28,6 +30,7 @@ export type SettingsSectionPath =
   | "/settings/providers"
   | "/settings/source-control"
   | "/settings/connections"
+  | "/settings/beta"
   | "/settings/archived";
 
 export const SETTINGS_NAV_ITEMS: ReadonlyArray<{
@@ -40,6 +43,7 @@ export const SETTINGS_NAV_ITEMS: ReadonlyArray<{
   { label: "Providers", to: "/settings/providers", icon: BotIcon },
   { label: "Source Control", to: "/settings/source-control", icon: GitBranchIcon },
   { label: "Connections", to: "/settings/connections", icon: Link2Icon },
+  { label: "Beta", to: "/settings/beta", icon: FlaskConicalIcon },
   { label: "Archive", to: "/settings/archived", icon: ArchiveIcon },
 ];
 
@@ -82,15 +86,17 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
                     isActive={isActive}
                     className={
                       isActive
-                        ? "h-8 gap-2 px-2 text-left hover:bg-accent data-[active=true]:bg-accent data-[active=true]:text-foreground dark:hover:text-white/86 dark:data-[active=true]:bg-white/[0.06] dark:data-[active=true]:text-white/82"
-                        : `h-8 gap-2 px-2 text-left hover:bg-accent hover:text-foreground dark:hover:text-white/86 ${SIDEBAR_MUTED_TEXT_CLASS}`
+                        ? "h-8 items-center gap-2 rounded-md bg-sidebar-row-active px-2 py-1.5 text-left text-sm font-medium text-sidebar-foreground"
+                        : "h-8 items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm font-medium text-sidebar-muted-foreground/80 hover:bg-sidebar-row-hover hover:text-sidebar-foreground"
                     }
                     onClick={() => handleSectionClick(item.to)}
                   >
                     <Icon className="size-4 shrink-0" />
                     <span
                       className={
-                        SIDEBAR_LABEL_TEXT_CLASS + " truncate text-foreground/72 dark:text-white/82"
+                        isActive
+                          ? "size-4 shrink-0 text-sidebar-foreground"
+                          : "size-4 shrink-0 text-sidebar-muted-foreground/60"
                       }
                     >
                       {item.label}
@@ -130,22 +136,23 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
           </SidebarMenu>
         </SidebarGroup>
       </SidebarContent>
-
       <SidebarFooter className="p-2">
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              size="sm"
-              className={`h-8 gap-2 px-2 hover:bg-accent hover:text-foreground dark:hover:text-white/86 ${SIDEBAR_MUTED_TEXT_CLASS}`}
-              onClick={handleBackClick}
-            >
-              <ArrowLeftIcon className="size-4" />
-              <span className={SIDEBAR_LABEL_TEXT_CLASS + " text-foreground/72 dark:text-white/82"}>
-                Back
-              </span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
+        <T3ConnectSidebarSignIn />
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1">
+          <SidebarMenu className="min-w-0">
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                size="sm"
+                className="h-8 items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium text-sidebar-muted-foreground/80 hover:bg-sidebar-row-hover hover:text-sidebar-foreground"
+                onClick={handleBackClick}
+              >
+                <ArrowLeftIcon className="size-4" />
+                <span>Back</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+          <T3ConnectSidebarAvatar />
+        </div>
       </SidebarFooter>
     </>
   );

@@ -46,6 +46,8 @@ import Migration0030 from "./Migrations/030_ProjectionThreadShellArchiveIndexes.
 import Migration0031 from "./Migrations/031_AuthAuthorizationScopes.ts";
 import Migration0032 from "./Migrations/032_AuthPairingProofKeyThumbprint.ts";
 import Migration0033 from "./Migrations/033_ProjectionThreadContext.ts";
+import Migration0034 from "./Migrations/034_ProjectionThreadsSettled.ts";
+import Migration0035 from "./Migrations/035_ProjectionThreadsSnoozed.ts";
 import { applyOldPublicMigrationCompatibility } from "./OldPublicMigrationCompatibility.ts";
 
 /**
@@ -91,7 +93,11 @@ export const migrationEntries = [
   [30, "ProjectionThreadShellArchiveIndexes", Migration0030],
   [31, "AuthAuthorizationScopes", Migration0031],
   [32, "AuthPairingProofKeyThumbprint", Migration0032],
+  // 33 is ours and already shipped in Alpha 0.0.29, so the upstream pair that
+  // also landed as 33/34 is renumbered rather than renumbering ours.
   [33, "ProjectionThreadContext", Migration0033],
+  [34, "ProjectionThreadsSettled", Migration0034],
+  [35, "ProjectionThreadsSnoozed", Migration0035],
 ] as const;
 
 export const makeMigrationLoader = (throughId?: number) =>
@@ -133,9 +139,10 @@ export const runMigrations = Effect.fn("runMigrations")(function* ({
   );
   yield* applyOldPublicMigrationCompatibility({ toMigrationInclusive });
   const executedMigrations = yield* run({ loader: makeMigrationLoader(toMigrationInclusive) });
-  yield* Effect.log("Migrations ran successfully").pipe(
-    Effect.annotateLogs({ migrations: executedMigrations.map(([id, name]) => `${id}_${name}`) }),
-  );
+  const migrations = executedMigrations.map(([id, name]) => `${id}_${name}`);
+  yield* migrations.length === 0
+    ? Effect.logDebug("Database schema is current")
+    : Effect.log("Migrations ran successfully").pipe(Effect.annotateLogs({ migrations }));
   return executedMigrations;
 });
 

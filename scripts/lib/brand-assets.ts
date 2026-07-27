@@ -1,4 +1,13 @@
 export const BRAND_ASSET_PATHS = {
+  developmentIconComposerProject: "assets/dev/app-icon.icon",
+  developmentIosIconPng: "assets/dev/blueprint-ios-1024.png",
+  developmentUniversalIconPng: "assets/dev/blueprint-universal-1024.png",
+
+  // Production and nightly point at the Up.computer artwork. The upstream
+  // `black-*` / `t3-black-*` / `nightly-*` files stay in the tree so their
+  // branding refreshes keep merging, but nothing here references them.
+  productionIconComposerProject: "assets/prod/app-icon.icon",
+  productionIosIconPng: "assets/prod/upcomputer-ios-1024.png",
   productionMacIconPng: "assets/prod/upcomputer-macos-1024.png",
   productionLinuxIconPng: "assets/prod/upcomputer-universal-1024.png",
   productionWindowsIconIco: "assets/prod/upcomputer-windows.ico",
@@ -7,6 +16,8 @@ export const BRAND_ASSET_PATHS = {
   productionWebFavicon32Png: "assets/prod/upcomputer-web-favicon-32x32.png",
   productionWebAppleTouchIconPng: "assets/prod/upcomputer-web-apple-touch-180.png",
 
+  nightlyIconComposerProject: "assets/nightly/app-icon.icon",
+  nightlyIosIconPng: "assets/nightly/blueprint-ios-1024.png",
   nightlyMacIconPng: "assets/nightly/blueprint-macos-1024.png",
   nightlyLinuxIconPng: "assets/nightly/blueprint-universal-1024.png",
   nightlyWindowsIconIco: "assets/nightly/blueprint-windows.ico",
@@ -31,6 +42,10 @@ export type WebAssetChannel = (typeof WEB_ASSET_CHANNELS)[number];
 
 export function resolveWebAssetBrandForChannel(channel: WebAssetChannel): WebAssetBrand {
   return channel === "nightly" ? "nightly" : "production";
+}
+
+export function resolveWebAssetBrandForPackageVersion(version: string): WebAssetBrand {
+  return version.includes("-nightly.") ? "nightly" : "production";
 }
 
 export interface IconOverride {
@@ -93,4 +108,7 @@ export function resolveWebIconOverrides(
 
 export const DEVELOPMENT_ICON_OVERRIDES = resolveWebIconOverrides("development", "dist/client");
 
-export const PUBLISH_ICON_OVERRIDES = resolveWebIconOverrides("production", "dist/client");
+export const DEVELOPMENT_PUBLIC_ICON_OVERRIDES = resolveWebIconOverrides(
+  "development",
+  "apps/web/public",
+);

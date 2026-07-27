@@ -23,12 +23,13 @@ allowBuilds:
   workerd: false
 
 catalog:
-  "@clerk/backend": 3.11.2
-  "@clerk/clerk-js": 6.25.1
-  "@clerk/electron": 0.0.11
-  "@clerk/expo": 3.7.2
-  "@clerk/react": 6.12.1
-  "@clerk/shared": 4.25.1
+  "@clerk/backend": 3.13.0
+  "@clerk/clerk-js": 6.25.7
+  "@clerk/electron": 0.0.18
+  "@clerk/electron-passkeys": 0.0.3
+  "@clerk/expo": 4.0.2
+  "@clerk/react": 6.12.7
+  "@clerk/shared": 4.25.7
   "@effect/atom-react": 4.0.0-beta.78
   "@effect/openapi-generator": 4.0.0-beta.78
   "@effect/platform-bun": 4.0.0-beta.78
@@ -51,12 +52,12 @@ catalog:
   yaml: ^2.9.0
 
 minimumReleaseAgeExclude:
-  - "@clerk/backend@3.11.2"
-  - "@clerk/clerk-js@6.25.1"
-  - "@clerk/electron@0.0.11"
-  - "@clerk/expo@3.7.2"
-  - "@clerk/react@6.12.1"
-  - "@clerk/shared@4.25.1"
+  - "@clerk/backend@3.13.0"
+  - "@clerk/clerk-js@6.25.7"
+  - "@clerk/electron@0.0.18"
+  - "@clerk/expo@4.0.2"
+  - "@clerk/react@6.12.7"
+  - "@clerk/shared@4.25.7"
 
 overrides:
   "@clerk/backend": "catalog:"
@@ -85,10 +86,15 @@ overrides:
   "@types/node": "catalog:"
   effect: "catalog:"
   expo-modules-jsi: 56.0.10
+  "expo-sharing>@expo/config-plugins": 56.0.9
+  "expo-sharing>@expo/config-types": 56.0.6
   vite: "catalog:"
   yaml: "catalog:"
 
 packageExtensions:
+  "@clerk/expo@*":
+    dependencies:
+      "@expo/config-plugins": 56.0.9
   "@effect/vitest@*":
     dependencies:
       vite-plus: "catalog:"

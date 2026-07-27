@@ -16,6 +16,12 @@ import { RightPanelResizeHandle } from "./RightPanelResizeHandle";
 export type PreviewPanelMode = "inline" | "local-overlay" | "sheet" | "sidebar" | "embedded";
 
 const PREVIEW_PANEL_WIDTH_STORAGE_KEY = "t3code:preview-panel-width";
+/** Fraction of the viewport allowed, preserving the remaining space for chat. */
+const PREVIEW_PANEL_MAX_WIDTH_FRACTION = 0.7;
+
+export function getPreviewPanelMaxWidth(viewportWidth: number): number {
+  return Math.floor(viewportWidth * PREVIEW_PANEL_MAX_WIDTH_FRACTION);
+}
 
 /**
  * Shell for the preview panel. Inline and local-overlay modes share one
@@ -79,3 +85,9 @@ export function PreviewPanelShell(props: {
     </div>
   );
 }
+
+/**
+ * Track viewport width to derive a sensible upper bound for the panel.
+ * Resize-aware so dragging the OS window narrower re-clamps the stored
+ * width on the next render (the hook's clamp picks this up automatically).
+ */

@@ -56,6 +56,7 @@ function resolveClientFactory(options: RpcSessionLayerOptions): RpcSessionClient
 type InitialConfigError = Effect.Error<
   ReturnType<WsRpcProtocolClient[typeof WS_METHODS.serverGetConfig]>
 >;
+type ProbeError = Effect.Error<ReturnType<WsRpcProtocolClient[typeof WS_METHODS.serverProbe]>>;
 
 function mapClientFactoryError(error: Error): ConnectionAttemptError {
   return new ConnectionTransientErrorClass({
@@ -64,7 +65,7 @@ function mapClientFactoryError(error: Error): ConnectionAttemptError {
   });
 }
 
-function mapInitialConfigError(error: InitialConfigError): ConnectionAttemptError {
+function mapSessionRpcError(error: InitialConfigError | ProbeError): ConnectionAttemptError {
   switch (error._tag) {
     case "EnvironmentAuthorizationError":
       return new ConnectionBlockedError({
@@ -140,12 +141,19 @@ export const make = (options: RpcSessionLayerOptions = {}) =>
       );
       const initialConfig = yield* Effect.cached(
         client[WS_METHODS.serverGetConfig]({}).pipe(
-          Effect.mapError(mapInitialConfigError),
+          Effect.mapError(mapSessionRpcError),
           Effect.withSpan("environment.initialSync"),
         ),
       );
-      const probe = client[WS_METHODS.serverGetConfig]({}).pipe(
-        Effect.mapError(mapInitialConfigError),
+      // Servers older than the connectionProbe capability have no serverProbe
+      // method, so the config call doubles as the liveness probe there.
+      const probe = initialConfig.pipe(
+        Effect.flatMap((config) =>
+          (config.environment.capabilities.connectionProbe === true
+            ? client[WS_METHODS.serverProbe]({})
+            : client[WS_METHODS.serverGetConfig]({})
+          ).pipe(Effect.mapError(mapSessionRpcError)),
+        ),
         Effect.asVoid,
         Effect.withSpan("clientRuntime.connection.rpcSession.probe"),
       );

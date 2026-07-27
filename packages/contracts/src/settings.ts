@@ -21,7 +21,11 @@ export const SidebarThreadSortOrder = Schema.Literals(["updated_at", "created_at
 export type SidebarThreadSortOrder = typeof SidebarThreadSortOrder.Type;
 export const DEFAULT_SIDEBAR_THREAD_SORT_ORDER: SidebarThreadSortOrder = "updated_at";
 
-export const SidebarViewMode = Schema.Literals(["nested", "focused"]);
+// "v2" is upstream's flat-thread-list sidebar. Upstream gates it on a separate
+// `sidebarV2Enabled` beta flag; here it is a third view mode instead, so the
+// sidebar has exactly one piece of state and no way to be both "v2 enabled"
+// and "focused" at the same time.
+export const SidebarViewMode = Schema.Literals(["nested", "focused", "v2"]);
 export type SidebarViewMode = typeof SidebarViewMode.Type;
 export const DEFAULT_SIDEBAR_VIEW_MODE: SidebarViewMode = "nested";
 
@@ -42,6 +46,26 @@ export const SidebarThreadPreviewCount = Schema.Int.check(
 );
 export type SidebarThreadPreviewCount = typeof SidebarThreadPreviewCount.Type;
 export const DEFAULT_SIDEBAR_THREAD_PREVIEW_COUNT: SidebarThreadPreviewCount = 6;
+export const MIN_SIDEBAR_AUTO_SETTLE_AFTER_DAYS = 1;
+export const MAX_SIDEBAR_AUTO_SETTLE_AFTER_DAYS = 90;
+export const SidebarAutoSettleAfterDays = Schema.Number.check(
+  Schema.isBetween({
+    minimum: MIN_SIDEBAR_AUTO_SETTLE_AFTER_DAYS,
+    maximum: MAX_SIDEBAR_AUTO_SETTLE_AFTER_DAYS,
+  }),
+);
+export type SidebarAutoSettleAfterDays = typeof SidebarAutoSettleAfterDays.Type;
+export const DEFAULT_SIDEBAR_AUTO_SETTLE_AFTER_DAYS: SidebarAutoSettleAfterDays = 3;
+export const MIN_GLASS_OPACITY = 40;
+export const MAX_GLASS_OPACITY = 100;
+export const GlassOpacity = Schema.Int.check(
+  Schema.isBetween({
+    minimum: MIN_GLASS_OPACITY,
+    maximum: MAX_GLASS_OPACITY,
+  }),
+);
+export type GlassOpacity = typeof GlassOpacity.Type;
+export const DEFAULT_GLASS_OPACITY: GlassOpacity = 80;
 
 export const ClientSettingsSchema = Schema.Struct({
   autoOpenPlanSidebar: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
@@ -51,6 +75,9 @@ export const ClientSettingsSchema = Schema.Struct({
     Schema.withDecodingDefault(Effect.succeed([])),
   ),
   diffIgnoreWhitespace: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  glassOpacity: GlassOpacity.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_GLASS_OPACITY)),
+  ),
   // Model favorites. Historically keyed by provider kind, now
   // widened to `ProviderInstanceId` so users can favorite a specific model
   // on a custom provider instance (e.g. "Codex Personal · gpt-5") without
@@ -76,6 +103,9 @@ export const ClientSettingsSchema = Schema.Struct({
       modelOrder: Schema.Array(Schema.String).pipe(Schema.withDecodingDefault(Effect.succeed([]))),
     }),
   ).pipe(Schema.withDecodingDefault(Effect.succeed({}))),
+  sidebarAutoSettleAfterDays: Schema.NullOr(SidebarAutoSettleAfterDays).pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_SIDEBAR_AUTO_SETTLE_AFTER_DAYS)),
+  ),
   sidebarProjectGroupingMode: SidebarProjectGroupingMode.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_SIDEBAR_PROJECT_GROUPING_MODE)),
   ),
@@ -198,13 +228,20 @@ export const CodexSettings = makeProviderSettingsSchema(
         },
       }),
     ),
+    launchArgs: TrimmedString.pipe(
+      Schema.withDecodingDefault(Effect.succeed("")),
+      Schema.annotateKey({
+        title: "Launch arguments",
+        description: "Additional CLI arguments passed to codex app-server on session start.",
+      }),
+    ),
     customModels: Schema.Array(Schema.String).pipe(
       Schema.withDecodingDefault(Effect.succeed([])),
       Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
     ),
   },
   {
-    order: ["binaryPath", "homePath", "shadowHomePath"],
+    order: ["binaryPath", "homePath", "shadowHomePath", "launchArgs"],
   },
 );
 export type CodexSettings = typeof CodexSettings.Type;
@@ -225,10 +262,10 @@ export const ClaudeSettings = makeProviderSettingsSchema(
     homePath: TrimmedString.pipe(
       Schema.withDecodingDefault(Effect.succeed("")),
       Schema.annotateKey({
-        title: "Claude HOME path",
+        title: "CLAUDE_CONFIG_DIR path",
         description:
-          "Custom HOME used when running this Claude instance. Keeps .claude.json and .claude separate.",
-        providerSettingsForm: { placeholder: "~", clearWhenEmpty: "omit" },
+          "Custom Claude home and config directory. Keeps .claude.json and .claude separate.",
+        providerSettingsForm: { placeholder: "~/.claude", clearWhenEmpty: "omit" },
       }),
     ),
     customModels: Schema.Array(Schema.String).pipe(
@@ -259,11 +296,11 @@ export const CursorSettings = makeProviderSettingsSchema(
       Schema.withDecodingDefault(Effect.succeed(false)),
       Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
     ),
-    binaryPath: makeBinaryPathSetting("agent").pipe(
+    binaryPath: makeBinaryPathSetting("cursor-agent").pipe(
       Schema.annotateKey({
         title: "Binary path",
         description: "Path to the Cursor agent binary.",
-        providerSettingsForm: { placeholder: "agent", clearWhenEmpty: "omit" },
+        providerSettingsForm: { placeholder: "cursor-agent", clearWhenEmpty: "omit" },
       }),
     ),
     apiEndpoint: TrimmedString.pipe(
@@ -382,7 +419,7 @@ export const ServerSettings = Schema.Struct({
     Schema.withDecodingDefault(Effect.succeed("local" as const satisfies ThreadEnvMode)),
   ),
   newWorktreesStartFromOrigin: Schema.Boolean.pipe(
-    Schema.withDecodingDefault(Effect.succeed(false)),
+    Schema.withDecodingDefault(Effect.succeed(true)),
   ),
   addProjectBaseDirectory: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
   textGenerationModelSelection: ModelSelection.pipe(
@@ -476,6 +513,7 @@ const CodexSettingsPatch = Schema.Struct({
   binaryPath: Schema.optionalKey(TrimmedString),
   homePath: Schema.optionalKey(TrimmedString),
   shadowHomePath: Schema.optionalKey(TrimmedString),
+  launchArgs: Schema.optionalKey(TrimmedString),
   customModels: Schema.optionalKey(Schema.Array(Schema.String)),
 });
 
@@ -545,6 +583,7 @@ export const ClientSettingsPatch = Schema.Struct({
   confirmThreadArchive: Schema.optionalKey(Schema.Boolean),
   confirmThreadDelete: Schema.optionalKey(Schema.Boolean),
   diffIgnoreWhitespace: Schema.optionalKey(Schema.Boolean),
+  glassOpacity: Schema.optionalKey(GlassOpacity),
   favorites: Schema.optionalKey(
     Schema.Array(
       Schema.Struct({
@@ -566,6 +605,7 @@ export const ClientSettingsPatch = Schema.Struct({
       }),
     ),
   ),
+  sidebarAutoSettleAfterDays: Schema.optionalKey(Schema.NullOr(SidebarAutoSettleAfterDays)),
   sidebarProjectGroupingMode: Schema.optionalKey(SidebarProjectGroupingMode),
   sidebarProjectGroupingOverrides: Schema.optionalKey(
     Schema.Record(TrimmedNonEmptyString, SidebarProjectGroupingMode),
