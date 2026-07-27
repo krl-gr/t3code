@@ -1,0 +1,333 @@
+/* UpComputer theme layer.
+ *
+ * Everything in this file is ours. `index.css` stays byte-identical to
+ * upstream so their surface work merges without our involvement; all our
+ * divergence lives here and is applied last, overriding upstream by source
+ * order rather than by editing their rules in place.
+ *
+ * Rules:
+ *   - Never edit `index.css`. Add an override here instead.
+ *   - Overrides must match the upstream selector exactly, so a later upstream
+ *     rename shows up as our override going dead rather than as a conflict.
+ *   - Upstream rules we no longer use (`.chat-composer-glass`,
+ *     `.chat-markdown-codeblock-header`, ...) are left alone: the classes are
+ *     unreferenced in our components, so their CSS is inert.
+ */
+
+@import "dockview/dist/styles/dockview.css";
+
+/* Windows-specific Window Controls Overlay: titlebar-area-height differs from
+ * macOS, so tab chrome has to size against it. */
+@custom-variant wco-windows (&:is(.wco-windows, .wco-windows *));
+
+@theme inline {
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --color-app-content-background: var(--app-content-background);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+}
+
+:root {
+  --app-content-background: --alpha(var(--color-white) / 80%);
+  --sidebar: --alpha(var(--color-white) / 25%);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-accent: --alpha(var(--color-black) / 5%);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: --alpha(var(--color-black) / 10%);
+  --project-avatar-background-pink: #feeef8;
+  --project-avatar-background-mint: #e1fbf4;
+  --project-avatar-background-orange: #fff1e7;
+  --project-avatar-background-purple: #f9f1fe;
+  --project-avatar-background-cyan: #e7f9fb;
+  --project-avatar-background-lime: #eefadc;
+  --project-avatar-text-pink: #cd1d8d;
+  --project-avatar-text-mint: #147d6f;
+  --project-avatar-text-orange: #ed5f00;
+  --project-avatar-text-purple: #8445bc;
+  --project-avatar-text-cyan: #0894b3;
+  --project-avatar-text-lime: #5d770d;
+
+  @variant dark {
+    /* Flat near-black instead of upstream's tinted neutral-950 mix.
+     * `--app-chrome-background` is defined upstream as `var(--background)` and
+     * resolves lazily, so it follows this without being restated. */
+    --background: #131313;
+    --app-content-background: #131313;
+    --sidebar: color-mix(in srgb, var(--background) 34%, transparent);
+    --sidebar-foreground: var(--foreground);
+    --sidebar-accent: --alpha(var(--color-white) / 7%);
+    --sidebar-accent-foreground: var(--foreground);
+    --sidebar-border: --alpha(var(--color-white) / 10%);
+    --project-avatar-background-pink: #501b3f;
+    --project-avatar-background-mint: #033a34;
+    --project-avatar-background-orange: #5f2a06;
+    --project-avatar-background-purple: #432155;
+    --project-avatar-background-cyan: #0f3058;
+    --project-avatar-background-lime: #2b3711;
+    --project-avatar-text-pink: #e34ba9;
+    --project-avatar-text-mint: #95f3d9;
+    --project-avatar-text-orange: #ff802b;
+    --project-avatar-text-purple: #9d5bd2;
+    --project-avatar-text-cyan: #369eff;
+    --project-avatar-text-lime: #c4f042;
+  }
+}
+
+@layer components {
+  /* Our composer sits on an opaque fade to the content background rather than
+   * upstream's translucent glass card. */
+  .chat-composer-backdrop-fade {
+    background: linear-gradient(
+      to bottom,
+      rgb(from var(--app-content-background) r g b / 80%),
+      rgb(from var(--app-content-background) r g b / 100%)
+    );
+  }
+}
+
+body {
+  font-family:
+    "Inter",
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    system-ui,
+    sans-serif;
+}
+
+/* Upstream paints a fractal-noise overlay across the whole app. We don't. */
+body::after {
+  content: none;
+}
+
+/* Electron paints its own window background; the web layers stay transparent so
+ * the native vibrancy shows through. */
+.electron,
+.electron body,
+.electron #root {
+  background: transparent !important;
+}
+
+.t3-sidebar-glass {
+  background: var(--sidebar);
+  -webkit-backdrop-filter: blur(28px) saturate(1.25);
+  backdrop-filter: blur(28px) saturate(1.25);
+}
+
+/* Dockview workspace chrome. Upstream has no dockview integration, so none of
+ * this overrides anything -- it is ours end to end. */
+.t3code-dockview-theme {
+  --dv-active-sash-color: color-mix(in srgb, var(--ring) 55%, transparent);
+  --dv-active-sash-transition-delay: 0s;
+  --dv-active-sash-transition-duration: 0.08s;
+  --dv-drag-over-background-color: color-mix(in srgb, var(--primary) 18%, transparent);
+  --dv-drag-over-border-color: color-mix(in srgb, var(--primary) 42%, transparent);
+  --dv-group-view-background-color: transparent;
+  --dv-icon-hover-background-color: var(--accent);
+  --dv-inactivegroup-hiddenpanel-tab-background-color: transparent;
+  --dv-inactivegroup-hiddenpanel-tab-color: #bab9ba;
+  --dv-inactivegroup-visiblepanel-tab-background-color: transparent;
+  --dv-inactivegroup-visiblepanel-tab-color: #bab9ba;
+  --dv-paneview-active-outline-color: color-mix(in srgb, var(--ring) 55%, transparent);
+  --dv-paneview-header-border-color: transparent;
+  --dv-sash-color: transparent;
+  --dv-scrollbar-background-color: color-mix(in srgb, var(--foreground) 28%, transparent);
+  --dv-separator-border: var(--border);
+  --dv-tab-border-radius: 0;
+  --dv-tab-divider-color: #2b2b2c;
+  --dv-tab-font-size: 14px;
+  --dv-tab-margin: 0;
+  --dv-tabs-and-actions-container-background-color: transparent;
+  --dv-tabs-and-actions-container-font-size: 14px;
+  --dv-tabs-and-actions-container-height: 48px;
+  --dv-tabs-container-scrollbar-color: var(--border);
+  --dv-activegroup-hiddenpanel-tab-background-color: transparent;
+  --dv-activegroup-hiddenpanel-tab-color: #bab9ba;
+  --dv-activegroup-visiblepanel-tab-background-color: transparent;
+  --dv-activegroup-visiblepanel-tab-color: #bab9ba;
+  background: transparent;
+  color: var(--foreground);
+  font-family: inherit;
+}
+
+.t3code-dockview-theme .dv-tabs-and-actions-container {
+  border-bottom: 0;
+}
+
+.wco-windows .t3code-dockview-theme {
+  --dv-tabs-and-actions-container-height: env(titlebar-area-height);
+}
+
+.electron .t3code-dockview-theme .dv-tabs-and-actions-container {
+  -webkit-app-region: drag;
+}
+
+.t3code-dockview-theme .dv-pre-actions-container,
+.t3code-dockview-theme .dv-left-actions-container,
+.t3code-dockview-theme .dv-right-actions-container {
+  display: flex;
+  flex-shrink: 0;
+}
+
+.electron .t3code-dockview-theme .dv-tab,
+.electron .t3code-dockview-theme button {
+  -webkit-app-region: no-drag;
+}
+
+.t3code-dockview-theme .dv-scrollable {
+  box-sizing: border-box;
+  flex-shrink: 1;
+  min-width: 0;
+  padding-left: 8px;
+}
+
+.t3code-dockview-theme .dv-scrollable .dv-scrollbar-horizontal {
+  display: none;
+}
+
+.t3code-dockview-theme .dv-tabs-container {
+  align-items: flex-start;
+  gap: 2px;
+  overflow: hidden;
+  scrollbar-width: none;
+}
+
+.t3code-dockview-theme .dv-tabs-container::-webkit-scrollbar {
+  display: none;
+}
+
+.t3code-dockview-theme .dv-tab {
+  box-sizing: border-box;
+  flex: 0 0 auto;
+  height: 48px;
+  letter-spacing: 0;
+  max-width: none;
+  min-width: 96px;
+  overflow: visible;
+  padding: 8px 0;
+  width: max-content;
+}
+
+.wco-windows .t3code-dockview-theme .dv-tab {
+  height: env(titlebar-area-height);
+  padding: 4px 0;
+}
+
+.t3code-dockview-theme .dv-tabs-container[data-tab-sizing="fill"] .dv-tab {
+  flex: 1 1 0;
+  width: auto;
+}
+
+.t3code-dockview-theme .dv-tab.dv-active-tab {
+  box-shadow: none;
+}
+
+.t3code-dockview-theme .dv-tabs-and-actions-container.dv-single-tab .t3-workspace-tab {
+  background: transparent;
+  border-color: transparent;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.t3code-dockview-theme .dv-tabs-and-actions-container.dv-single-tab .dv-tab {
+  flex: 1 1 auto;
+  max-width: none;
+  width: auto;
+}
+
+.t3code-dockview-theme .dv-tabs-and-actions-container.dv-single-tab .dv-tab:focus::after,
+.t3code-dockview-theme .dv-tabs-and-actions-container.dv-single-tab .dv-tab:focus-within::after {
+  display: none;
+}
+
+.t3code-dockview-theme .dv-tabs-and-actions-container.dv-single-tab .t3-workspace-tab-close {
+  display: none;
+}
+
+.t3code-dockview-theme .dv-tab:focus::after,
+.t3code-dockview-theme .dv-tab:focus-within::after {
+  border-radius: 8px;
+  height: 32px;
+  top: 8px;
+}
+
+.t3code-dockview-theme .dv-tabs-container.dv-horizontal .dv-tab:not(:first-child)::before {
+  background-color: #2b2b2c;
+  height: 12px;
+  top: 18px;
+}
+
+.t3code-dockview-theme .dv-tabs-container.dv-horizontal .dv-tab.dv-active-tab::before,
+.t3code-dockview-theme .dv-tabs-container.dv-horizontal .dv-tab.dv-active-tab + .dv-tab::before {
+  display: none;
+}
+
+.t3code-dockview-theme .dv-void-container {
+  min-width: 12px;
+}
+
+.electron .t3code-dockview-theme .dv-void-container {
+  pointer-events: none;
+}
+
+.t3code-dockview-theme .t3-workspace-tab {
+  font-family: Inter, sans-serif;
+}
+
+.t3code-dockview-theme .dv-view {
+  background: transparent;
+}
+
+/* Chat markdown. */
+
+.chat-markdown strong {
+  font-weight: 550;
+}
+
+.chat-markdown pre code {
+  font-size: 0.875rem;
+}
+
+/* Our code blocks have no header bar: the actions float over the top-right
+ * corner and appear on hover, so the block needs a positioning context and
+ * right-hand padding to keep code clear of them. */
+.chat-markdown .chat-markdown-codeblock {
+  --chat-markdown-codeblock-action-space: 3.5rem;
+  position: relative;
+  background: rgb(239 239 239 / 95%);
+}
+
+.dark .chat-markdown .chat-markdown-codeblock {
+  background: var(--muted);
+}
+
+.chat-markdown .chat-markdown-codeblock-actions {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+
+.chat-markdown .chat-markdown-codeblock:hover .chat-markdown-codeblock-actions,
+.chat-markdown .chat-markdown-codeblock:focus-within .chat-markdown-codeblock-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.chat-markdown .chat-markdown-chrome-action {
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--background) 82%, transparent);
+}
+
+.chat-markdown .chat-markdown-codeblock pre {
+  padding-right: calc(0.9rem + var(--chat-markdown-codeblock-action-space));
+}

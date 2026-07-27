@@ -1,10 +1,8 @@
-@import "dockview/dist/styles/dockview.css";
 @import "tailwindcss";
 
 @custom-variant dark (&:is(.dark, .dark *));
 /* Window Controls Overlay: active when Electron exposes native titlebar control geometry. */
 @custom-variant wco (&:is(.wco, .wco *));
-@custom-variant wco-windows (&:is(.wco-windows, .wco-windows *));
 
 :root {
   --app-scrollbar-width: 6px;
@@ -38,7 +36,9 @@
 
 @theme inline {
   --animate-skeleton: skeleton 2s -1s infinite linear;
-  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-sans:
+    "DM Sans Variable", "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui,
+    sans-serif;
   --font-mono:
     "SF Mono", "SFMono-Regular", "JetBrains Mono", Consolas, "Liberation Mono", Menlo, monospace;
   --color-warning-foreground: var(--warning-foreground);
@@ -65,13 +65,7 @@
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
   --color-foreground: var(--foreground);
-  --color-app-content-background: var(--app-content-background);
   --color-background: var(--background);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar: var(--sidebar);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -157,18 +151,50 @@
     padding-inline-end: calc(env(safe-area-inset-right) + 0.75rem);
   }
 
-  .chat-composer-backdrop-fade {
-    background: linear-gradient(
-      to bottom,
-      rgb(from var(--app-content-background) r g b / 80%),
-      rgb(from var(--app-content-background) r g b / 100%)
-    );
+  .chat-composer-glass,
+  .chat-composer-lower-chrome {
+    background: color-mix(in srgb, var(--card) 20%, transparent);
+  }
+
+  .chat-composer-glass {
+    box-shadow:
+      0 18px 48px -20px rgb(0 0 0 / 28%),
+      0 4px 14px -7px rgb(0 0 0 / 22%);
+  }
+
+  .chat-composer-shared-blur {
+    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(16px);
+  }
+
+  .dark .chat-composer-glass,
+  .dark .chat-composer-lower-chrome {
+    background: color-mix(in srgb, var(--card) 45%, transparent);
+  }
+
+  .dark .chat-composer-glass {
+    box-shadow:
+      0 18px 48px -20px rgb(0 0 0 / 60%),
+      0 4px 14px -7px rgb(0 0 0 / 40%);
+  }
+
+  .chat-composer-lower-chrome {
+    margin-top: -1px;
+    margin-inline-end: var(--app-scrollbar-width);
+    padding-top: 1px;
   }
 
   @media (min-width: 40rem) {
     .chat-composer-horizontal-inset {
       padding-inline-start: calc(env(safe-area-inset-left) + 1.25rem);
       padding-inline-end: calc(env(safe-area-inset-right) + 1.25rem);
+    }
+  }
+
+  @supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+    .chat-composer-glass,
+    .chat-composer-lower-chrome {
+      background: var(--card);
     }
   }
 }
@@ -203,7 +229,6 @@
   --radius: 0.625rem;
   --background: var(--color-white);
   --app-chrome-background: var(--background);
-  --app-content-background: --alpha(var(--color-white) / 80%);
   --foreground: var(--color-neutral-800);
   --card: var(--color-white);
   --card-foreground: var(--color-neutral-800);
@@ -228,29 +253,11 @@
   --success-foreground: var(--color-emerald-700);
   --warning: var(--color-amber-500);
   --warning-foreground: var(--color-amber-700);
-  --sidebar: --alpha(var(--color-white) / 25%);
-  --sidebar-foreground: var(--foreground);
-  --sidebar-accent: --alpha(var(--color-black) / 5%);
-  --sidebar-accent-foreground: var(--foreground);
-  --sidebar-border: --alpha(var(--color-black) / 10%);
-  --project-avatar-background-pink: #feeef8;
-  --project-avatar-background-mint: #e1fbf4;
-  --project-avatar-background-orange: #fff1e7;
-  --project-avatar-background-purple: #f9f1fe;
-  --project-avatar-background-cyan: #e7f9fb;
-  --project-avatar-background-lime: #eefadc;
-  --project-avatar-text-pink: #cd1d8d;
-  --project-avatar-text-mint: #147d6f;
-  --project-avatar-text-orange: #ed5f00;
-  --project-avatar-text-purple: #8445bc;
-  --project-avatar-text-cyan: #0894b3;
-  --project-avatar-text-lime: #5d770d;
 
   @variant dark {
     color-scheme: dark;
-    --background: #131313;
+    --background: color-mix(in srgb, var(--color-neutral-950) 95%, var(--color-white));
     --app-chrome-background: var(--background);
-    --app-content-background: #131313;
     --foreground: var(--color-neutral-100);
     --card: color-mix(in srgb, var(--background) 98%, var(--color-white));
     --card-foreground: var(--color-neutral-100);
@@ -275,29 +282,13 @@
     --success-foreground: var(--color-emerald-400);
     --warning: var(--color-amber-500);
     --warning-foreground: var(--color-amber-400);
-    --sidebar: color-mix(in srgb, var(--background) 34%, transparent);
-    --sidebar-foreground: var(--foreground);
-    --sidebar-accent: --alpha(var(--color-white) / 7%);
-    --sidebar-accent-foreground: var(--foreground);
-    --sidebar-border: --alpha(var(--color-white) / 10%);
-    --project-avatar-background-pink: #501b3f;
-    --project-avatar-background-mint: #033a34;
-    --project-avatar-background-orange: #5f2a06;
-    --project-avatar-background-purple: #432155;
-    --project-avatar-background-cyan: #0f3058;
-    --project-avatar-background-lime: #2b3711;
-    --project-avatar-text-pink: #e34ba9;
-    --project-avatar-text-mint: #95f3d9;
-    --project-avatar-text-orange: #ff802b;
-    --project-avatar-text-purple: #9d5bd2;
-    --project-avatar-text-cyan: #369eff;
-    --project-avatar-text-lime: #c4f042;
   }
 }
 
 body {
   font-family:
-    "Inter",
+    "DM Sans Variable",
+    "DM Sans",
     -apple-system,
     BlinkMacSystemFont,
     "Segoe UI",
@@ -318,174 +309,6 @@ body {
   overflow: hidden;
 }
 
-.t3code-dockview-theme {
-  --dv-active-sash-color: color-mix(in srgb, var(--ring) 55%, transparent);
-  --dv-active-sash-transition-delay: 0s;
-  --dv-active-sash-transition-duration: 0.08s;
-  --dv-drag-over-background-color: color-mix(in srgb, var(--primary) 18%, transparent);
-  --dv-drag-over-border-color: color-mix(in srgb, var(--primary) 42%, transparent);
-  --dv-group-view-background-color: transparent;
-  --dv-icon-hover-background-color: var(--accent);
-  --dv-inactivegroup-hiddenpanel-tab-background-color: transparent;
-  --dv-inactivegroup-hiddenpanel-tab-color: #bab9ba;
-  --dv-inactivegroup-visiblepanel-tab-background-color: transparent;
-  --dv-inactivegroup-visiblepanel-tab-color: #bab9ba;
-  --dv-paneview-active-outline-color: color-mix(in srgb, var(--ring) 55%, transparent);
-  --dv-paneview-header-border-color: transparent;
-  --dv-sash-color: transparent;
-  --dv-scrollbar-background-color: color-mix(in srgb, var(--foreground) 28%, transparent);
-  --dv-separator-border: var(--border);
-  --dv-tab-border-radius: 0;
-  --dv-tab-divider-color: #2b2b2c;
-  --dv-tab-font-size: 14px;
-  --dv-tab-margin: 0;
-  --dv-tabs-and-actions-container-background-color: transparent;
-  --dv-tabs-and-actions-container-font-size: 14px;
-  --dv-tabs-and-actions-container-height: 48px;
-  --dv-tabs-container-scrollbar-color: var(--border);
-  --dv-activegroup-hiddenpanel-tab-background-color: transparent;
-  --dv-activegroup-hiddenpanel-tab-color: #bab9ba;
-  --dv-activegroup-visiblepanel-tab-background-color: transparent;
-  --dv-activegroup-visiblepanel-tab-color: #bab9ba;
-  background: transparent;
-  color: var(--foreground);
-  font-family: inherit;
-}
-
-.t3code-dockview-theme .dv-tabs-and-actions-container {
-  border-bottom: 0;
-}
-
-.wco-windows .t3code-dockview-theme {
-  --dv-tabs-and-actions-container-height: env(titlebar-area-height);
-}
-
-.electron .t3code-dockview-theme .dv-tabs-and-actions-container {
-  -webkit-app-region: drag;
-}
-
-.t3code-dockview-theme .dv-pre-actions-container,
-.t3code-dockview-theme .dv-left-actions-container,
-.t3code-dockview-theme .dv-right-actions-container {
-  display: flex;
-  flex-shrink: 0;
-}
-
-.electron .t3code-dockview-theme .dv-tab,
-.electron .t3code-dockview-theme button {
-  -webkit-app-region: no-drag;
-}
-
-.t3code-dockview-theme .dv-scrollable {
-  box-sizing: border-box;
-  flex-shrink: 1;
-  min-width: 0;
-  padding-left: 8px;
-}
-
-.t3code-dockview-theme .dv-scrollable .dv-scrollbar-horizontal {
-  display: none;
-}
-
-.t3code-dockview-theme .dv-tabs-container {
-  align-items: flex-start;
-  gap: 2px;
-  overflow: hidden;
-  scrollbar-width: none;
-}
-
-.t3code-dockview-theme .dv-tabs-container::-webkit-scrollbar {
-  display: none;
-}
-
-.t3code-dockview-theme .dv-tab {
-  box-sizing: border-box;
-  flex: 0 0 auto;
-  height: 48px;
-  letter-spacing: 0;
-  max-width: none;
-  min-width: 96px;
-  overflow: visible;
-  padding: 8px 0;
-  width: max-content;
-}
-
-.wco-windows .t3code-dockview-theme .dv-tab {
-  height: env(titlebar-area-height);
-  padding: 4px 0;
-}
-
-.t3code-dockview-theme .dv-tabs-container[data-tab-sizing="fill"] .dv-tab {
-  flex: 1 1 0;
-  width: auto;
-}
-
-.t3code-dockview-theme .dv-tab.dv-active-tab {
-  box-shadow: none;
-}
-
-.t3code-dockview-theme .dv-tabs-and-actions-container.dv-single-tab .t3-workspace-tab {
-  background: transparent;
-  border-color: transparent;
-  border-radius: 0;
-  box-shadow: none;
-}
-
-.t3code-dockview-theme .dv-tabs-and-actions-container.dv-single-tab .dv-tab {
-  flex: 1 1 auto;
-  max-width: none;
-  width: auto;
-}
-
-.t3code-dockview-theme .dv-tabs-and-actions-container.dv-single-tab .dv-tab:focus::after,
-.t3code-dockview-theme .dv-tabs-and-actions-container.dv-single-tab .dv-tab:focus-within::after {
-  display: none;
-}
-
-.t3code-dockview-theme .dv-tabs-and-actions-container.dv-single-tab .t3-workspace-tab-close {
-  display: none;
-}
-
-.t3code-dockview-theme .dv-tab:focus::after,
-.t3code-dockview-theme .dv-tab:focus-within::after {
-  border-radius: 8px;
-  height: 32px;
-  top: 8px;
-}
-
-.t3code-dockview-theme .dv-tabs-container.dv-horizontal .dv-tab:not(:first-child)::before {
-  background-color: #2b2b2c;
-  height: 12px;
-  top: 18px;
-}
-
-.t3code-dockview-theme .dv-tabs-container.dv-horizontal .dv-tab.dv-active-tab::before,
-.t3code-dockview-theme .dv-tabs-container.dv-horizontal .dv-tab.dv-active-tab + .dv-tab::before {
-  display: none;
-}
-
-.t3code-dockview-theme .dv-void-container {
-  min-width: 12px;
-}
-
-.electron .t3code-dockview-theme .dv-void-container {
-  pointer-events: none;
-}
-
-.t3code-dockview-theme .t3-workspace-tab {
-  font-family: Inter, sans-serif;
-}
-
-.t3code-dockview-theme .dv-view {
-  background: transparent;
-}
-
-.electron,
-.electron body,
-.electron #root {
-  background: transparent !important;
-}
-
 #root {
   height: 100%;
   width: 100%;
@@ -497,10 +320,15 @@ body {
   padding-top: max(env(safe-area-inset-top), 0px);
 }
 
-.t3-sidebar-glass {
-  background: var(--sidebar);
-  -webkit-backdrop-filter: blur(28px) saturate(1.25);
-  backdrop-filter: blur(28px) saturate(1.25);
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 256px 256px;
 }
 
 pre,
@@ -673,10 +501,6 @@ label:has(> select#reasoning-effort) select {
   margin-top: 0.25rem;
 }
 
-.chat-markdown strong {
-  font-weight: 550;
-}
-
 /* GitHub-style task lists: the checkbox replaces the list marker. */
 .chat-markdown li.task-list-item {
   list-style-type: none;
@@ -784,7 +608,7 @@ label:has(> select#reasoning-effort) select {
   border: none;
   background: transparent;
   padding: 0;
-  font-size: 0.875rem;
+  font-size: 0.75rem;
 }
 
 .chat-markdown pre {
@@ -824,41 +648,34 @@ label:has(> select#reasoning-effort) select {
 }
 
 .chat-markdown .chat-markdown-codeblock {
-  --chat-markdown-codeblock-action-space: 3.5rem;
-  position: relative;
   margin: 0.65rem 0;
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 0.75rem;
-  background: rgb(239 239 239 / 95%);
+  background: color-mix(in srgb, var(--muted) 78%, var(--background));
 }
 
-.dark .chat-markdown .chat-markdown-codeblock {
-  background: var(--muted);
-}
-
-.chat-markdown .chat-markdown-codeblock-actions {
-  position: absolute;
-  top: 0.5rem;
-  right: 0.5rem;
-  z-index: 1;
+.chat-markdown .chat-markdown-codeblock-header {
   display: flex;
   align-items: center;
-  gap: 0.25rem;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 120ms ease;
+  justify-content: space-between;
+  gap: 0.5rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--muted);
+  padding: 0.25rem 0.375rem 0.25rem 0.7rem;
+  color: var(--muted-foreground);
 }
 
-.chat-markdown .chat-markdown-codeblock:hover .chat-markdown-codeblock-actions,
-.chat-markdown .chat-markdown-codeblock:focus-within .chat-markdown-codeblock-actions {
-  opacity: 1;
-  pointer-events: auto;
+.chat-markdown .chat-markdown-codeblock-title {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.4rem;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
+  font-size: 0.6875rem;
 }
 
 .chat-markdown .chat-markdown-chrome-action {
-  border: 1px solid var(--border);
-  background: color-mix(in srgb, var(--background) 82%, transparent);
   color: var(--muted-foreground);
 }
 
@@ -876,7 +693,6 @@ label:has(> select#reasoning-effort) select {
   border: none;
   border-radius: 0;
   background: transparent;
-  padding-right: calc(0.9rem + var(--chat-markdown-codeblock-action-space));
 }
 
 .chat-markdown .chat-markdown-codeblock[data-wrap="true"] pre {
@@ -1075,3 +891,5 @@ label:has(> select#reasoning-effort) select {
 .dark .model-picker-list::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.15);
 }
+
+@import "./theme.upcomputer.css";
