@@ -305,6 +305,22 @@ const EMPTY_ACTIVITIES: OrchestrationThreadActivity[] = [];
 const EMPTY_PROVIDERS: ServerProvider[] = [];
 const EMPTY_PROVIDER_SKILLS: ServerProvider["skills"] = [];
 const EMPTY_PENDING_USER_INPUT_ANSWERS: Record<string, PendingUserInputDraftAnswer> = {};
+
+/**
+ * Upstream's draft hero (#4055) is parked.
+ *
+ * It arrived with the 2026-07-27 sync and lifts the composer to the vertical
+ * centre of an empty draft. Only half of it merged: the headline
+ * (`chat/DraftHeroHeadline`), the glass shell and the context strip are all
+ * decisions this fork already declined, so the centred state showed a bare
+ * composer with no landing content — and the timeline's "Send a message to
+ * start the conversation" placeholder hidden behind it.
+ *
+ * The layout below is written for the hero anyway, so flipping this to `true`
+ * gives a correct centred stack; what is missing is the content, not the CSS.
+ */
+const DRAFT_HERO_ENABLED = false;
+
 function useDraftHeroLayoutTransition(isDraftHeroState: boolean) {
   const transitionGroupRef = useRef<HTMLDivElement | null>(null);
   const composerAnchorRef = useRef<HTMLDivElement | null>(null);
@@ -2300,7 +2316,11 @@ function ChatViewContent(props: ChatViewProps) {
   const draftHeroDockRequested =
     activeThreadKey !== null && dockedDraftHeroThreadKey === activeThreadKey;
   const isDraftHeroState =
-    isLocalDraftThread && timelineEntries.length === 0 && !isWorking && !draftHeroDockRequested;
+    DRAFT_HERO_ENABLED &&
+    isLocalDraftThread &&
+    timelineEntries.length === 0 &&
+    !isWorking &&
+    !draftHeroDockRequested;
   const [, , captureDraftHeroComposerRect] = useDraftHeroLayoutTransition(isDraftHeroState);
   const { turnDiffSummaries, inferredCheckpointTurnCountByTurnId } =
     useTurnDiffSummaries(activeThread);
@@ -5861,17 +5881,26 @@ function ChatViewContent(props: ChatViewProps) {
               data-chat-composer-overlay="true"
               className={
                 isDraftHeroState
-                  ? "pointer-events-none absolute inset-0 z-20 flex items-center"
+                  ? // A column, not upstream's `flex items-center`: their overlay
+                    // holds a single child, ours holds the composer and the branch
+                    // toolbar as siblings, and in a flex *row* those two sit next to
+                    // each other, each shrunk to its content width.
+                    "pointer-events-none absolute inset-0 z-20 flex flex-col justify-center"
                   : "pointer-events-none absolute inset-x-0 bottom-0 z-20 pt-1.5 sm:pt-2"
               }
             >
-              <div
-                aria-hidden="true"
-                className="chat-composer-horizontal-inset pointer-events-none absolute inset-x-0 top-1/2 bottom-0 z-0"
-              >
-                <div className="chat-composer-backdrop-fade mx-auto h-full w-full max-w-208" />
-              </div>
-              <div className="chat-composer-horizontal-inset">
+              {/* Reads from the overlay's own box, so it only makes sense while the
+                  overlay is the docked strip; over a full-height hero it would fade
+                  the whole lower half of the panel. */}
+              {!isDraftHeroState && (
+                <div
+                  aria-hidden="true"
+                  className="chat-composer-horizontal-inset pointer-events-none absolute inset-x-0 top-1/2 bottom-0 z-0"
+                >
+                  <div className="chat-composer-backdrop-fade mx-auto h-full w-full max-w-208" />
+                </div>
+              )}
+              <div className="chat-composer-horizontal-inset w-full">
                 <div className="pointer-events-auto relative z-10 isolate">
                   <ComposerBannerStack className="relative z-0" items={composerBannerItems} />
                   <div className="relative z-10">
