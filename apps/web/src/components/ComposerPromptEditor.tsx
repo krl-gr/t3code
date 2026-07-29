@@ -1607,8 +1607,13 @@ function ComposerPromptEditorInner({
       if (shouldRewriteEditorState) {
         $setComposerEditorPrompt(value, terminalContexts, skillMetadataRef.current);
       }
-      if (shouldRewriteEditorState || isFocused) {
+      if (isFocused) {
         $setSelectionAtComposerOffset(normalizedCursor);
+      } else if (shouldRewriteEditorState) {
+        // A thread can be rendered in multiple dock panels. Their prompt value is
+        // shared, but DOM selection is document-global, so a blurred editor must
+        // not publish its stale local cursor while mirroring the shared prompt.
+        $setSelection(null);
       }
     });
     queueMicrotask(() => {
