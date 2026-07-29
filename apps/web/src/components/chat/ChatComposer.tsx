@@ -1186,7 +1186,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const mobileComposerExpandFrameRef = useRef<number | null>(null);
   const mobileComposerExpandReleaseFrameRef = useRef<number | null>(null);
   const mobileComposerExpandInFlightRef = useRef(false);
-  const dragDepthRef = useRef(0);
 
   // ------------------------------------------------------------------
   // Derived: composer send state
@@ -1603,7 +1602,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     setComposerHighlightedItemId(null);
     setComposerCursor(collapseExpandedComposerCursor(promptRef.current, promptRef.current.length));
     setComposerTrigger(detectComposerTrigger(promptRef.current, promptRef.current.length));
-    dragDepthRef.current = 0;
     setIsDragOverComposer(false);
   }, [draftId, activeThreadId, promptRef]);
 
@@ -2226,7 +2224,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const onComposerDragEnter = (event: React.DragEvent<HTMLDivElement>) => {
     if (!event.dataTransfer.types.includes("Files")) return;
     event.preventDefault();
-    dragDepthRef.current += 1;
+    const previousTarget = event.relatedTarget;
+    if (previousTarget instanceof Node && event.currentTarget.contains(previousTarget)) return;
     setIsDragOverComposer(true);
   };
 
@@ -2242,16 +2241,12 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     event.preventDefault();
     const nextTarget = event.relatedTarget;
     if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) return;
-    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
-    if (dragDepthRef.current === 0) {
-      setIsDragOverComposer(false);
-    }
+    setIsDragOverComposer(false);
   };
 
   const onComposerDrop = (event: React.DragEvent<HTMLDivElement>) => {
     if (!event.dataTransfer.types.includes("Files")) return;
     event.preventDefault();
-    dragDepthRef.current = 0;
     setIsDragOverComposer(false);
     const files = Array.from(event.dataTransfer.files);
     addComposerImages(files);
@@ -2311,7 +2306,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   useEffect(() => {
     if (!isDragOverComposer) return;
     const onWindowDragEnd = () => {
-      dragDepthRef.current = 0;
       setIsDragOverComposer(false);
     };
     window.addEventListener("dragend", onWindowDragEnd);
