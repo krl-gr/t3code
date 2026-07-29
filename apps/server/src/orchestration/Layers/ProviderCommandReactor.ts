@@ -9,6 +9,7 @@ import {
   type ProviderInteractionMode,
   type ProjectId,
   type OrchestrationSession,
+  type OrchestrationThread,
   ThreadId,
   type ProviderSession,
   type RuntimeMode,
@@ -216,6 +217,27 @@ const make = Effect.gen(function* () {
     );
 
   const threadModelSelections = new Map<string, ModelSelection>();
+  // Context bindings are immutable snapshots. Track each binding accepted by
+  // the active provider session so snapshots are not repeated on every turn.
+  const injectedContextBindingsByThread = new Map<string, Set<string>>();
+  const pendingContextBindingClaims = new Map<string, symbol>();
+  const contextBindingClaimKey = (threadId: ThreadId, bindingId: string) =>
+    `${threadId}\u0000${bindingId}`;
+  const resetInjectedContextBindings = (threadId: ThreadId) => {
+    injectedContextBindingsByThread.delete(threadId);
+    const prefix = `${threadId}\u0000`;
+    for (const key of pendingContextBindingClaims.keys()) {
+      if (key.startsWith(prefix)) pendingContextBindingClaims.delete(key);
+    }
+  };
+  const seedResumedContextBindings = (threadId: ThreadId, thread: OrchestrationThread) => {
+    if (thread.latestTurn === null) return;
+    const injected = injectedContextBindingsByThread.get(threadId) ?? new Set<string>();
+    for (const binding of thread.contextBindings ?? []) {
+      if (binding.createdAt <= thread.latestTurn.requestedAt) injected.add(binding.id);
+    }
+    injectedContextBindingsByThread.set(threadId, injected);
+  };
 
   const appendProviderFailureActivity = (input: {
     readonly threadId: ThreadId;
@@ -566,6 +588,7 @@ const make = Effect.gen(function* () {
         !shouldRestartForModelChange &&
         !shouldRestartForModelSelectionChange
       ) {
+        seedResumedContextBindings(threadId, thread);
         return existingSessionThreadId;
       }
 
@@ -594,6 +617,11 @@ const make = Effect.gen(function* () {
       const restartedSession = yield* startProviderSession(
         resumeCursor !== undefined ? { resumeCursor } : undefined,
       );
+      if (resumeCursor === undefined) {
+        resetInjectedContextBindings(threadId);
+      } else {
+        seedResumedContextBindings(threadId, thread);
+      }
       yield* Effect.logInfo("provider command reactor restarted provider session", {
         threadId,
         previousSessionId: existingSessionThreadId,
@@ -607,6 +635,7 @@ const make = Effect.gen(function* () {
     }
 
     const startedSession = yield* startProviderSession(undefined);
+    resetInjectedContextBindings(threadId);
     yield* bindSessionToThread(startedSession);
     return startedSession.threadId;
   });
@@ -633,9 +662,16 @@ const make = Effect.gen(function* () {
     if (input.modelSelection !== undefined) {
       threadModelSelections.set(input.threadId, input.modelSelection);
     }
+    const injectedContextBindings =
+      injectedContextBindingsByThread.get(input.threadId) ?? new Set<string>();
+    const contextBlocks = (input.contextBlocks ?? []).filter(
+      (block) =>
+        !injectedContextBindings.has(block.bindingId) &&
+        !pendingContextBindingClaims.has(contextBindingClaimKey(input.threadId, block.bindingId)),
+    );
     const messageText = prependThreadContextBlocksToPrompt({
       prompt: input.messageText,
-      contextBlocks: input.contextBlocks ?? [],
+      contextBlocks,
     });
     const normalizedInput = toNonEmptyProviderInput(messageText);
     const normalizedAttachments = input.attachments ?? [];
@@ -667,12 +703,23 @@ const make = Effect.gen(function* () {
           : requestedModelSelection
         : input.modelSelection;
 
+    const contextBindingClaims = contextBlocks.map((block) => {
+      const token = Symbol(block.bindingId);
+      pendingContextBindingClaims.set(
+        contextBindingClaimKey(input.threadId, block.bindingId),
+        token,
+      );
+      return { bindingId: block.bindingId, token } as const;
+    });
     return {
-      threadId: input.threadId,
-      ...(normalizedInput ? { input: normalizedInput } : {}),
-      ...(normalizedAttachments.length > 0 ? { attachments: normalizedAttachments } : {}),
-      ...(modelForTurn !== undefined ? { modelSelection: modelForTurn } : {}),
-      ...(input.interactionMode !== undefined ? { interactionMode: input.interactionMode } : {}),
+      request: {
+        threadId: input.threadId,
+        ...(normalizedInput ? { input: normalizedInput } : {}),
+        ...(normalizedAttachments.length > 0 ? { attachments: normalizedAttachments } : {}),
+        ...(modelForTurn !== undefined ? { modelSelection: modelForTurn } : {}),
+        ...(input.interactionMode !== undefined ? { interactionMode: input.interactionMode } : {}),
+      },
+      contextBindingClaims,
     };
   });
 
@@ -888,9 +935,30 @@ const make = Effect.gen(function* () {
       return;
     }
 
-    yield* providerService
-      .sendTurn(sendTurnRequest.value)
-      .pipe(Effect.catchCause(recoverTurnStartFailure), Effect.forkScoped);
+    const settleContextBindingClaims = (accepted: boolean) =>
+      Effect.sync(() => {
+        const injected =
+          injectedContextBindingsByThread.get(event.payload.threadId) ?? new Set<string>();
+        for (const claim of sendTurnRequest.value.contextBindingClaims) {
+          const key = contextBindingClaimKey(event.payload.threadId, claim.bindingId);
+          if (pendingContextBindingClaims.get(key) !== claim.token) continue;
+          pendingContextBindingClaims.delete(key);
+          if (accepted) injected.add(claim.bindingId);
+        }
+        if (accepted && injected.size > 0) {
+          injectedContextBindingsByThread.set(event.payload.threadId, injected);
+        }
+      });
+
+    yield* providerService.sendTurn(sendTurnRequest.value.request).pipe(
+      Effect.tap(() => settleContextBindingClaims(true)),
+      Effect.catchCause((cause) =>
+        settleContextBindingClaims(false).pipe(
+          Effect.flatMap(() => recoverTurnStartFailure(cause)),
+        ),
+      ),
+      Effect.forkScoped,
+    );
   });
 
   const processTurnInterruptRequested = Effect.fn("processTurnInterruptRequested")(function* (

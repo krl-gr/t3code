@@ -18,6 +18,7 @@ import {
   EventId,
   MessageId,
   ProjectId,
+  ThreadContextBindingId,
   ThreadId,
   TurnId,
 } from "@t3tools/contracts";
@@ -475,6 +476,123 @@ describe("ProviderCommandReactor", () => {
     expect(thread?.session?.threadId).toBe("thread-1");
     expect(thread?.session?.status).toBe("starting");
     expect(thread?.session?.runtimeMode).toBe("approval-required");
+  });
+
+  it("injects snapshot context only once after the provider accepts the first turn", async () => {
+    const harness = await createHarness();
+    const now = "2026-01-01T00:00:00.000Z";
+    const sourceThreadId = ThreadId.make("thread-context-source");
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.create",
+        commandId: CommandId.make("cmd-context-source-create"),
+        threadId: sourceThreadId,
+        projectId: asProjectId("project-1"),
+        title: "Context source",
+        modelSelection: {
+          instanceId: ProviderInstanceId.make("codex"),
+          model: "gpt-5-codex",
+        },
+        runtimeMode: "full-access",
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        branch: null,
+        worktreePath: null,
+        createdAt: now,
+      }),
+    );
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.make("cmd-context-source-turn"),
+        threadId: sourceThreadId,
+        message: {
+          messageId: asMessageId("context-source-user"),
+          role: "user",
+          text: "source question",
+          attachments: [],
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "full-access",
+        createdAt: now,
+      }),
+    );
+    await waitFor(() => harness.sendTurn.mock.calls.length === 1);
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.message.assistant.delta",
+        commandId: CommandId.make("cmd-context-source-answer-delta"),
+        threadId: sourceThreadId,
+        messageId: asMessageId("context-source-assistant"),
+        delta: "source answer",
+        turnId: asTurnId("turn-source"),
+        createdAt: now,
+      }),
+    );
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.message.assistant.complete",
+        commandId: CommandId.make("cmd-context-source-answer-complete"),
+        threadId: sourceThreadId,
+        messageId: asMessageId("context-source-assistant"),
+        turnId: asTurnId("turn-source"),
+        createdAt: now,
+      }),
+    );
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.context-binding.add",
+        commandId: CommandId.make("cmd-context-binding-add"),
+        threadId: ThreadId.make("thread-1"),
+        bindingId: ThreadContextBindingId.make("ctx-provider-once"),
+        sourceThreadId,
+        mode: "snapshot",
+        cutoffMessageId: asMessageId("context-source-assistant"),
+        createdAt: now,
+      }),
+    );
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.make("cmd-context-target-first"),
+        threadId: ThreadId.make("thread-1"),
+        message: {
+          messageId: asMessageId("context-target-user-first"),
+          role: "user",
+          text: "first target question",
+          attachments: [],
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "full-access",
+        createdAt: now,
+      }),
+    );
+    await waitFor(() => harness.sendTurn.mock.calls.length === 2);
+    expect(harness.sendTurn.mock.calls[1]?.[0]).toMatchObject({
+      input: expect.stringContaining("<attached_chat_context"),
+    });
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.make("cmd-context-target-second"),
+        threadId: ThreadId.make("thread-1"),
+        message: {
+          messageId: asMessageId("context-target-user-second"),
+          role: "user",
+          text: "second target question",
+          attachments: [],
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "full-access",
+        createdAt: "2026-01-01T00:00:01.000Z",
+      }),
+    );
+    await waitFor(() => harness.sendTurn.mock.calls.length === 3);
+    expect(harness.sendTurn.mock.calls[2]?.[0]).toMatchObject({
+      input: "second target question",
+    });
   });
 
   effectIt.effect("projects starting before a slow provider session finishes", () =>
