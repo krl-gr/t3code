@@ -48,6 +48,7 @@ import {
   type ChatWorkspaceDraftThreadRequest,
   type ChatWorkspaceOpenRequest,
 } from "../../workspace/chatWorkspaceController";
+import { resolveWorkspaceRouteSyncDecision } from "../../workspace/chatWorkspaceRouteSync";
 import {
   createChatWorkspacePanelId,
   getChatWorkspaceRouteTargetKey,
@@ -479,6 +480,7 @@ export function ChatWorkspace({ children, routeTarget = null }: ChatWorkspacePro
   const restoredRef = useRef(false);
   const applyingRouteRef = useRef(false);
   const lastRouteKeyRef = useRef<string | null>(null);
+  const pendingOutboundRouteKeyRef = useRef<string | null>(null);
   const persistTimerRef = useRef<number | null>(null);
   const [api, setApi] = useState<DockviewApi | null>(null);
   const [panelsById, setPanelsById] = useState<
@@ -504,6 +506,9 @@ export function ChatWorkspace({ children, routeTarget = null }: ChatWorkspacePro
 
   const commitActivePanel = useCallback(
     (next: ChatWorkspacePanelId | null) => {
+      if (activePanelRef.current === next) {
+        return;
+      }
       activePanelRef.current = next;
       setActivePanelId(next);
       setControllerActivePanel(next);
@@ -601,6 +606,16 @@ export function ChatWorkspace({ children, routeTarget = null }: ChatWorkspacePro
     [setPanelState],
   );
 
+  const beginOutboundRouteSync = useCallback((routeKey: string) => {
+    pendingOutboundRouteKeyRef.current = routeKey;
+    lastRouteKeyRef.current = routeKey;
+  }, []);
+  const clearPendingOutboundRouteSync = useCallback((routeKey: string) => {
+    if (pendingOutboundRouteKeyRef.current === routeKey) {
+      pendingOutboundRouteKeyRef.current = null;
+    }
+  }, []);
+
   const createDraftThreadPanel = useCallback(
     (request: ChatWorkspaceDraftThreadRequest) => {
       const options: NewThreadOptions = {
@@ -623,17 +638,29 @@ export function ChatWorkspace({ children, routeTarget = null }: ChatWorkspacePro
         useComposerDraftStore.getState().clearDraftThread(created.draftId);
         return null;
       }
-      lastRouteKeyRef.current = getChatWorkspaceRouteTargetKey({
+      const routeKey = getChatWorkspaceRouteTargetKey({
         target: { kind: "draft", draftId: created.draftId, ref: created.ref },
       });
+      beginOutboundRouteSync(routeKey);
       void navigate({
         to: "/draft/$draftId",
         params: buildDraftThreadRouteParams(created.draftId),
+      }).catch(() => {
+        clearPendingOutboundRouteSync(routeKey);
       });
       persistNow();
       return created;
     },
-    [activeDraftThread, activeThread, createDraftThread, navigate, openWorkspaceTarget, persistNow],
+    [
+      activeDraftThread,
+      activeThread,
+      beginOutboundRouteSync,
+      clearPendingOutboundRouteSync,
+      createDraftThread,
+      navigate,
+      openWorkspaceTarget,
+      persistNow,
+    ],
   );
 
   const createDraftPanel = useCallback(
@@ -664,26 +691,39 @@ export function ChatWorkspace({ children, routeTarget = null }: ChatWorkspacePro
       if (!restoredRef.current || applyingRouteRef.current) return;
       const state = panelId ? panelsRef.current[panelId] : null;
       if (!state || state.kind === "empty") {
-        lastRouteKeyRef.current = "index";
-        void navigate({ to: "/", replace: true });
+        const routeKey = "index";
+        beginOutboundRouteSync(routeKey);
+        void navigate({ to: "/", replace: true }).then(
+          () => {
+            clearPendingOutboundRouteSync(routeKey);
+          },
+          () => {
+            clearPendingOutboundRouteSync(routeKey);
+          },
+        );
         return;
       }
-      lastRouteKeyRef.current = getChatWorkspaceRouteTargetKey({ target: state.target });
+      const routeKey = getChatWorkspaceRouteTargetKey({ target: state.target });
+      beginOutboundRouteSync(routeKey);
       if (state.target.kind === "draft") {
         void navigate({
           to: "/draft/$draftId",
           params: buildDraftThreadRouteParams(state.target.draftId),
           replace: true,
+        }).catch(() => {
+          clearPendingOutboundRouteSync(routeKey);
         });
       } else {
         void navigate({
           to: "/$environmentId/$threadId",
           params: buildThreadRouteParams(state.target.ref),
           replace: true,
+        }).catch(() => {
+          clearPendingOutboundRouteSync(routeKey);
         });
       }
     },
-    [navigate],
+    [beginOutboundRouteSync, clearPendingOutboundRouteSync, navigate],
   );
 
   const applyRouteTarget = useCallback(
@@ -787,7 +827,19 @@ export function ChatWorkspace({ children, routeTarget = null }: ChatWorkspacePro
   useEffect(() => {
     if (!api || !routeTarget || !restoredRef.current) return;
     const key = getChatWorkspaceRouteTargetKey(routeTarget);
-    if (key === lastRouteKeyRef.current) return;
+    const decision = resolveWorkspaceRouteSyncDecision({
+      incomingRouteKey: key,
+      lastRouteKey: lastRouteKeyRef.current,
+      pendingOutboundRouteKey: pendingOutboundRouteKeyRef.current,
+    });
+    if (decision === "acknowledge-pending") {
+      pendingOutboundRouteKeyRef.current = null;
+      lastRouteKeyRef.current = key;
+      return;
+    }
+    if (decision !== "apply-route") {
+      return;
+    }
     applyRouteTarget(routeTarget);
     schedulePersist();
   }, [api, applyRouteTarget, routeTarget, schedulePersist]);
