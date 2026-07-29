@@ -35,6 +35,30 @@ const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
 // QUEUED_TURN_START_GRACE_MS in client-runtime threadSettled.ts.
 const QUEUED_TURN_START_GRACE_MS = 2 * 60 * 1_000;
 
+function startedThreadProviderInstanceChangeDetail(input: {
+  readonly thread: OrchestrationReadModel["threads"][number];
+  readonly requestedModelSelection:
+    | OrchestrationReadModel["threads"][number]["modelSelection"]
+    | undefined;
+}): string | null {
+  const requestedModelSelection = input.requestedModelSelection;
+  const conversationStarted =
+    input.thread.latestTurn !== null ||
+    input.thread.messages.length > 0 ||
+    input.thread.session !== null;
+  if (!conversationStarted || requestedModelSelection === undefined) {
+    return null;
+  }
+
+  const boundInstanceId =
+    input.thread.session?.providerInstanceId ?? input.thread.modelSelection.instanceId;
+  if (requestedModelSelection.instanceId === boundInstanceId) {
+    return null;
+  }
+
+  return `Thread '${input.thread.id}' is bound to provider instance '${boundInstanceId}' and cannot switch to '${requestedModelSelection.instanceId}' after the conversation has started. Start a new thread to use a different provider instance.`;
+}
+
 /**
  * Blocked-on-you work derived from the thread's retained activities: an
  * approval or user-input request with no later resolution for the same
@@ -642,6 +666,16 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         command,
         threadId: command.threadId,
       });
+      const providerInstanceChangeDetail = startedThreadProviderInstanceChangeDetail({
+        thread,
+        requestedModelSelection: command.modelSelection,
+      });
+      if (providerInstanceChangeDetail !== null) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: providerInstanceChangeDetail,
+        });
+      }
       const branch =
         command.branch !== undefined &&
         command.expectedBranch !== undefined &&
@@ -911,6 +945,16 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
         command,
         threadId: command.threadId,
       });
+      const providerInstanceChangeDetail = startedThreadProviderInstanceChangeDetail({
+        thread: targetThread,
+        requestedModelSelection: command.modelSelection,
+      });
+      if (providerInstanceChangeDetail !== null) {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: providerInstanceChangeDetail,
+        });
+      }
       const sourceProposedPlan = command.sourceProposedPlan;
       const sourceThread = sourceProposedPlan
         ? yield* requireThread({

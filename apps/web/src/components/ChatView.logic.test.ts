@@ -27,6 +27,7 @@ import {
   resolveSendEnvMode,
   shouldShowBranchMismatchBanner,
   shouldWriteThreadErrorToCurrentServerThread,
+  waitForThreadShellReady,
 } from "./ChatView.logic";
 
 const environmentId = EnvironmentId.make("environment-local");
@@ -233,18 +234,18 @@ describe("getStartedThreadModelChangeBlockReason", () => {
     },
   ];
 
-  it("allows model changes before a provider session has started", () => {
+  it("allows provider and model changes before the thread has started", () => {
     expect(
       getStartedThreadModelChangeBlockReason({
         providers,
-        hasStartedSession: false,
+        hasStartedThread: false,
         currentModelSelection: {
           instanceId: ProviderInstanceId.make("grok"),
           model: "grok-build",
         },
         nextModelSelection: {
-          instanceId: ProviderInstanceId.make("grok"),
-          model: "grok-other",
+          instanceId: ProviderInstanceId.make("codex"),
+          model: "gpt-5.4",
         },
       }),
     ).toBeNull();
@@ -254,7 +255,7 @@ describe("getStartedThreadModelChangeBlockReason", () => {
     expect(
       getStartedThreadModelChangeBlockReason({
         providers,
-        hasStartedSession: true,
+        hasStartedThread: true,
         currentModelSelection: {
           instanceId: ProviderInstanceId.make("grok"),
           model: "grok-build",
@@ -267,18 +268,59 @@ describe("getStartedThreadModelChangeBlockReason", () => {
     ).toBeNull();
   });
 
-  it("blocks started-session model changes when either provider requires a new thread", () => {
+  it("blocks provider instance changes for every started thread", () => {
     expect(
       getStartedThreadModelChangeBlockReason({
         providers,
-        hasStartedSession: true,
+        hasStartedThread: true,
+        currentModelSelection: {
+          instanceId: ProviderInstanceId.make("grok"),
+          model: "grok-build",
+        },
+        nextModelSelection: {
+          instanceId: ProviderInstanceId.make("codex"),
+          model: "gpt-5.4",
+        },
+      }),
+    ).toEqual({
+      title: "Start a new chat to change providers",
+      description: "A conversation cannot switch provider instances after it has started.",
+    });
+  });
+
+  it("uses the bound session instance when persisted metadata disagrees", () => {
+    expect(
+      getStartedThreadModelChangeBlockReason({
+        providers,
+        hasStartedThread: true,
         currentModelSelection: {
           instanceId: ProviderInstanceId.make("codex"),
           model: "gpt-5.4",
         },
+        currentProviderInstanceId: ProviderInstanceId.make("grok"),
         nextModelSelection: {
+          instanceId: ProviderInstanceId.make("codex"),
+          model: "gpt-5.4",
+        },
+      }),
+    ).toEqual({
+      title: "Start a new chat to change providers",
+      description: "A conversation cannot switch provider instances after it has started.",
+    });
+  });
+
+  it("blocks same-provider model changes only when the provider requires a new thread", () => {
+    expect(
+      getStartedThreadModelChangeBlockReason({
+        providers,
+        hasStartedThread: true,
+        currentModelSelection: {
           instanceId: ProviderInstanceId.make("grok"),
           model: "grok-build",
+        },
+        nextModelSelection: {
+          instanceId: ProviderInstanceId.make("grok"),
+          model: "grok-other",
         },
       }),
     ).toEqual({
@@ -286,6 +328,56 @@ describe("getStartedThreadModelChangeBlockReason", () => {
       description:
         "This provider does not allow switching models after a conversation has started.",
     });
+    expect(
+      getStartedThreadModelChangeBlockReason({
+        providers,
+        hasStartedThread: true,
+        currentModelSelection: {
+          instanceId: ProviderInstanceId.make("codex"),
+          model: "gpt-5.4",
+        },
+        nextModelSelection: {
+          instanceId: ProviderInstanceId.make("codex"),
+          model: "gpt-5.5",
+        },
+      }),
+    ).toBeNull();
+  });
+});
+
+describe("waitForThreadShellReady", () => {
+  it("waits for a delayed fork shell before allowing navigation", async () => {
+    let elapsedMs = 0;
+
+    const ready = await waitForThreadShellReady({
+      read: () => elapsedMs >= 80,
+      timeoutMs: 120,
+      pollIntervalMs: 40,
+      now: () => elapsedMs,
+      delay: async (durationMs) => {
+        elapsedMs += durationMs;
+      },
+    });
+
+    expect(ready).toBe(true);
+    expect(elapsedMs).toBe(80);
+  });
+
+  it("returns false instead of navigating to a missing fork route", async () => {
+    let elapsedMs = 0;
+
+    const ready = await waitForThreadShellReady({
+      read: () => false,
+      timeoutMs: 80,
+      pollIntervalMs: 40,
+      now: () => elapsedMs,
+      delay: async (durationMs) => {
+        elapsedMs += durationMs;
+      },
+    });
+
+    expect(ready).toBe(false);
+    expect(elapsedMs).toBe(80);
   });
 });
 

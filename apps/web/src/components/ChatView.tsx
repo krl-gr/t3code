@@ -269,6 +269,8 @@ import {
   resolveSendEnvMode,
   revokeBlobPreviewUrl,
   revokeUserMessagePreviewUrls,
+  threadHasStarted,
+  waitForServerThreadShell,
   waitForStartedServerThread,
 } from "./ChatView.logic";
 import { useLocalStorage } from "~/hooks/useLocalStorage";
@@ -4512,6 +4514,27 @@ function ChatViewContent(props: ChatViewProps) {
       selectedPromptEffort: ctxSelectedPromptEffort,
       selectedModelSelection: ctxSelectedModelSelection,
     } = sendCtx;
+    const modelChangeBlockReason = getStartedThreadModelChangeBlockReason({
+      providers: providerStatuses,
+      hasStartedThread: threadHasStarted(activeThread),
+      currentModelSelection: activeThread.modelSelection,
+      currentProviderInstanceId: activeThread.session?.providerInstanceId ?? null,
+      nextModelSelection: ctxSelectedModelSelection,
+    });
+    if (modelChangeBlockReason) {
+      setComposerDraftModelSelection(scopeThreadRef(activeThread.environmentId, activeThread.id), {
+        ...activeThread.modelSelection,
+        instanceId:
+          activeThread.session?.providerInstanceId ?? activeThread.modelSelection.instanceId,
+      });
+      toastManager.add({
+        type: "warning",
+        title: modelChangeBlockReason.title,
+        description: modelChangeBlockReason.description,
+      });
+      scheduleComposerFocus();
+      return;
+    }
     const promptForSend = promptRef.current;
     const {
       trimmedPrompt: trimmed,
@@ -5404,7 +5427,7 @@ function ChatViewContent(props: ChatViewProps) {
       }
       const reason = getStartedThreadModelChangeBlockReason({
         providers: providerStatuses,
-        hasStartedSession: activeThread.session !== null,
+        hasStartedThread: threadHasStarted(activeThread),
         currentModelSelection: activeThread.modelSelection,
         currentProviderInstanceId: activeThread.session?.providerInstanceId ?? null,
         nextModelSelection: { instanceId, model },
@@ -5459,7 +5482,7 @@ function ChatViewContent(props: ChatViewProps) {
       };
       const modelChangeBlockReason = getStartedThreadModelChangeBlockReason({
         providers: providerStatuses,
-        hasStartedSession: activeThread.session !== null,
+        hasStartedThread: threadHasStarted(activeThread),
         currentModelSelection: activeThread.modelSelection,
         currentProviderInstanceId: activeThread.session?.providerInstanceId ?? null,
         nextModelSelection,
@@ -5598,6 +5621,18 @@ function ChatViewContent(props: ChatViewProps) {
             type: "error",
             title: "Failed to fork chat",
             description: error instanceof Error ? error.message : "An error occurred.",
+          }),
+        );
+        return;
+      }
+      const forkShellReady = await waitForServerThreadShell(nextThreadRef);
+      if (!forkShellReady) {
+        toastManager.add(
+          stackedThreadToast({
+            type: "warning",
+            title: "Fork created",
+            description:
+              "Its thread data has not reached this client yet. Open it from the sidebar after reconnecting.",
           }),
         );
         return;

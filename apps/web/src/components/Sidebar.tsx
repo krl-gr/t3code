@@ -23,6 +23,7 @@ import {
 import * as Schema from "effect/Schema";
 
 import { ProjectFavicon } from "./ProjectFavicon";
+import { waitForServerThreadShell } from "./ChatView.logic";
 import { useLocalStorage } from "../hooks/useLocalStorage";
 import { PROJECT_STATUS_INDICATOR_EXPERIMENT_KEY } from "./sidebar/experiments";
 import { useAtomValue } from "@effect/atom-react";
@@ -2112,6 +2113,18 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
               type: "error",
               title: "Failed to fork thread",
               description: error instanceof Error ? error.message : "An error occurred.",
+            }),
+          );
+          return;
+        }
+        const forkShellReady = await waitForServerThreadShell(nextThreadRef);
+        if (!forkShellReady) {
+          toastManager.add(
+            stackedThreadToast({
+              type: "warning",
+              title: "Fork created",
+              description:
+                "Its thread data has not reached this client yet. Open it from the sidebar after reconnecting.",
             }),
           );
           return;

@@ -13,7 +13,7 @@ import { type ChatMessage, type SessionPhase, type Thread } from "../types";
 import { type ComposerImageAttachment, type DraftThreadState } from "../composerDraftStore";
 import * as Schema from "effect/Schema";
 import { appAtomRegistry } from "../rpc/atomRegistry";
-import { environmentThreadDetails } from "../state/threads";
+import { environmentThreadDetails, environmentThreadShells } from "../state/threads";
 import {
   filterTerminalContextsWithText,
   stripInlineTerminalContextPlaceholders,
@@ -373,22 +373,25 @@ export function deriveLockedProvider(input: {
 
 export function getStartedThreadModelChangeBlockReason(input: {
   providers: ReadonlyArray<Pick<ServerProvider, "instanceId" | "requiresNewThreadForModelChange">>;
-  hasStartedSession: boolean;
+  hasStartedThread: boolean;
   currentModelSelection: ModelSelection;
   currentProviderInstanceId?: ModelSelection["instanceId"] | null | undefined;
   nextModelSelection: ModelSelection;
 }): { title: string; description: string } | null {
-  if (!input.hasStartedSession) {
+  if (!input.hasStartedThread) {
     return null;
   }
   const currentModelSelection = {
     ...input.currentModelSelection,
     instanceId: input.currentProviderInstanceId ?? input.currentModelSelection.instanceId,
   };
-  if (
-    currentModelSelection.instanceId === input.nextModelSelection.instanceId &&
-    currentModelSelection.model === input.nextModelSelection.model
-  ) {
+  if (currentModelSelection.instanceId !== input.nextModelSelection.instanceId) {
+    return {
+      title: "Start a new chat to change providers",
+      description: "A conversation cannot switch provider instances after it has started.",
+    };
+  }
+  if (currentModelSelection.model === input.nextModelSelection.model) {
     return null;
   }
   const currentProvider = input.providers.find(
@@ -407,6 +410,41 @@ export function getStartedThreadModelChangeBlockReason(input: {
     title: "Start a new chat to change models",
     description: "This provider does not allow switching models after a conversation has started.",
   };
+}
+
+export async function waitForThreadShellReady(input: {
+  readonly read: () => boolean;
+  readonly timeoutMs?: number;
+  readonly pollIntervalMs?: number;
+  readonly now?: () => number;
+  readonly delay?: (durationMs: number) => Promise<void>;
+}): Promise<boolean> {
+  const now = input.now ?? Date.now;
+  const delay =
+    input.delay ??
+    ((durationMs: number) =>
+      new Promise<void>((resolve) => {
+        globalThis.setTimeout(resolve, durationMs);
+      }));
+  const deadline = now() + (input.timeoutMs ?? 2_000);
+  const pollIntervalMs = input.pollIntervalMs ?? 40;
+
+  while (!input.read() && now() < deadline) {
+    await delay(Math.min(pollIntervalMs, deadline - now()));
+  }
+
+  return input.read();
+}
+
+export function waitForServerThreadShell(
+  threadRef: ScopedThreadRef,
+  timeoutMs = 2_000,
+): Promise<boolean> {
+  const threadShellAtom = environmentThreadShells.threadShellAtom(threadRef);
+  return waitForThreadShellReady({
+    read: () => appAtomRegistry.get(threadShellAtom) !== null,
+    timeoutMs,
+  });
 }
 
 export async function waitForStartedServerThread(
