@@ -208,6 +208,81 @@ it.effect("normalizes old public migration IDs before current auth migrations ru
   }).pipe(Effect.provide(sqliteMemoryLayer)),
 );
 
+it.effect("repairs legacy orchestration-run IDs after a newer current migration was recorded", () =>
+  Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
+
+    yield* runMigrations({ toMigrationInclusive: 30 });
+    yield* sql`
+      CREATE TABLE projection_orchestration_runs (
+        run_id TEXT PRIMARY KEY,
+        status TEXT NOT NULL
+      )
+    `;
+    yield* sql`
+      INSERT INTO projection_orchestration_runs (run_id, status)
+      VALUES ('preserved-run', 'complete')
+    `;
+    yield* sql`ALTER TABLE projection_threads ADD COLUMN snoozed_until TEXT`;
+    yield* sql`ALTER TABLE projection_threads ADD COLUMN snoozed_at TEXT`;
+    yield* sql`
+      INSERT INTO effect_sql_migrations (migration_id, name)
+      VALUES
+        (33, 'ProjectionOrchestrationRuns'),
+        (34, 'ProjectionOrchestrationRunsDeliveries'),
+        (35, 'ProjectionThreadsSnoozed')
+    `;
+
+    yield* runMigrations();
+
+    const currentMigrations = yield* sql<{
+      readonly migration_id: number;
+      readonly name: string;
+    }>`
+      SELECT migration_id, name
+      FROM effect_sql_migrations
+      WHERE migration_id BETWEEN 31 AND 35
+      ORDER BY migration_id
+    `;
+    assert.deepStrictEqual(currentMigrations, [
+      { migration_id: 31, name: "AuthAuthorizationScopes" },
+      { migration_id: 32, name: "AuthPairingProofKeyThumbprint" },
+      { migration_id: 33, name: "ProjectionThreadContext" },
+      { migration_id: 34, name: "ProjectionThreadsSettled" },
+      { migration_id: 35, name: "ProjectionThreadsSnoozed" },
+    ]);
+
+    const projectionThreadColumns = yield* sql<{ readonly name: string }>`
+      PRAGMA table_info(projection_threads)
+    `;
+    const projectionThreadColumnNames = new Set(
+      projectionThreadColumns.map((column) => column.name),
+    );
+    for (const columnName of ["settled_override", "settled_at", "snoozed_until", "snoozed_at"]) {
+      assert.isTrue(projectionThreadColumnNames.has(columnName));
+    }
+
+    const preservedRuns = yield* sql<{ readonly run_id: string; readonly status: string }>`
+      SELECT run_id, status FROM projection_orchestration_runs
+    `;
+    assert.deepStrictEqual(preservedRuns, [{ run_id: "preserved-run", status: "complete" }]);
+
+    const legacyHistory = yield* sql<{
+      readonly legacy_migration_id: number;
+      readonly legacy_name: string;
+    }>`
+      SELECT legacy_migration_id, legacy_name
+      FROM old_public_migration_history
+      WHERE legacy_migration_id IN (33, 34)
+      ORDER BY legacy_migration_id
+    `;
+    assert.deepStrictEqual(legacyHistory, [
+      { legacy_migration_id: 33, legacy_name: "ProjectionOrchestrationRuns" },
+      { legacy_migration_id: 34, legacy_name: "ProjectionOrchestrationRunsDeliveries" },
+    ]);
+  }).pipe(Effect.provide(sqliteMemoryLayer)),
+);
+
 it.effect("normalizes legacy Pro migrations that advanced past the upstream migration range", () =>
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;

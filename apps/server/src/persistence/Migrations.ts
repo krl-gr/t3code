@@ -137,7 +137,10 @@ export const runMigrations = Effect.fn("runMigrations")(function* ({
       ? "Running all migrations..."
       : `Running migrations 1 through ${toMigrationInclusive}...`,
   );
-  yield* applyOldPublicMigrationCompatibility({ toMigrationInclusive });
+  yield* applyOldPublicMigrationCompatibility({
+    currentMigrations: migrationEntries.map(([id, name]) => ({ id, name })),
+    toMigrationInclusive,
+  });
   const executedMigrations = yield* run({ loader: makeMigrationLoader(toMigrationInclusive) });
   const migrations = executedMigrations.map(([id, name]) => `${id}_${name}`);
   yield* migrations.length === 0

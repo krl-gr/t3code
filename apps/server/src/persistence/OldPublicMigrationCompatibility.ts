@@ -3,23 +3,28 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 const OLD_PUBLIC_MIGRATION_31 = "ProjectionThreadContextBindings";
 const OLD_PUBLIC_MIGRATION_32 = "ProjectionTurnsContextBlocks";
-const LEGACY_UPCOMPUTER_MIGRATIONS = new Map<number, string>([
-  [31, OLD_PUBLIC_MIGRATION_31],
-  [32, OLD_PUBLIC_MIGRATION_32],
-  [33, "Tasks"],
-  [34, "TaskTriggers"],
-  [35, "TaskAgentsCompatibility"],
-  [36, "EnsureTaskTables"],
-  [37, "ProjectionThreadProposedPlanProposal"],
-  [38, "ProjectionThreadsSidebarVisibility"],
+const LEGACY_UPCOMPUTER_MIGRATIONS = new Map<number, ReadonlySet<string>>([
+  [31, new Set([OLD_PUBLIC_MIGRATION_31])],
+  [32, new Set([OLD_PUBLIC_MIGRATION_32])],
+  [33, new Set(["Tasks", "ProjectionOrchestrationRuns"])],
+  [34, new Set(["TaskTriggers", "ProjectionOrchestrationRunsDeliveries"])],
+  [35, new Set(["TaskAgentsCompatibility"])],
+  [36, new Set(["EnsureTaskTables"])],
+  [37, new Set(["ProjectionThreadProposedPlanProposal"])],
+  [38, new Set(["ProjectionThreadsSidebarVisibility"])],
 ]);
 
+export interface CurrentMigrationIdentity {
+  readonly id: number;
+  readonly name: string;
+}
+
 export interface ApplyOldPublicMigrationCompatibilityOptions {
+  readonly currentMigrations: ReadonlyArray<CurrentMigrationIdentity>;
   readonly toMigrationInclusive?: number | undefined;
 }
 
-const targetsCurrentAuthMigrationIds = (toMigrationInclusive: number | undefined) =>
-  toMigrationInclusive === undefined || toMigrationInclusive >= 31;
+const targetsCurrentAuthMigrationIds = (targetMigrationId: number) => targetMigrationId >= 31;
 
 /**
  * Old UpComputer public builds used migration IDs 31/32 for thread context.
@@ -28,9 +33,17 @@ const targetsCurrentAuthMigrationIds = (toMigrationInclusive: number | undefined
  */
 export const applyOldPublicMigrationCompatibility = Effect.fn(
   "applyOldPublicMigrationCompatibility",
-)(function* ({ toMigrationInclusive }: ApplyOldPublicMigrationCompatibilityOptions = {}) {
-  if (!targetsCurrentAuthMigrationIds(toMigrationInclusive)) return;
+)(function* ({
+  currentMigrations,
+  toMigrationInclusive,
+}: ApplyOldPublicMigrationCompatibilityOptions) {
+  const latestCurrentMigrationId = currentMigrations.at(-1)?.id ?? 0;
+  const targetMigrationId = toMigrationInclusive ?? latestCurrentMigrationId;
+  if (!targetsCurrentAuthMigrationIds(targetMigrationId)) return;
 
+  const currentMigrationNames = new Map(
+    currentMigrations.map(({ id, name }) => [id, name] as const),
+  );
   const sql = yield* SqlClient.SqlClient;
 
   yield* sql.withTransaction(
@@ -55,11 +68,11 @@ export const applyOldPublicMigrationCompatibility = Effect.fn(
       }>`
         SELECT migration_id, name
         FROM effect_sql_migrations
-        WHERE migration_id BETWEEN 31 AND 38
+        WHERE migration_id >= 31
         ORDER BY migration_id
       `;
-      const legacyRows = conflictingRows.filter(
-        (row) => LEGACY_UPCOMPUTER_MIGRATIONS.get(row.migration_id) === row.name,
+      const legacyRows = conflictingRows.filter((row) =>
+        LEGACY_UPCOMPUTER_MIGRATIONS.get(row.migration_id)?.has(row.name),
       );
 
       const shouldInstallOldPublicContextSchema = latestMigrationId === 30 || legacyRows.length > 0;
@@ -129,6 +142,24 @@ export const applyOldPublicMigrationCompatibility = Effect.fn(
           WHERE migration_id = ${row.migration_id} AND name = ${row.name}
         `;
 
+        yield* sql`
+          DELETE FROM effect_sql_migrations
+          WHERE migration_id = ${row.migration_id} AND name = ${row.name}
+        `;
+      }
+
+      // A previous compatibility pass may already have recorded a newer current
+      // migration after an unrecognized legacy row. Replay current migrations
+      // from the first collision so Effect's max-ID migrator cannot skip the
+      // newly assigned schemas that precede that recorded row.
+      const firstLegacyMigrationId = Math.min(...legacyRows.map((row) => row.migration_id));
+      const currentRowsToReplay = conflictingRows.filter(
+        (row) =>
+          row.migration_id >= firstLegacyMigrationId &&
+          row.migration_id <= targetMigrationId &&
+          currentMigrationNames.get(row.migration_id) === row.name,
+      );
+      for (const row of currentRowsToReplay) {
         yield* sql`
           DELETE FROM effect_sql_migrations
           WHERE migration_id = ${row.migration_id} AND name = ${row.name}
