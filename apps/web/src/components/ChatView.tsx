@@ -87,7 +87,11 @@ import {
   isLatestTurnSettled,
 } from "../session-logic";
 import { type LegendListRef } from "@legendapp/list/react";
-import { getAnchoredTurnMetrics, type TimelineScrollMode } from "./chat/timelineScrollAnchoring";
+import {
+  getAnchoredTurnMetrics,
+  shouldPositionTimelineAnchor,
+  type TimelineScrollMode,
+} from "./chat/timelineScrollAnchoring";
 import {
   buildPendingUserInputAnswers,
   derivePendingUserInputProgress,
@@ -3449,10 +3453,10 @@ function ChatViewContent(props: ChatViewProps) {
     readonly userScrollGeneration: number;
   } | null>(null);
   const anchorScrollRestoreFrameRef = useRef<number | null>(null);
-  const cancelTimelineLiveFollowForUserNavigation = useCallback(() => {
-    anchorUserScrollGenerationRef.current += 1;
-    timelineScrollModeRef.current = "free-scrolling";
-    liveFollowUserScrollGenerationRef.current = null;
+  const anchorPositioningGenerationRef = useRef(0);
+  const scrollToEndGenerationRef = useRef(0);
+  const invalidateTimelineAnchorPositioning = useCallback(() => {
+    anchorPositioningGenerationRef.current += 1;
     pendingTimelineAnchorRef.current = null;
     positionedTimelineAnchorRef.current = null;
     settledTimelineAnchorRef.current = null;
@@ -3463,6 +3467,13 @@ function ChatViewContent(props: ChatViewProps) {
       anchorScrollRestoreFrameRef.current = null;
     }
   }, []);
+  const cancelTimelineLiveFollowForUserNavigation = useCallback(() => {
+    anchorUserScrollGenerationRef.current += 1;
+    scrollToEndGenerationRef.current += 1;
+    timelineScrollModeRef.current = "free-scrolling";
+    liveFollowUserScrollGenerationRef.current = null;
+    invalidateTimelineAnchorPositioning();
+  }, [invalidateTimelineAnchorPositioning]);
   const cancelTimelineLiveFollowForUserNavigationRef = useRef(
     cancelTimelineLiveFollowForUserNavigation,
   );
@@ -3519,17 +3530,59 @@ function ChatViewContent(props: ChatViewProps) {
   );
 
   // Live-follow stays active after send/thread-open until an actual list scroll
-  // gesture opts out.
-  const scrollToEnd = useCallback((animated = false) => {
-    isAtEndRef.current = true;
-    timelineScrollModeRef.current = "following-end";
-    liveFollowUserScrollGenerationRef.current = anchorUserScrollGenerationRef.current;
-    pendingTimelineAnchorRef.current = null;
-    activeTimelineAnchorIndexRef.current = null;
-    showScrollDebouncer.current.cancel();
-    setShowScrollToBottom(false);
-    void legendListRef.current?.scrollToEnd?.({ animated });
-  }, []);
+  // gesture opts out. Explicitly leaving anchored-turn mode removes its reserved
+  // tail before scrolling; otherwise LegendList can calculate the smooth target
+  // from stale virtual measurements and stop before the real end.
+  const scrollToEnd = useCallback(
+    async (animated = false) => {
+      const requestGeneration = scrollToEndGenerationRef.current + 1;
+      scrollToEndGenerationRef.current = requestGeneration;
+      invalidateTimelineAnchorPositioning();
+      timelineScrollModeRef.current = "following-end";
+      liveFollowUserScrollGenerationRef.current = anchorUserScrollGenerationRef.current;
+      showScrollDebouncer.current.cancel();
+
+      flushSync(() => {
+        setTimelineAnchor((current) =>
+          current.messageId === null ? current : { ...current, messageId: null },
+        );
+      });
+
+      const list = legendListRef.current;
+      if (!list) {
+        return;
+      }
+
+      // The first pass preserves the requested animation. At least one instant
+      // correction follows after layout so rows measured during a long virtual
+      // jump cannot strand the viewport at the old estimated endpoint.
+      for (let pass = 0; pass < 4; pass += 1) {
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        if (scrollToEndGenerationRef.current !== requestGeneration) {
+          return;
+        }
+        await list.scrollToEnd({ animated: pass === 0 ? animated : false });
+        if (scrollToEndGenerationRef.current !== requestGeneration) {
+          return;
+        }
+
+        const state = list.getState();
+        if (pass > 0 && (state.isAtEnd || state.isNearEnd)) {
+          isAtEndRef.current = true;
+          setShowScrollToBottom(false);
+          return;
+        }
+      }
+
+      const state = list.getState();
+      const reachedEnd = state.isAtEnd || state.isNearEnd;
+      isAtEndRef.current = reachedEnd;
+      if (reachedEnd) {
+        setShowScrollToBottom(false);
+      }
+    },
+    [invalidateTimelineAnchorPositioning],
+  );
   useEffect(() => {
     let removeListeners: (() => void) | null = null;
     const frame = requestAnimationFrame(() => {
@@ -3563,18 +3616,27 @@ function ChatViewContent(props: ChatViewProps) {
   }, [activeThread?.id]);
 
   const onTimelineAnchorReady = useCallback((messageId: MessageId, anchorIndex: number) => {
-    if (pendingTimelineAnchorRef.current === messageId) {
-      pendingTimelineAnchorRef.current = null;
-    }
-    activeTimelineAnchorIndexRef.current = anchorIndex;
-    if (positionedTimelineAnchorRef.current === messageId) {
+    if (
+      !shouldPositionTimelineAnchor({
+        messageId,
+        pendingMessageId: pendingTimelineAnchorRef.current,
+        scrollMode: timelineScrollModeRef.current,
+      })
+    ) {
       return;
     }
+
+    pendingTimelineAnchorRef.current = null;
+    activeTimelineAnchorIndexRef.current = anchorIndex;
     positionedTimelineAnchorRef.current = messageId;
     settledTimelineAnchorRef.current = null;
+    const positioningGeneration = anchorPositioningGenerationRef.current;
+    const isCurrentPositioning = () =>
+      anchorPositioningGenerationRef.current === positioningGeneration &&
+      positionedTimelineAnchorRef.current === messageId;
     const positionAnchor = (remainingAttempts: number) => {
       requestAnimationFrame(() => {
-        if (positionedTimelineAnchorRef.current !== messageId) {
+        if (!isCurrentPositioning()) {
           return;
         }
         const list = legendListRef.current;
@@ -3593,7 +3655,7 @@ function ChatViewContent(props: ChatViewProps) {
           finished = true;
           window.clearTimeout(fallbackTimer);
           scrollNode.removeEventListener("scrollend", finishAnimatedPositioning);
-          if (positionedTimelineAnchorRef.current !== messageId) {
+          if (!isCurrentPositioning()) {
             return;
           }
           const scrollOffset = list.getState().scroll;
@@ -3745,13 +3807,11 @@ function ChatViewContent(props: ChatViewProps) {
 
   useEffect(() => {
     setPullRequestDialogState(null);
+    scrollToEndGenerationRef.current += 1;
+    invalidateTimelineAnchorPositioning();
     isAtEndRef.current = true;
     timelineScrollModeRef.current = "following-end";
     liveFollowUserScrollGenerationRef.current = anchorUserScrollGenerationRef.current;
-    pendingTimelineAnchorRef.current = null;
-    positionedTimelineAnchorRef.current = null;
-    settledTimelineAnchorRef.current = null;
-    activeTimelineAnchorIndexRef.current = null;
     showScrollDebouncer.current.cancel();
     setShowScrollToBottom(false);
     if (planSidebarOpenOnNextThreadRef.current) {
@@ -3762,7 +3822,7 @@ function ChatViewContent(props: ChatViewProps) {
     }
     planSidebarDismissedForTurnRef.current = null;
     // activeThreadRef resets transitively with the active thread.
-  }, [activeThread?.id]);
+  }, [activeThread?.id, invalidateTimelineAnchorPositioning]);
 
   // Auto-open the plan sidebar when plan/todo steps arrive for the current turn.
   // Don't auto-open for plans carried over from a previous turn (the user can open manually).
@@ -4686,11 +4746,12 @@ function ChatViewContent(props: ChatViewProps) {
     // Sending always returns to the live edge. The new row becomes the
     // anchored end-space target so it lands near the top while the response
     // streams into the reserved space below it.
+    scrollToEndGenerationRef.current += 1;
+    invalidateTimelineAnchorPositioning();
     isAtEndRef.current = true;
     timelineScrollModeRef.current = "anchoring-new-turn";
     liveFollowUserScrollGenerationRef.current = anchorUserScrollGenerationRef.current;
     pendingTimelineAnchorRef.current = messageIdForSend;
-    activeTimelineAnchorIndexRef.current = null;
     showScrollDebouncer.current.cancel();
     setShowScrollToBottom(false);
     setTimelineAnchor({
@@ -5139,11 +5200,12 @@ function ChatViewContent(props: ChatViewProps) {
       setThreadError(threadIdForSend, null);
 
       // Position this sent row once LegendList has measured the anchored tail.
+      scrollToEndGenerationRef.current += 1;
+      invalidateTimelineAnchorPositioning();
       isAtEndRef.current = true;
       timelineScrollModeRef.current = "anchoring-new-turn";
       liveFollowUserScrollGenerationRef.current = anchorUserScrollGenerationRef.current;
       pendingTimelineAnchorRef.current = messageIdForSend;
-      activeTimelineAnchorIndexRef.current = null;
       showScrollDebouncer.current.cancel();
       setShowScrollToBottom(false);
       setTimelineAnchor({
@@ -5257,6 +5319,7 @@ function ChatViewContent(props: ChatViewProps) {
       autoOpenPlanSidebar,
       environmentId,
       composerRef,
+      invalidateTimelineAnchorPositioning,
     ],
   );
 
@@ -5900,7 +5963,7 @@ function ChatViewContent(props: ChatViewProps) {
                     type="button"
                     aria-label="Scroll to end"
                     title="Scroll to end"
-                    onClick={() => scrollToEnd(true)}
+                    onClick={() => void scrollToEnd(true)}
                     className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-border/60 bg-card px-3 py-1 text-muted-foreground text-xs shadow-sm transition-colors hover:border-border hover:text-foreground hover:cursor-pointer"
                   >
                     <ChevronDownIcon className="size-3.5" />

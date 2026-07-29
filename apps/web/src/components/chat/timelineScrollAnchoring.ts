@@ -1,5 +1,17 @@
 export type TimelineScrollMode = "following-end" | "anchoring-new-turn" | "free-scrolling";
 
+export function shouldPositionTimelineAnchor({
+  messageId,
+  pendingMessageId,
+  scrollMode,
+}: {
+  readonly messageId: string;
+  readonly pendingMessageId: string | null;
+  readonly scrollMode: TimelineScrollMode;
+}): boolean {
+  return scrollMode === "anchoring-new-turn" && pendingMessageId === messageId;
+}
+
 export interface TimelineListMeasurementState {
   readonly data: readonly unknown[];
   readonly scroll: number;

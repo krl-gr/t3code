@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vite-plus/test";
-import { getAnchoredTurnMetrics, getRowBottom } from "./timelineScrollAnchoring";
+import {
+  getAnchoredTurnMetrics,
+  getRowBottom,
+  shouldPositionTimelineAnchor,
+} from "./timelineScrollAnchoring";
 
 function buildState({
   positions,
@@ -22,6 +26,30 @@ function buildState({
 }
 
 describe("timeline scroll anchoring", () => {
+  it("positions only the pending anchor while entering a new turn", () => {
+    expect(
+      shouldPositionTimelineAnchor({
+        messageId: "message-2",
+        pendingMessageId: "message-2",
+        scrollMode: "anchoring-new-turn",
+      }),
+    ).toBe(true);
+    expect(
+      shouldPositionTimelineAnchor({
+        messageId: "message-2",
+        pendingMessageId: null,
+        scrollMode: "anchoring-new-turn",
+      }),
+    ).toBe(false);
+    expect(
+      shouldPositionTimelineAnchor({
+        messageId: "message-2",
+        pendingMessageId: "message-2",
+        scrollMode: "free-scrolling",
+      }),
+    ).toBe(false);
+  });
+
   it("measures row bottoms from LegendList row position and size", () => {
     const state = buildState({
       positions: [0, 120],
