@@ -543,13 +543,18 @@ export function ChatWorkspace({ children, routeTarget = null }: ChatWorkspacePro
       referenceGroupId?: string,
     ) => {
       const existing = dockviewApi.getPanel(panelId);
-      if (existing) return existing;
+      if (existing) {
+        // Keep inactive chat DOM mounted so virtualized timelines retain their
+        // measured viewport and native scroll offset across tab switches.
+        if (existing.api.renderer !== "always") existing.api.setRenderer("always");
+        return existing;
+      }
       const options = {
         id: panelId,
         component: CHAT_PANEL_COMPONENT_ID,
         title: fallbackPanelTitle(state),
         params: { panelId },
-        renderer: "onlyWhenVisible" as const,
+        renderer: "always" as const,
       };
       return referenceGroupId && dockviewApi.getGroup(referenceGroupId)
         ? dockviewApi.addPanel({
@@ -867,7 +872,7 @@ export function ChatWorkspace({ children, routeTarget = null }: ChatWorkspacePro
         <DockviewReact
           className="t3code-dockview-theme h-full w-full"
           components={{ [CHAT_PANEL_COMPONENT_ID]: DockviewChatPanel }}
-          defaultRenderer="onlyWhenVisible"
+          defaultRenderer="always"
           defaultTabComponent={DockviewChatTab}
           disableFloatingGroups
           disableTabsOverflowList
