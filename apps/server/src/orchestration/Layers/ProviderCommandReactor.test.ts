@@ -478,7 +478,7 @@ describe("ProviderCommandReactor", () => {
     expect(thread?.session?.runtimeMode).toBe("approval-required");
   });
 
-  it("injects snapshot context only once after the provider accepts the first turn", async () => {
+  it("injects snapshot context attached to an active session exactly once", async () => {
     const harness = await createHarness();
     const now = "2026-01-01T00:00:00.000Z";
     const sourceThreadId = ThreadId.make("thread-context-source");
@@ -541,26 +541,13 @@ describe("ProviderCommandReactor", () => {
     );
     await Effect.runPromise(
       harness.engine.dispatch({
-        type: "thread.context-binding.add",
-        commandId: CommandId.make("cmd-context-binding-add"),
-        threadId: ThreadId.make("thread-1"),
-        bindingId: ThreadContextBindingId.make("ctx-provider-once"),
-        sourceThreadId,
-        mode: "snapshot",
-        cutoffMessageId: asMessageId("context-source-assistant"),
-        createdAt: now,
-      }),
-    );
-
-    await Effect.runPromise(
-      harness.engine.dispatch({
         type: "thread.turn.start",
-        commandId: CommandId.make("cmd-context-target-first"),
+        commandId: CommandId.make("cmd-context-target-before-binding"),
         threadId: ThreadId.make("thread-1"),
         message: {
-          messageId: asMessageId("context-target-user-first"),
+          messageId: asMessageId("context-target-user-before-binding"),
           role: "user",
-          text: "first target question",
+          text: "start the target session",
           attachments: [],
         },
         interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
@@ -570,28 +557,62 @@ describe("ProviderCommandReactor", () => {
     );
     await waitFor(() => harness.sendTurn.mock.calls.length === 2);
     expect(harness.sendTurn.mock.calls[1]?.[0]).toMatchObject({
+      input: "start the target session",
+    });
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.context-binding.add",
+        commandId: CommandId.make("cmd-context-binding-add"),
+        threadId: ThreadId.make("thread-1"),
+        bindingId: ThreadContextBindingId.make("ctx-provider-once"),
+        sourceThreadId,
+        mode: "snapshot",
+        cutoffMessageId: asMessageId("context-source-assistant"),
+        createdAt: "2026-01-01T00:00:01.000Z",
+      }),
+    );
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.make("cmd-context-target-with-binding"),
+        threadId: ThreadId.make("thread-1"),
+        message: {
+          messageId: asMessageId("context-target-user-with-binding"),
+          role: "user",
+          text: "use the attached context",
+          attachments: [],
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "full-access",
+        createdAt: "2026-01-01T00:00:02.000Z",
+      }),
+    );
+    await waitFor(() => harness.sendTurn.mock.calls.length === 3);
+    expect(harness.sendTurn.mock.calls[2]?.[0]).toMatchObject({
       input: expect.stringContaining("<attached_chat_context"),
     });
 
     await Effect.runPromise(
       harness.engine.dispatch({
         type: "thread.turn.start",
-        commandId: CommandId.make("cmd-context-target-second"),
+        commandId: CommandId.make("cmd-context-target-after-binding"),
         threadId: ThreadId.make("thread-1"),
         message: {
-          messageId: asMessageId("context-target-user-second"),
+          messageId: asMessageId("context-target-user-after-binding"),
           role: "user",
-          text: "second target question",
+          text: "continue without repeating it",
           attachments: [],
         },
         interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
         runtimeMode: "full-access",
-        createdAt: "2026-01-01T00:00:01.000Z",
+        createdAt: "2026-01-01T00:00:03.000Z",
       }),
     );
-    await waitFor(() => harness.sendTurn.mock.calls.length === 3);
-    expect(harness.sendTurn.mock.calls[2]?.[0]).toMatchObject({
-      input: "second target question",
+    await waitFor(() => harness.sendTurn.mock.calls.length === 4);
+    expect(harness.sendTurn.mock.calls[3]?.[0]).toMatchObject({
+      input: "continue without repeating it",
     });
   });
 

@@ -9,7 +9,6 @@ import {
   type ProviderInteractionMode,
   type ProjectId,
   type OrchestrationSession,
-  type OrchestrationThread,
   ThreadId,
   type ProviderSession,
   type RuntimeMode,
@@ -219,6 +218,10 @@ const make = Effect.gen(function* () {
   const threadModelSelections = new Map<string, ModelSelection>();
   // Context bindings are immutable snapshots. Track each binding accepted by
   // the active provider session so snapshots are not repeated on every turn.
+  // This acknowledgment is intentionally process-local: after a reactor restart
+  // a resumed provider can receive a snapshot once more, which is safer than
+  // inferring acceptance from turn timestamps and permanently dropping a
+  // binding attached between turns.
   const injectedContextBindingsByThread = new Map<string, Set<string>>();
   const pendingContextBindingClaims = new Map<string, symbol>();
   const contextBindingClaimKey = (threadId: ThreadId, bindingId: string) =>
@@ -229,14 +232,6 @@ const make = Effect.gen(function* () {
     for (const key of pendingContextBindingClaims.keys()) {
       if (key.startsWith(prefix)) pendingContextBindingClaims.delete(key);
     }
-  };
-  const seedResumedContextBindings = (threadId: ThreadId, thread: OrchestrationThread) => {
-    if (thread.latestTurn === null) return;
-    const injected = injectedContextBindingsByThread.get(threadId) ?? new Set<string>();
-    for (const binding of thread.contextBindings ?? []) {
-      if (binding.createdAt <= thread.latestTurn.requestedAt) injected.add(binding.id);
-    }
-    injectedContextBindingsByThread.set(threadId, injected);
   };
 
   const appendProviderFailureActivity = (input: {
@@ -588,7 +583,6 @@ const make = Effect.gen(function* () {
         !shouldRestartForModelChange &&
         !shouldRestartForModelSelectionChange
       ) {
-        seedResumedContextBindings(threadId, thread);
         return existingSessionThreadId;
       }
 
@@ -619,8 +613,6 @@ const make = Effect.gen(function* () {
       );
       if (resumeCursor === undefined) {
         resetInjectedContextBindings(threadId);
-      } else {
-        seedResumedContextBindings(threadId, thread);
       }
       yield* Effect.logInfo("provider command reactor restarted provider session", {
         threadId,
