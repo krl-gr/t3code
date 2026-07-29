@@ -21,6 +21,7 @@ import {
   hasConfiguredMcpServer,
   isRecoverableThreadResumeError,
   openCodexThread,
+  supportsCodexInteractionModeAdditionalContext,
 } from "./CodexSessionRuntime.ts";
 const isCodexAppServerRequestError = Schema.is(CodexErrors.CodexAppServerRequestError);
 
@@ -182,6 +183,15 @@ describe("buildTurnStartParams", () => {
           }),
         },
       },
+      additionalContext: {
+        upcomputer_interaction_mode: {
+          kind: "application",
+          value: buildCodexDeveloperInstructions("default", {
+            model: "gpt-5.3-codex",
+            reasoningEffort: "medium",
+          }),
+        },
+      },
     });
   });
 
@@ -251,9 +261,9 @@ describe("buildTurnStartParams", () => {
     });
   });
 
-  it("uses resolved collaboration instructions and sandbox overrides", () => {
-    const params = Effect.runSync(
-      buildTurnStartParams({
+  it.effect("uses resolved collaboration instructions and sandbox overrides", () =>
+    Effect.gen(function* () {
+      const params = yield* buildTurnStartParams({
         threadId: "provider-thread-1",
         runtimeMode: "full-access",
         prompt: "Explain the code",
@@ -264,32 +274,70 @@ describe("buildTurnStartParams", () => {
           mode: "default",
           developerInstructions: CODEX_ASK_MODE_DEVELOPER_INSTRUCTIONS,
         },
-      }),
-    );
+      });
 
-    NodeAssert.deepStrictEqual(params, {
-      threadId: "provider-thread-1",
-      approvalPolicy: "never",
-      approvalsReviewer: "user",
-      sandboxPolicy: {
-        type: "readOnly",
-      },
-      input: [
-        {
-          type: "text",
-          text: "Explain the code",
+      NodeAssert.deepStrictEqual(params, {
+        threadId: "provider-thread-1",
+        approvalPolicy: "never",
+        approvalsReviewer: "user",
+        sandboxPolicy: {
+          type: "readOnly",
         },
-      ],
-      model: "gpt-5.3-codex",
-      collaborationMode: {
-        mode: "default",
-        settings: {
-          model: "gpt-5.3-codex",
-          reasoning_effort: "medium",
-          developer_instructions: CODEX_ASK_MODE_DEVELOPER_INSTRUCTIONS,
+        input: [
+          {
+            type: "text",
+            text: "Explain the code",
+          },
+        ],
+        model: "gpt-5.3-codex",
+        collaborationMode: {
+          mode: "default",
+          settings: {
+            model: "gpt-5.3-codex",
+            reasoning_effort: "medium",
+            developer_instructions: CODEX_ASK_MODE_DEVELOPER_INSTRUCTIONS,
+          },
         },
-      },
-    });
+        additionalContext: {
+          upcomputer_interaction_mode: {
+            kind: "application",
+            value: CODEX_ASK_MODE_DEVELOPER_INSTRUCTIONS,
+          },
+        },
+      });
+    }),
+  );
+
+  it.effect("omits application interaction-mode context for older Codex versions", () =>
+    Effect.gen(function* () {
+      const params = yield* buildTurnStartParams({
+        threadId: "provider-thread-1",
+        runtimeMode: "full-access",
+        prompt: "Explain the code",
+        interactionMode: "ask",
+        collaborationMode: {
+          mode: "default",
+          developerInstructions: CODEX_ASK_MODE_DEVELOPER_INSTRUCTIONS,
+        },
+        supportsInteractionModeAdditionalContext: false,
+      });
+
+      NodeAssert.equal(params.additionalContext, undefined);
+      NodeAssert.equal(
+        params.collaborationMode?.settings.developer_instructions,
+        CODEX_ASK_MODE_DEVELOPER_INSTRUCTIONS,
+      );
+    }),
+  );
+});
+
+describe("supportsCodexInteractionModeAdditionalContext", () => {
+  it("gates the workaround to Codex versions that support turn additional context", () => {
+    NodeAssert.equal(supportsCodexInteractionModeAdditionalContext(undefined), false);
+    NodeAssert.equal(supportsCodexInteractionModeAdditionalContext("not-semver"), false);
+    NodeAssert.equal(supportsCodexInteractionModeAdditionalContext("0.134.0"), false);
+    NodeAssert.equal(supportsCodexInteractionModeAdditionalContext("0.141.0"), true);
+    NodeAssert.equal(supportsCodexInteractionModeAdditionalContext("0.145.0"), true);
   });
 });
 

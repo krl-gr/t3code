@@ -24,7 +24,7 @@ import {
 import { createModelSelection } from "@t3tools/shared/model";
 import { ServerConfig } from "../../config.ts";
 import { BUILT_IN_INTERACTION_MODE_REGISTRY } from "../../product/BuiltInInteractionModes.ts";
-import { ASK_MODE_PROMPT_PREFIX } from "../AskModeInstructions.ts";
+import { ASK_MODE_PROMPT_PREFIX, DEFAULT_MODE_PROMPT_PREFIX } from "../AskModeInstructions.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
 import { ProviderSessionDirectory } from "../Services/ProviderSessionDirectory.ts";
 import type { OpenCodeAdapterShape } from "../Services/OpenCodeAdapter.ts";
@@ -959,6 +959,43 @@ it.layer(OpenCodeAdapterTestLayer)("OpenCodeAdapterLive", (it) => {
           {
             type: "text",
             text: `${ASK_MODE_PROMPT_PREFIX}\n\nUser question:\nExplain this file`,
+          },
+        ],
+      });
+    }),
+  );
+
+  it.effect("maps resolved default mode to a build reset prefix", () =>
+    Effect.gen(function* () {
+      const adapter = yield* OpenCodeAdapter;
+      const threadId = asThreadId("thread-resolved-default-prompt-prefix");
+      yield* adapter.startSession({
+        provider: ProviderDriverKind.make("opencode"),
+        threadId,
+        runtimeMode: "full-access",
+      });
+
+      yield* adapter.sendTurn({
+        threadId,
+        input: "Implement the change",
+        interactionMode: "default",
+        resolvedInteractionMode: BUILT_IN_INTERACTION_MODE_REGISTRY.resolveOrThrow(
+          "default",
+          "opencode",
+        ),
+        modelSelection: createModelSelection(ProviderInstanceId.make("opencode"), "openai/gpt-5"),
+      });
+
+      NodeAssert.deepEqual(runtimeMock.state.promptCalls.at(-1), {
+        sessionID: "http://127.0.0.1:9999/session",
+        model: {
+          providerID: "openai",
+          modelID: "gpt-5",
+        },
+        parts: [
+          {
+            type: "text",
+            text: `${DEFAULT_MODE_PROMPT_PREFIX}\n\nImplement the change`,
           },
         ],
       });

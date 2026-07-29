@@ -19,6 +19,7 @@ import {
 } from "@t3tools/contracts";
 import { resolveSpawnCommand } from "@t3tools/shared/shell";
 import { normalizeModelSlug } from "@t3tools/shared/model";
+import { compareSemverVersions, parseSemver } from "@t3tools/shared/semver";
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
@@ -68,6 +69,7 @@ const BENIGN_ERROR_LOG_SNIPPETS = [
   "state db record_discrepancy: find_thread_path_by_id_str_in_subdir, falling_back",
 ];
 const CODEX_APP_SERVER_FORCE_KILL_AFTER = "2 seconds" as const;
+const CODEX_ADDITIONAL_CONTEXT_MINIMUM_VERSION = "0.141.0";
 const RECOVERABLE_THREAD_RESUME_ERROR_SNIPPETS = [
   "not found",
   "missing thread",
@@ -80,6 +82,16 @@ export function hasConfiguredMcpServer(appServerArgs: ReadonlyArray<string> | un
   return appServerArgs?.some((argument) => argument.includes("mcp_servers.")) === true;
 }
 
+export function supportsCodexInteractionModeAdditionalContext(
+  cliVersion: string | undefined,
+): boolean {
+  return (
+    cliVersion !== undefined &&
+    parseSemver(cliVersion) !== null &&
+    compareSemverVersions(cliVersion, CODEX_ADDITIONAL_CONTEXT_MINIMUM_VERSION) >= 0
+  );
+}
+
 export const CodexResumeCursorSchema = Schema.Struct({
   threadId: Schema.String,
 });
@@ -90,10 +102,13 @@ const isCodexResumeCursorSchema = Schema.is(CodexResumeCursorSchema);
 const isCodexUserInputAnswerObject = Schema.is(CodexUserInputAnswerObject);
 
 // TODO: Verify `packages/effect-codex-app-server/scripts/generate.ts` so the generated
-// `V2TurnStartParams` schema includes `collaborationMode` directly.
+// `V2TurnStartParams` schema includes these experimental fields directly.
 const CodexTurnStartParamsWithCollaborationMode = EffectCodexSchema.V2TurnStartParams.pipe(
   Schema.fieldsAssign({
     collaborationMode: Schema.optionalKey(EffectCodexSchema.V2TurnStartParams__CollaborationMode),
+    additionalContext: Schema.optionalKey(
+      Schema.Record(Schema.String, EffectCodexSchema.V2TurnStartParams__AdditionalContextEntry),
+    ),
   }),
 );
 const decodeCodexTurnStartParamsWithCollaborationMode = Schema.decodeUnknownEffect(
@@ -472,6 +487,33 @@ function buildCodexCollaborationMode(input: {
   };
 }
 
+const CODEX_INTERACTION_MODE_CONTEXT_KEY = "upcomputer_interaction_mode";
+
+function buildCodexInteractionModeAdditionalContext(
+  collaborationMode: EffectCodexSchema.V2TurnStartParams__CollaborationMode | undefined,
+):
+  | Readonly<Record<string, EffectCodexSchema.V2TurnStartParams__AdditionalContextEntry>>
+  | undefined {
+  if (collaborationMode?.mode !== "default") {
+    return undefined;
+  }
+  const instructions = collaborationMode.settings.developer_instructions;
+  if (instructions === undefined || instructions === null || instructions.length === 0) {
+    return undefined;
+  }
+
+  // Codex snapshots collaboration-mode state by native mode. Ask and Build both
+  // use native Default, so a change between their developer instructions can be
+  // omitted. Application additional context is also developer-role, while its
+  // stable key makes Codex re-emit the block only when the instructions change.
+  return {
+    [CODEX_INTERACTION_MODE_CONTEXT_KEY]: {
+      kind: "application",
+      value: instructions,
+    },
+  };
+}
+
 export function buildTurnStartParams(input: {
   readonly threadId: string;
   readonly runtimeMode: RuntimeMode;
@@ -486,6 +528,7 @@ export function buildTurnStartParams(input: {
   readonly interactionMode?: ProviderInteractionMode;
   readonly interactionModeSandbox?: InteractionModeSandboxPolicy;
   readonly collaborationMode?: CodexSessionRuntimeCollaborationModeInput;
+  readonly supportsInteractionModeAdditionalContext?: boolean;
 }): Effect.Effect<
   CodexTurnStartParamsWithCollaborationMode,
   CodexErrors.CodexAppServerProtocolParseError
@@ -508,6 +551,10 @@ export function buildTurnStartParams(input: {
     ...(input.model ? { model: input.model } : {}),
     ...(input.effort ? { effort: input.effort } : {}),
   });
+  const additionalContext =
+    input.supportsInteractionModeAdditionalContext === false
+      ? undefined
+      : buildCodexInteractionModeAdditionalContext(collaborationMode);
   const sandboxPolicy =
     input.interactionModeSandbox === "read-only"
       ? ({ type: "readOnly" } satisfies EffectCodexSchema.V2TurnStartParams__SandboxPolicy)
@@ -525,6 +572,7 @@ export function buildTurnStartParams(input: {
     ...(input.serviceTier ? { serviceTier: input.serviceTier } : {}),
     ...(input.effort ? { effort: input.effort } : {}),
     ...(collaborationMode ? { collaborationMode } : {}),
+    ...(additionalContext ? { additionalContext } : {}),
   }).pipe(
     Effect.mapError((cause) =>
       CodexErrors.CodexAppServerProtocolParseError.fromSchemaError(
@@ -896,6 +944,7 @@ export const makeCodexSessionRuntime = (
     const turnDynamicToolPoliciesRef = yield* Ref.make(new Map<string, TurnDynamicToolPolicy>());
     const pendingUserInputsRef = yield* Ref.make(new Map<ApprovalRequestId, PendingUserInput>());
     const collabReceiverTurnsRef = yield* Ref.make(new Map<string, TurnId>());
+    const supportsInteractionModeAdditionalContextRef = yield* Ref.make(false);
     const closedRef = yield* Ref.make(false);
 
     // `~` is not shell-expanded when env vars are set via
@@ -1477,6 +1526,10 @@ export const makeCodexSessionRuntime = (
       });
 
       const providerThreadId = opened.thread.id;
+      yield* Ref.set(
+        supportsInteractionModeAdditionalContextRef,
+        supportsCodexInteractionModeAdditionalContext(opened.thread.cliVersion),
+      );
       const session = {
         ...(yield* Ref.get(sessionRef)),
         status: "ready",
@@ -1539,6 +1592,9 @@ export const makeCodexSessionRuntime = (
           const normalizedModel = normalizeCodexModelSlug(
             input.model ?? (yield* Ref.get(sessionRef)).model,
           );
+          const supportsInteractionModeAdditionalContext = yield* Ref.get(
+            supportsInteractionModeAdditionalContextRef,
+          );
           const params = yield* buildTurnStartParams({
             threadId: providerThreadId,
             runtimeMode: options.runtimeMode,
@@ -1552,6 +1608,7 @@ export const makeCodexSessionRuntime = (
               ? { interactionModeSandbox: input.interactionModeSandbox }
               : {}),
             ...(input.collaborationMode ? { collaborationMode: input.collaborationMode } : {}),
+            supportsInteractionModeAdditionalContext,
           });
           const rawResponse = yield* client.raw.request("turn/start", params);
           const response = yield* decodeV2TurnStartResponse(rawResponse).pipe(

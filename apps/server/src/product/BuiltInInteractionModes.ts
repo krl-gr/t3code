@@ -4,7 +4,10 @@ import {
   type ExperimentalInteractionModeRegistration,
 } from "@t3tools/shared/interactionMode";
 
-import { ASK_MODE_PROMPT_PREFIX } from "../provider/AskModeInstructions.ts";
+import {
+  ASK_MODE_PROMPT_PREFIX,
+  DEFAULT_MODE_PROMPT_PREFIX,
+} from "../provider/AskModeInstructions.ts";
 import {
   CODEX_ASK_MODE_DEVELOPER_INSTRUCTIONS,
   CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS,
@@ -34,13 +37,21 @@ const DEFAULT_INTERACTION_MODE = {
       collaborationMode: "default",
       developerInstructions: CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS,
     },
-    { providerId: "claudeAgent", permissionMode: "session-default" },
+    {
+      providerId: "claudeAgent",
+      permissionMode: "session-default",
+      promptPrefix: DEFAULT_MODE_PROMPT_PREFIX,
+    },
     {
       providerId: "cursor",
       nativeMode: "runtime-default",
       nativeModeFallback: "unchanged",
     },
-    { providerId: "opencode", nativeModePrecedence: "user-first" },
+    {
+      providerId: "opencode",
+      nativeModePrecedence: "user-first",
+      promptPrefix: DEFAULT_MODE_PROMPT_PREFIX,
+    },
   ],
 } satisfies InteractionModeDescriptor;
 
