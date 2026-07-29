@@ -446,7 +446,7 @@ const DockviewChatPanel = memo(function DockviewChatPanel(
   props: IDockviewPanelProps<{ panelId?: ChatWorkspacePanelId }>,
 ) {
   const panelId = normalizePanelId(props.params?.panelId ?? props.api.id);
-  const { panelsById } = useChatWorkspaceContext();
+  const { activePanelId, panelsById } = useChatWorkspaceContext();
   const panelState = panelId ? panelsById[panelId] : undefined;
   const threadRef = panelState?.kind === "chat" ? panelState.target.ref : null;
   const thread = useThreadShell(threadRef);
@@ -461,7 +461,7 @@ const DockviewChatPanel = memo(function DockviewChatPanel(
     );
   }, [panelState, props.api, thread?.title]);
 
-  return <ChatWorkspacePanel panelState={panelState} />;
+  return <ChatWorkspacePanel panelState={panelState} isActive={panelId === activePanelId} />;
 });
 
 export interface ChatWorkspaceProps {

@@ -483,6 +483,7 @@ type ChatViewProps =
       onDiffPanelOpen?: () => void;
       reserveTitleBarControlInset?: boolean;
       showHeaderControls?: boolean;
+      isWorkspacePanelActive?: boolean;
       routeKind: "server";
       draftId?: never;
     }
@@ -492,6 +493,7 @@ type ChatViewProps =
       onDiffPanelOpen?: () => void;
       reserveTitleBarControlInset?: boolean;
       showHeaderControls?: boolean;
+      isWorkspacePanelActive?: boolean;
       routeKind: "draft";
       draftId: DraftId;
     };
@@ -1148,6 +1150,7 @@ function ChatViewContent(props: ChatViewProps) {
     onDiffPanelOpen,
     reserveTitleBarControlInset = true,
     showHeaderControls = true,
+    isWorkspacePanelActive = true,
   } = props;
   const draftId = routeKind === "draft" ? props.draftId : null;
   const routeThreadRef = useMemo(
@@ -3350,13 +3353,12 @@ function ChatViewContent(props: ChatViewProps) {
       },
     );
   }, []);
-  useEffect(
-    () =>
-      subscribePreviewAction((action) => {
-        if (action === "toggle-panel") togglePreviewPanel();
-      }),
-    [togglePreviewPanel],
-  );
+  useEffect(() => {
+    if (!isWorkspacePanelActive) return;
+    return subscribePreviewAction((action) => {
+      if (action === "toggle-panel") togglePreviewPanel();
+    });
+  }, [isWorkspacePanelActive, togglePreviewPanel]);
   const persistThreadSettingsForNextTurn = useCallback(
     async (input: {
       threadId: ThreadId;
@@ -4342,6 +4344,7 @@ function ChatViewContent(props: ChatViewProps) {
   }, [activeThreadKey, focusComposer, terminalUiState.terminalOpen]);
 
   useEffect(() => {
+    if (!isWorkspacePanelActive) return;
     const handler = (event: globalThis.KeyboardEvent) => {
       if (!activeThreadId || isCommandPaletteOpen()) {
         return;
@@ -4469,6 +4472,7 @@ function ChatViewContent(props: ChatViewProps) {
     activeProject,
     activeRightPanelSurface,
     addTerminalSurface,
+    isWorkspacePanelActive,
     terminalUiState.terminalOpen,
     terminalUiState.activeTerminalId,
     activeThreadId,
@@ -5767,7 +5771,7 @@ function ChatViewContent(props: ChatViewProps) {
           threadRef={activeThreadRef}
           tabId={activeRightPanelSurface.resourceId}
           configuredUrls={configuredPreviewUrls}
-          visible
+          visible={isWorkspacePanelActive}
         />
       </Suspense>
     ) : activeRightPanelSurface?.kind === "terminal" ? (
