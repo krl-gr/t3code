@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { useClientSettings, useUpdateClientSettings } from "../../hooks/useSettings";
 import { PROJECT_STATUS_INDICATOR_EXPERIMENT_KEY } from "../sidebar/experiments";
+import { resolveAvailableSidebarViewMode } from "../sidebar/sidebarViewMode";
 import { Input } from "../ui/input";
 import { Switch } from "../ui/switch";
 import { SettingsPageContainer, SettingsRow, SettingsSection } from "./settingsLayout";
@@ -54,10 +55,11 @@ function AutoSettleDaysInput({
 }
 
 export function BetaSettingsPanel() {
-  // Upstream's "Sidebar v2" switch is deliberately absent: v2 is one of this
-  // fork's three sidebar view modes, chosen from the sidebar's own View menu,
-  // so a second entry point here could only disagree with it.
-  const sidebarViewMode = useClientSettings((settings) => settings.sidebarViewMode);
+  // Keep the settings surface aligned with the mode the sidebar can actually
+  // render. Persisted `v2` values decode for compatibility but resolve to
+  // Classic until Flat view is re-enabled.
+  const storedSidebarViewMode = useClientSettings((settings) => settings.sidebarViewMode);
+  const sidebarViewMode = resolveAvailableSidebarViewMode(storedSidebarViewMode);
   const sidebarAutoSettleAfterDays = useClientSettings(
     (settings) => settings.sidebarAutoSettleAfterDays,
   );

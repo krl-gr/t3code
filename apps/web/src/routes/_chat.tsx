@@ -10,6 +10,7 @@ import { usePrimaryEnvironmentId } from "../state/environments";
 import { selectProjectGroupingSettings } from "../logicalProject";
 import { buildSidebarProjectSnapshots } from "../sidebarProjectGrouping";
 import { dispatchPreviewAction } from "../components/preview/previewActionBus";
+import { resolveAvailableSidebarViewMode } from "../components/sidebar/sidebarViewMode";
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
 import {
   startNewLocalThreadInWorkspacePanelFromContext,
@@ -41,7 +42,8 @@ function ChatRouteGlobalShortcuts() {
   const { activeDraftThread, activeThread, defaultProjectRef, handleNewThread, routeThreadRef } =
     useHandleNewThread();
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
-  const sidebarViewMode = useClientSettings((settings) => settings.sidebarViewMode);
+  const storedSidebarViewMode = useClientSettings((settings) => settings.sidebarViewMode);
+  const sidebarViewMode = resolveAvailableSidebarViewMode(storedSidebarViewMode);
   const projectGroupingSettings = useClientSettings(selectProjectGroupingSettings);
   const projects = useProjects();
   const primaryEnvironmentId = usePrimaryEnvironmentId();

@@ -1,10 +1,11 @@
 import { useEffect, type ReactNode } from "react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 
-import { useClientSettings } from "../hooks/useSettings";
+import { useClientSettings, useUpdateClientSettings } from "../hooks/useSettings";
 import ThreadSidebar from "./Sidebar";
 import ThreadSidebarV2 from "./SidebarV2";
 import { Sidebar, SidebarProvider, SidebarRail } from "./ui/sidebar";
+import { resolveAvailableSidebarViewMode } from "./sidebar/sidebarViewMode";
 
 const THREAD_SIDEBAR_WIDTH_STORAGE_KEY = "chat_thread_sidebar_width";
 const THREAD_SIDEBAR_MIN_WIDTH = 12 * 16;
@@ -19,24 +20,22 @@ function resolveThreadSidebarMaximumWidth(viewportWidth: number): number {
   );
 }
 
-/**
- * Flat view (upstream's SidebarV2) is parked.
- *
- * The view switcher lives inside the v1 sidebar, and this layout swaps that
- * whole component out in v2 — so choosing Flat view removed the only control
- * that could leave it. Re-enable once the switcher moves into the shared
- * `sidebar/SidebarChrome`, which both sidebars already render.
- */
-const FLAT_VIEW_ENABLED = false;
-
 export function AppSidebarLayout({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
-  const sidebarViewMode = useClientSettings((settings) => settings.sidebarViewMode);
+  const storedSidebarViewMode = useClientSettings((settings) => settings.sidebarViewMode);
+  const sidebarViewMode = resolveAvailableSidebarViewMode(storedSidebarViewMode);
+  const updateSettings = useUpdateClientSettings();
   // Settings routes render the settings nav, which lives in the v1 component
   // and is the same for every view mode — so v1 stays mounted there.
   const pathname = useLocation({ select: (location) => location.pathname });
   const isOnSettings = pathname === "/settings" || pathname.startsWith("/settings/");
-  const showSidebarV2 = FLAT_VIEW_ENABLED && sidebarViewMode === "v2" && !isOnSettings;
+  const showSidebarV2 = sidebarViewMode === "v2" && !isOnSettings;
+
+  useEffect(() => {
+    if (storedSidebarViewMode !== sidebarViewMode) {
+      updateSettings({ sidebarViewMode });
+    }
+  }, [sidebarViewMode, storedSidebarViewMode, updateSettings]);
 
   useEffect(() => {
     const onMenuAction = window.desktopBridge?.onMenuAction;

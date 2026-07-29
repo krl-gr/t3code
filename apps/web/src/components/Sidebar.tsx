@@ -207,6 +207,7 @@ import {
   SIDEBAR_LABEL_TEXT_CLASS,
   SIDEBAR_MUTED_TEXT_CLASS,
 } from "./sidebar/sidebarTextStyles";
+import { resolveAvailableSidebarViewMode } from "./sidebar/sidebarViewMode";
 const SIDEBAR_LIST_ANIMATION_OPTIONS = {
   duration: 180,
   easing: "ease-out",
@@ -3241,7 +3242,8 @@ export default function Sidebar() {
   const isOnSettings = pathname.startsWith("/settings");
   const sidebarThreadSortOrder = useClientSettings((s) => s.sidebarThreadSortOrder);
   const sidebarProjectSortOrder = useClientSettings((s) => s.sidebarProjectSortOrder);
-  const sidebarViewMode = useClientSettings((s) => s.sidebarViewMode);
+  const storedSidebarViewMode = useClientSettings((s) => s.sidebarViewMode);
+  const sidebarViewMode = resolveAvailableSidebarViewMode(storedSidebarViewMode);
   const projectGroupingSettings = useClientSettings(selectProjectGroupingSettings);
   const sidebarThreadPreviewCount = useClientSettings((s) => s.sidebarThreadPreviewCount);
   const updateSettings = useUpdateClientSettings();
