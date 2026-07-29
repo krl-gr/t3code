@@ -20,6 +20,7 @@ import {
 import { resolveSpawnCommand } from "@t3tools/shared/shell";
 import { normalizeModelSlug } from "@t3tools/shared/model";
 import { compareSemverVersions, parseSemver } from "@t3tools/shared/semver";
+import { codexVersionFromUserAgent } from "../codexVersion.ts";
 import * as Crypto from "effect/Crypto";
 import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
@@ -1504,8 +1505,14 @@ export const makeCodexSessionRuntime = (
 
     const start = Effect.fn("CodexSessionRuntime.start")(function* () {
       yield* emitSessionEvent("session/connecting", "Starting Codex App Server session.");
-      yield* client.request("initialize", buildCodexInitializeParams());
+      const initialize = yield* client.request("initialize", buildCodexInitializeParams());
       yield* client.notify("initialized", undefined);
+      yield* Ref.set(
+        supportsInteractionModeAdditionalContextRef,
+        supportsCodexInteractionModeAdditionalContext(
+          codexVersionFromUserAgent(initialize.userAgent),
+        ),
+      );
 
       const requestedModel = normalizeCodexModelSlug(options.model);
       const registeredDynamicTools = dynamicToolLease?.specs ?? [];
@@ -1526,10 +1533,6 @@ export const makeCodexSessionRuntime = (
       });
 
       const providerThreadId = opened.thread.id;
-      yield* Ref.set(
-        supportsInteractionModeAdditionalContextRef,
-        supportsCodexInteractionModeAdditionalContext(opened.thread.cliVersion),
-      );
       const session = {
         ...(yield* Ref.get(sessionRef)),
         status: "ready",
