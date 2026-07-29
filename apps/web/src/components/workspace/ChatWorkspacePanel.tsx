@@ -7,6 +7,7 @@ import type { ChatWorkspacePanelState } from "../../workspace/workspacePanelIds"
 export const ChatWorkspacePanel = memo(function ChatWorkspacePanel(props: {
   panelState: ChatWorkspacePanelState | undefined;
   isActive: boolean;
+  persistenceKey?: string | undefined;
 }) {
   if (!props.panelState || props.panelState.kind === "empty") {
     return <NoActiveThreadContent />;
@@ -22,6 +23,7 @@ export const ChatWorkspacePanel = memo(function ChatWorkspacePanel(props: {
           routeKind="server"
           showHeaderControls={false}
           isWorkspacePanelActive={props.isActive}
+          timelinePersistenceKey={props.persistenceKey}
         />
       ) : (
         <ChatView
@@ -31,6 +33,7 @@ export const ChatWorkspacePanel = memo(function ChatWorkspacePanel(props: {
           routeKind="draft"
           showHeaderControls={false}
           isWorkspacePanelActive={props.isActive}
+          timelinePersistenceKey={props.persistenceKey}
         />
       )}
     </div>

@@ -93,6 +93,11 @@ import {
   type TimelineScrollMode,
 } from "./chat/timelineScrollAnchoring";
 import {
+  captureTimelineScrollSnapshot,
+  resolveTimelineRestoreOffset,
+  type TimelineScrollSnapshot,
+} from "./chat/timelineScrollPersistence";
+import {
   buildPendingUserInputAnswers,
   derivePendingUserInputProgress,
   setPendingUserInputCustomAnswer,
@@ -311,6 +316,7 @@ const EMPTY_ACTIVITIES: OrchestrationThreadActivity[] = [];
 const EMPTY_PROVIDERS: ServerProvider[] = [];
 const EMPTY_PROVIDER_SKILLS: ServerProvider["skills"] = [];
 const EMPTY_PENDING_USER_INPUT_ANSWERS: Record<string, PendingUserInputDraftAnswer> = {};
+const timelineScrollSnapshots = new Map<string, TimelineScrollSnapshot>();
 
 /**
  * Upstream's draft hero (#4055) is parked.
@@ -484,6 +490,7 @@ type ChatViewProps =
       reserveTitleBarControlInset?: boolean;
       showHeaderControls?: boolean;
       isWorkspacePanelActive?: boolean;
+      timelinePersistenceKey?: string | undefined;
       routeKind: "server";
       draftId?: never;
     }
@@ -494,6 +501,7 @@ type ChatViewProps =
       reserveTitleBarControlInset?: boolean;
       showHeaderControls?: boolean;
       isWorkspacePanelActive?: boolean;
+      timelinePersistenceKey?: string | undefined;
       routeKind: "draft";
       draftId: DraftId;
     };
@@ -1151,6 +1159,7 @@ function ChatViewContent(props: ChatViewProps) {
     reserveTitleBarControlInset = true,
     showHeaderControls = true,
     isWorkspacePanelActive = true,
+    timelinePersistenceKey: workspaceTimelinePersistenceKey,
   } = props;
   const draftId = routeKind === "draft" ? props.draftId : null;
   const routeThreadRef = useMemo(
@@ -1332,10 +1341,19 @@ function ChatViewContent(props: ChatViewProps) {
     {},
     LastInvokedScriptByProjectSchema,
   );
+  const timelinePersistenceKey = workspaceTimelinePersistenceKey
+    ? `${workspaceTimelinePersistenceKey}:${routeThreadKey}`
+    : null;
+  const initialTimelineScrollSnapshotRef = useRef<TimelineScrollSnapshot | null>(
+    timelinePersistenceKey ? (timelineScrollSnapshots.get(timelinePersistenceKey) ?? null) : null,
+  );
+  const timelineRestorePendingRef = useRef(
+    initialTimelineScrollSnapshotRef.current?.isAtEnd === false,
+  );
   const legendListRef = useRef<LegendListRef | null>(null);
   const [composerOverlayElement, setComposerOverlayElement] = useState<HTMLDivElement | null>(null);
   const [composerOverlayHeight, setComposerOverlayHeight] = useState(0);
-  const isAtEndRef = useRef(true);
+  const isAtEndRef = useRef(initialTimelineScrollSnapshotRef.current?.isAtEnd ?? true);
   const attachmentPreviewHandoffByMessageIdRef = useRef<Record<string, string[]>>({});
   const attachmentPreviewPromotionInFlightByMessageIdRef = useRef<Record<string, true>>({});
   const sendInFlightRef = useRef(false);
@@ -3442,13 +3460,17 @@ function ChatViewContent(props: ChatViewProps) {
   const showScrollDebouncer = useRef(
     new Debouncer(() => setShowScrollToBottom(true), { wait: 150 }),
   );
-  const timelineScrollModeRef = useRef<TimelineScrollMode>("following-end");
+  const timelineScrollModeRef = useRef<TimelineScrollMode>(
+    timelineRestorePendingRef.current ? "free-scrolling" : "following-end",
+  );
   const pendingTimelineAnchorRef = useRef<MessageId | null>(null);
   const positionedTimelineAnchorRef = useRef<MessageId | null>(null);
   const settledTimelineAnchorRef = useRef<MessageId | null>(null);
   const activeTimelineAnchorIndexRef = useRef<number | null>(null);
   const anchorUserScrollGenerationRef = useRef(0);
-  const liveFollowUserScrollGenerationRef = useRef<number | null>(0);
+  const liveFollowUserScrollGenerationRef = useRef<number | null>(
+    timelineRestorePendingRef.current ? null : 0,
+  );
   const pendingAnchorScrollRestoreRef = useRef<{
     readonly messageId: MessageId;
     readonly offset: number;
@@ -3470,6 +3492,7 @@ function ChatViewContent(props: ChatViewProps) {
     }
   }, []);
   const cancelTimelineLiveFollowForUserNavigation = useCallback(() => {
+    timelineRestorePendingRef.current = false;
     anchorUserScrollGenerationRef.current += 1;
     scrollToEndGenerationRef.current += 1;
     timelineScrollModeRef.current = "free-scrolling";
@@ -3718,28 +3741,52 @@ function ChatViewContent(props: ChatViewProps) {
     });
   }, []);
 
-  const onIsAtEndChange = useCallback((isAtEnd: boolean) => {
-    if (
-      !isAtEnd &&
-      liveFollowUserScrollGenerationRef.current === anchorUserScrollGenerationRef.current
-    ) {
-      showScrollDebouncer.current.cancel();
-      setShowScrollToBottom(false);
-      return;
-    }
-    if (isAtEndRef.current === isAtEnd) return;
-    isAtEndRef.current = isAtEnd;
-    if (isAtEnd) {
-      timelineScrollModeRef.current = "following-end";
-      liveFollowUserScrollGenerationRef.current = anchorUserScrollGenerationRef.current;
-      showScrollDebouncer.current.cancel();
-      setShowScrollToBottom(false);
-    } else {
-      timelineScrollModeRef.current = "free-scrolling";
-      liveFollowUserScrollGenerationRef.current = null;
-      showScrollDebouncer.current.maybeExecute();
-    }
-  }, []);
+  const persistTimelineScroll = useCallback(
+    (isAtEnd = isAtEndRef.current) => {
+      if (!timelinePersistenceKey || timelineRestorePendingRef.current) {
+        return;
+      }
+      const snapshot = captureTimelineScrollSnapshot(legendListRef.current?.getState(), isAtEnd);
+      if (snapshot) {
+        timelineScrollSnapshots.set(timelinePersistenceKey, snapshot);
+      }
+    },
+    [timelinePersistenceKey],
+  );
+
+  useEffect(
+    () => () => {
+      persistTimelineScroll();
+    },
+    [persistTimelineScroll],
+  );
+
+  const onIsAtEndChange = useCallback(
+    (isAtEnd: boolean) => {
+      if (
+        !isAtEnd &&
+        liveFollowUserScrollGenerationRef.current === anchorUserScrollGenerationRef.current
+      ) {
+        showScrollDebouncer.current.cancel();
+        setShowScrollToBottom(false);
+        return;
+      }
+      persistTimelineScroll(isAtEnd);
+      if (isAtEndRef.current === isAtEnd) return;
+      isAtEndRef.current = isAtEnd;
+      if (isAtEnd) {
+        timelineScrollModeRef.current = "following-end";
+        liveFollowUserScrollGenerationRef.current = anchorUserScrollGenerationRef.current;
+        showScrollDebouncer.current.cancel();
+        setShowScrollToBottom(false);
+      } else {
+        timelineScrollModeRef.current = "free-scrolling";
+        liveFollowUserScrollGenerationRef.current = null;
+        showScrollDebouncer.current.maybeExecute();
+      }
+    },
+    [persistTimelineScroll],
+  );
 
   useEffect(() => {
     if (!activeThread?.id) {
@@ -3811,11 +3858,19 @@ function ChatViewContent(props: ChatViewProps) {
     setPullRequestDialogState(null);
     scrollToEndGenerationRef.current += 1;
     invalidateTimelineAnchorPositioning();
-    isAtEndRef.current = true;
-    timelineScrollModeRef.current = "following-end";
-    liveFollowUserScrollGenerationRef.current = anchorUserScrollGenerationRef.current;
-    showScrollDebouncer.current.cancel();
-    setShowScrollToBottom(false);
+    if (timelineRestorePendingRef.current) {
+      isAtEndRef.current = false;
+      timelineScrollModeRef.current = "free-scrolling";
+      liveFollowUserScrollGenerationRef.current = null;
+      showScrollDebouncer.current.cancel();
+      setShowScrollToBottom(true);
+    } else {
+      isAtEndRef.current = true;
+      timelineScrollModeRef.current = "following-end";
+      liveFollowUserScrollGenerationRef.current = anchorUserScrollGenerationRef.current;
+      showScrollDebouncer.current.cancel();
+      setShowScrollToBottom(false);
+    }
     if (planSidebarOpenOnNextThreadRef.current) {
       planSidebarOpenOnNextThreadRef.current = false;
       if (activeThreadRef) {
@@ -3825,6 +3880,102 @@ function ChatViewContent(props: ChatViewProps) {
     planSidebarDismissedForTurnRef.current = null;
     // activeThreadRef resets transitively with the active thread.
   }, [activeThread?.id, invalidateTimelineAnchorPositioning]);
+
+  useLayoutEffect(() => {
+    if (!timelinePersistenceKey) {
+      return;
+    }
+    if (!isWorkspacePanelActive) {
+      // Dockview can retain the React instance while detaching or zero-sizing
+      // its panel DOM. Capture on the active-state edge rather than relying on
+      // an unmount cleanup that may never run.
+      persistTimelineScroll();
+      return;
+    }
+
+    const snapshot = timelineScrollSnapshots.get(timelinePersistenceKey);
+    if (!snapshot) {
+      return;
+    }
+
+    timelineRestorePendingRef.current = true;
+    scrollToEndGenerationRef.current += 1;
+    invalidateTimelineAnchorPositioning();
+    showScrollDebouncer.current.cancel();
+    isAtEndRef.current = snapshot.isAtEnd;
+    timelineScrollModeRef.current = snapshot.isAtEnd ? "following-end" : "free-scrolling";
+    liveFollowUserScrollGenerationRef.current = snapshot.isAtEnd
+      ? anchorUserScrollGenerationRef.current
+      : null;
+    setShowScrollToBottom(!snapshot.isAtEnd);
+
+    let frame: number | null = null;
+    let attempts = 0;
+    let correctionPasses = 0;
+    const restore = () => {
+      if (!timelineRestorePendingRef.current || !isWorkspacePanelActive) {
+        return;
+      }
+      const list = legendListRef.current;
+      const state = list?.getState();
+      const scrollNode = list?.getScrollableNode();
+      if (
+        !list ||
+        !state ||
+        state.data.length === 0 ||
+        !scrollNode ||
+        scrollNode.clientHeight <= 0
+      ) {
+        if (attempts++ < 30) frame = requestAnimationFrame(restore);
+        return;
+      }
+
+      if (snapshot.isAtEnd) {
+        void list.scrollToEnd({ animated: false });
+      } else {
+        if (snapshot.anchorRowId !== null) {
+          const anchorIndex = state.data.findIndex(
+            (row: { readonly id?: unknown }) => row.id === snapshot.anchorRowId,
+          );
+          if (anchorIndex >= 0 && state.positionAtIndex(anchorIndex) === undefined) {
+            if (attempts++ < 30) frame = requestAnimationFrame(restore);
+            return;
+          }
+        }
+
+        const offset = resolveTimelineRestoreOffset(state, snapshot);
+        if (offset !== null) {
+          void list.scrollToOffset({ offset, animated: false });
+        }
+      }
+
+      // Reactivation and virtual row measurement settle over several frames.
+      // Repeat after the panel has a real viewport so one stale zero-size pass
+      // cannot leave the list at offset 0.
+      correctionPasses += 1;
+      if (correctionPasses < 5) {
+        frame = requestAnimationFrame(restore);
+        return;
+      }
+      timelineRestorePendingRef.current = false;
+      isAtEndRef.current = snapshot.isAtEnd;
+      timelineScrollModeRef.current = snapshot.isAtEnd ? "following-end" : "free-scrolling";
+      liveFollowUserScrollGenerationRef.current = snapshot.isAtEnd
+        ? anchorUserScrollGenerationRef.current
+        : null;
+    };
+
+    frame = requestAnimationFrame(restore);
+    return () => {
+      if (frame !== null) cancelAnimationFrame(frame);
+    };
+  }, [
+    activeThread?.id,
+    invalidateTimelineAnchorPositioning,
+    isWorkspacePanelActive,
+    persistTimelineScroll,
+    timelinePersistenceKey,
+  ]);
 
   // Auto-open the plan sidebar when plan/todo steps arrive for the current turn.
   // Don't auto-open for plans carried over from a previous turn (the user can open manually).
@@ -5951,6 +6102,7 @@ function ChatViewContent(props: ChatViewProps) {
                 preserveVisibleContentPositionOnResize={
                   isRightPanelResizing || isRightPanelLayoutTransitioning
                 }
+                initialScrollAtEnd={initialTimelineScrollSnapshotRef.current?.isAtEnd !== false}
                 onIsAtEndChange={onIsAtEndChange}
                 onManualNavigation={cancelTimelineLiveFollowForUserNavigation}
                 hideEmptyPlaceholder={isDraftHeroState}

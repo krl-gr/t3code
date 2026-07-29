@@ -195,6 +195,7 @@ function buildProps() {
     onAnchorSizeChanged: () => {},
     contentInsetEndAdjustment: 0,
     preserveVisibleContentPositionOnResize: false,
+    initialScrollAtEnd: true,
     onIsAtEndChange: () => {},
     onManualNavigation: () => {},
   };

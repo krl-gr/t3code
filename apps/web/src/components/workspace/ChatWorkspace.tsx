@@ -461,7 +461,13 @@ const DockviewChatPanel = memo(function DockviewChatPanel(
     );
   }, [panelState, props.api, thread?.title]);
 
-  return <ChatWorkspacePanel panelState={panelState} isActive={panelId === activePanelId} />;
+  return (
+    <ChatWorkspacePanel
+      panelState={panelState}
+      isActive={panelId === activePanelId}
+      persistenceKey={panelId ?? undefined}
+    />
+  );
 });
 
 export interface ChatWorkspaceProps {
@@ -544,9 +550,12 @@ export function ChatWorkspace({ children, routeTarget = null }: ChatWorkspacePro
     ) => {
       const existing = dockviewApi.getPanel(panelId);
       if (existing) {
-        // Keep inactive chat DOM mounted so virtualized timelines retain their
-        // measured viewport and native scroll offset across tab switches.
-        if (existing.api.renderer !== "always") existing.api.setRenderer("always");
+        // Hidden zero-sized containers corrupt LegendList's virtual viewport.
+        // Let Dockview unmount inactive panels; ChatView restores their semantic
+        // row anchor when they become visible again.
+        if (existing.api.renderer !== "onlyWhenVisible") {
+          existing.api.setRenderer("onlyWhenVisible");
+        }
         return existing;
       }
       const options = {
@@ -554,7 +563,7 @@ export function ChatWorkspace({ children, routeTarget = null }: ChatWorkspacePro
         component: CHAT_PANEL_COMPONENT_ID,
         title: fallbackPanelTitle(state),
         params: { panelId },
-        renderer: "always" as const,
+        renderer: "onlyWhenVisible" as const,
       };
       return referenceGroupId && dockviewApi.getGroup(referenceGroupId)
         ? dockviewApi.addPanel({
@@ -872,7 +881,7 @@ export function ChatWorkspace({ children, routeTarget = null }: ChatWorkspacePro
         <DockviewReact
           className="t3code-dockview-theme h-full w-full"
           components={{ [CHAT_PANEL_COMPONENT_ID]: DockviewChatPanel }}
-          defaultRenderer="always"
+          defaultRenderer="onlyWhenVisible"
           defaultTabComponent={DockviewChatTab}
           disableFloatingGroups
           disableTabsOverflowList
