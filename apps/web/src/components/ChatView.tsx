@@ -4311,7 +4311,9 @@ function ChatViewContent(props: ChatViewProps) {
   // ordering is priority: system banners, then the branch-mismatch notice,
   // and the informational parked-thread banner last — it must never cover another.
   const parkedThreadBannerItem = useMemo<ComposerBannerStackItem | null>(() => {
-    if (!activeThreadSnoozed && !activeThreadSettled) {
+    // Settlement is currently only surfaced by the disabled upstream sidebar.
+    // Keep its state and actions intact, but hide the banner until that UI returns.
+    if (!activeThreadSnoozed) {
       return null;
     }
     const isSnoozed = activeThreadSnoozed;
