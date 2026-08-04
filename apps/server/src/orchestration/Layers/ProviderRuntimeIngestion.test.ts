@@ -218,7 +218,10 @@ describe("ProviderRuntimeIngestion", () => {
     }
   });
 
-  async function createHarness(options?: { serverSettings?: Partial<ServerSettings> }) {
+  async function createHarness(options?: {
+    serverSettings?: Partial<ServerSettings>;
+    sidebarVisible?: boolean;
+  }) {
     const workspaceRoot = makeTempDir("t3-provider-project-");
     NodeFS.mkdirSync(NodePath.join(workspaceRoot, ".git"));
     const provider = createProviderServiceHarness();
@@ -281,6 +284,9 @@ describe("ProviderRuntimeIngestion", () => {
         runtimeMode: "approval-required",
         branch: null,
         worktreePath: null,
+        ...(options?.sidebarVisible === undefined
+          ? {}
+          : { sidebarVisible: options.sidebarVisible }),
         createdAt,
       }),
     );
@@ -946,8 +952,8 @@ describe("ProviderRuntimeIngestion", () => {
     expect(message?.streaming).toBe(false);
   });
 
-  it("uses assistant item completion detail when no assistant deltas were streamed", async () => {
-    const harness = await createHarness();
+  it("persists assistant completion for a hidden thread without streamed deltas", async () => {
+    const harness = await createHarness({ sidebarVisible: false });
     const now = "2026-01-01T00:00:00.000Z";
 
     harness.emit({

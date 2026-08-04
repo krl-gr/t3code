@@ -2143,7 +2143,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
         ),
       ]);
 
-      if (Option.isNone(threadRow) || threadRow.value.sidebarVisible === 0) {
+      if (Option.isNone(threadRow)) {
         return Option.none<OrchestrationThreadShell>();
       }
 
@@ -2169,6 +2169,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
         hasPendingApprovals: threadRow.value.pendingApprovalCount > 0,
         hasPendingUserInput: threadRow.value.pendingUserInputCount > 0,
         hasActionableProposedPlan: threadRow.value.hasActionableProposedPlan > 0,
+        sidebarVisible: threadRow.value.sidebarVisible !== 0,
         contextBindingCount: contextBindingRows.length,
       } satisfies OrchestrationThreadShell);
     });

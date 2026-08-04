@@ -465,6 +465,8 @@ export const OrchestrationThreadShell = Schema.Struct({
   hasPendingApprovals: Schema.Boolean,
   hasPendingUserInput: Schema.Boolean,
   hasActionableProposedPlan: Schema.Boolean,
+  /** Internal shell lookups include hidden threads; sidebar snapshots filter them out. */
+  sidebarVisible: Schema.optional(Schema.Boolean),
   contextBindingCount: Schema.optional(NonNegativeInt).pipe(
     Schema.withDecodingDefault(Effect.succeed(0)),
   ),

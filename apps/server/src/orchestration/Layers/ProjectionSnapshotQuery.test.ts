@@ -594,7 +594,10 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
       assert.equal(archivedShellSnapshot.threads[0]?.archivedAt, "2026-04-06T00:00:06.000Z");
 
       const hiddenShell = yield* snapshotQuery.getThreadShellById(ThreadId.make("thread-hidden"));
-      assert.equal(hiddenShell._tag, "None");
+      assert.equal(hiddenShell._tag, "Some");
+      if (hiddenShell._tag === "Some") {
+        assert.equal(hiddenShell.value.sidebarVisible, false);
+      }
       const hiddenDetail = yield* snapshotQuery.getThreadDetailById(ThreadId.make("thread-hidden"));
       assert.equal(hiddenDetail._tag, "Some");
     }),

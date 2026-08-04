@@ -761,11 +761,19 @@ const makeWsRpcLayer = (
                     threadId,
                   }),
                 onSome: (nextThread) =>
-                  Option.some<OrchestrationShellStreamEvent>({
-                    kind: "thread-upserted" as const,
-                    sequence,
-                    thread: nextThread,
-                  }),
+                  Option.some<OrchestrationShellStreamEvent>(
+                    nextThread.sidebarVisible === false
+                      ? {
+                          kind: "thread-removed" as const,
+                          sequence,
+                          threadId,
+                        }
+                      : {
+                          kind: "thread-upserted" as const,
+                          sequence,
+                          thread: nextThread,
+                        },
+                  ),
               }),
             ),
           ),
