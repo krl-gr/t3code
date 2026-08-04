@@ -620,6 +620,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             pendingApprovalCount: 0,
             pendingUserInputCount: 0,
             hasActionableProposedPlan: 0,
+            sidebarVisible: event.payload.sidebarVisible === false ? 0 : 1,
             deletedAt: null,
           });
           return;

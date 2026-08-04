@@ -402,7 +402,8 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           has_actionable_proposed_plan AS "hasActionableProposedPlan",
           deleted_at AS "deletedAt"
         FROM projection_threads
-        WHERE deleted_at IS NULL
+        WHERE sidebar_visible = 1
+          AND deleted_at IS NULL
           AND archived_at IS NULL
         ORDER BY project_id ASC, created_at ASC, thread_id ASC
       `,
@@ -436,7 +437,8 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           has_actionable_proposed_plan AS "hasActionableProposedPlan",
           deleted_at AS "deletedAt"
         FROM projection_threads
-        WHERE deleted_at IS NULL
+        WHERE sidebar_visible = 1
+          AND deleted_at IS NULL
           AND archived_at IS NOT NULL
         ORDER BY project_id ASC, archived_at DESC, thread_id DESC
       `,
@@ -808,6 +810,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           thread_id AS "threadId"
         FROM projection_threads
         WHERE project_id = ${projectId}
+          AND sidebar_visible = 1
           AND deleted_at IS NULL
           AND archived_at IS NULL
         ORDER BY created_at ASC, thread_id ASC
@@ -860,6 +863,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           pending_approval_count AS "pendingApprovalCount",
           pending_user_input_count AS "pendingUserInputCount",
           has_actionable_proposed_plan AS "hasActionableProposedPlan",
+          sidebar_visible AS "sidebarVisible",
           deleted_at AS "deletedAt"
         FROM projection_threads
         WHERE thread_id = ${threadId}
@@ -2139,7 +2143,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
         ),
       ]);
 
-      if (Option.isNone(threadRow)) {
+      if (Option.isNone(threadRow) || threadRow.value.sidebarVisible === 0) {
         return Option.none<OrchestrationThreadShell>();
       }
 

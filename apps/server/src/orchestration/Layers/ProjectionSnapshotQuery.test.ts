@@ -499,6 +499,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           pending_approval_count,
           pending_user_input_count,
           has_actionable_proposed_plan,
+          sidebar_visible,
           created_at,
           updated_at,
           archived_at,
@@ -519,6 +520,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
             0,
             0,
             0,
+            1,
             '2026-04-06T00:00:02.000Z',
             '2026-04-06T00:00:03.000Z',
             NULL,
@@ -538,9 +540,30 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
             0,
             0,
             0,
+            1,
             '2026-04-06T00:00:04.000Z',
             '2026-04-06T00:00:05.000Z',
             '2026-04-06T00:00:06.000Z',
+            NULL
+          ),
+          (
+            'thread-hidden',
+            'project-archive-test',
+            'Hidden Agent Thread',
+            '{"provider":"codex","model":"gpt-5-codex"}',
+            'full-access',
+            'default',
+            NULL,
+            NULL,
+            NULL,
+            NULL,
+            0,
+            0,
+            0,
+            0,
+            '2026-04-06T00:00:07.000Z',
+            '2026-04-06T00:00:08.000Z',
+            NULL,
             NULL
           )
       `;
@@ -569,6 +592,11 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
         [ThreadId.make("thread-archived")],
       );
       assert.equal(archivedShellSnapshot.threads[0]?.archivedAt, "2026-04-06T00:00:06.000Z");
+
+      const hiddenShell = yield* snapshotQuery.getThreadShellById(ThreadId.make("thread-hidden"));
+      assert.equal(hiddenShell._tag, "None");
+      const hiddenDetail = yield* snapshotQuery.getThreadDetailById(ThreadId.make("thread-hidden"));
+      assert.equal(hiddenDetail._tag, "Some");
     }),
   );
 

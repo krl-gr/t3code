@@ -1,6 +1,29 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { resolveWorkspaceRouteSyncDecision } from "./chatWorkspaceRouteSync";
+import {
+  resolveWorkspaceInitialRouteDecision,
+  resolveWorkspaceRouteSyncDecision,
+} from "./chatWorkspaceRouteSync";
+
+describe("resolveWorkspaceInitialRouteDecision", () => {
+  it("applies an explicit deep link instead of restoring the previous active panel", () => {
+    expect(
+      resolveWorkspaceInitialRouteDecision({
+        hasRouteTarget: true,
+        hasRestoredPanels: true,
+      }),
+    ).toBe("apply-route");
+  });
+
+  it("restores the active panel when mounting the index without a deep link", () => {
+    expect(
+      resolveWorkspaceInitialRouteDecision({
+        hasRouteTarget: false,
+        hasRestoredPanels: true,
+      }),
+    ).toBe("restore-active-panel");
+  });
+});
 
 describe("resolveWorkspaceRouteSyncDecision", () => {
   it("ignores the previous route while a panel activation is navigating to its target", () => {

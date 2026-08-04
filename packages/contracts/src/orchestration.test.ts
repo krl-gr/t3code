@@ -258,12 +258,14 @@ it.effect("accepts ask interaction mode in thread.create commands", () =>
       interactionMode: "ask",
       branch: null,
       worktreePath: null,
+      sidebarVisible: false,
       createdAt: "2026-01-01T00:00:00.000Z",
     });
     if (parsed.type !== "thread.create") {
       throw new Error(`Expected thread.create command, received ${parsed.type}`);
     }
     assert.strictEqual(parsed.interactionMode, "ask");
+    assert.strictEqual(parsed.sidebarVisible, false);
   }),
 );
 

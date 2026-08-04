@@ -34,7 +34,7 @@ import {
 import { shortcutLabelForCommand } from "../../keybindings";
 import { resolveThreadActionProjectRef } from "../../lib/chatThreadActions";
 import { cn, isMacPlatform } from "../../lib/utils";
-import { useThreadShell } from "../../state/entities";
+import { useThread } from "../../state/entities";
 import { buildDraftThreadRouteParams, buildThreadRouteParams } from "../../threadRoutes";
 import {
   EMPTY_CHAT_WORKSPACE_STATE,
@@ -48,7 +48,10 @@ import {
   type ChatWorkspaceDraftThreadRequest,
   type ChatWorkspaceOpenRequest,
 } from "../../workspace/chatWorkspaceController";
-import { resolveWorkspaceRouteSyncDecision } from "../../workspace/chatWorkspaceRouteSync";
+import {
+  resolveWorkspaceInitialRouteDecision,
+  resolveWorkspaceRouteSyncDecision,
+} from "../../workspace/chatWorkspaceRouteSync";
 import {
   createChatWorkspacePanelId,
   getChatWorkspaceRouteTargetKey,
@@ -449,7 +452,7 @@ const DockviewChatPanel = memo(function DockviewChatPanel(
   const { activePanelId, panelsById } = useChatWorkspaceContext();
   const panelState = panelId ? panelsById[panelId] : undefined;
   const threadRef = panelState?.kind === "chat" ? panelState.target.ref : null;
-  const thread = useThreadShell(threadRef);
+  const thread = useThread(threadRef);
 
   useEffect(() => {
     props.api.setTitle(
@@ -795,10 +798,14 @@ export function ChatWorkspace({ children, routeTarget = null }: ChatWorkspacePro
       commitActivePanel(restoredActive);
       restoredRef.current = true;
 
-      if (Object.keys(restored.panelsById).length > 0) {
-        syncRouteToPanel(restoredActive);
-      } else if (routeTarget) {
+      const initialRouteDecision = resolveWorkspaceInitialRouteDecision({
+        hasRouteTarget: routeTarget !== null,
+        hasRestoredPanels: Object.keys(restored.panelsById).length > 0,
+      });
+      if (initialRouteDecision === "apply-route" && routeTarget) {
         applyRouteTarget(routeTarget);
+      } else if (initialRouteDecision === "restore-active-panel") {
+        syncRouteToPanel(restoredActive);
       }
       schedulePersist();
     },

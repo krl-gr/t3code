@@ -1,3 +1,14 @@
+export type WorkspaceInitialRouteDecision = "apply-route" | "restore-active-panel" | "show-index";
+
+/** An explicit URL is authoritative when the persisted workspace first mounts. */
+export function resolveWorkspaceInitialRouteDecision(input: {
+  readonly hasRouteTarget: boolean;
+  readonly hasRestoredPanels: boolean;
+}): WorkspaceInitialRouteDecision {
+  if (input.hasRouteTarget) return "apply-route";
+  return input.hasRestoredPanels ? "restore-active-panel" : "show-index";
+}
+
 export type WorkspaceRouteSyncDecision =
   | "acknowledge-pending"
   | "apply-route"
