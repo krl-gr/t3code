@@ -100,6 +100,15 @@ const enrichedSnapshotSecond: ServerProvider = {
   ],
 };
 
+const checking = (snapshot: ServerProvider): ServerProvider => ({
+  ...snapshot,
+  probeStatus: "checking",
+});
+const settled = (snapshot: ServerProvider): ServerProvider => ({
+  ...snapshot,
+  probeStatus: "settled",
+});
+
 describe("makeManagedServerProvider", () => {
   it.effect(
     "runs the initial provider check in the background and streams the refreshed snapshot",
@@ -122,7 +131,7 @@ describe("makeManagedServerProvider", () => {
           });
 
           const initial = yield* provider.getSnapshot;
-          assert.deepStrictEqual(initial, initialSnapshot);
+          assert.deepStrictEqual(initial, checking(initialSnapshot));
 
           const updatesFiber = yield* Stream.take(provider.streamChanges, 1).pipe(
             Stream.runCollect,
@@ -136,8 +145,8 @@ describe("makeManagedServerProvider", () => {
           const updates = Array.from(yield* Fiber.join(updatesFiber));
           const latest = yield* provider.getSnapshot;
 
-          assert.deepStrictEqual(updates, [refreshedSnapshot]);
-          assert.deepStrictEqual(latest, refreshedSnapshot);
+          assert.deepStrictEqual(updates, [settled(refreshedSnapshot)]);
+          assert.deepStrictEqual(latest, settled(refreshedSnapshot));
           assert.strictEqual(yield* Ref.get(checkCalls), 1);
         }),
       ),
@@ -181,8 +190,11 @@ describe("makeManagedServerProvider", () => {
         const updates = Array.from(yield* Fiber.join(updatesFiber));
         const latest = yield* provider.getSnapshot;
 
-        assert.deepStrictEqual(updates, [refreshedSnapshot, refreshedSnapshotSecond]);
-        assert.deepStrictEqual(latest, refreshedSnapshotSecond);
+        assert.deepStrictEqual(updates, [
+          settled(refreshedSnapshot),
+          settled(refreshedSnapshotSecond),
+        ]);
+        assert.deepStrictEqual(latest, settled(refreshedSnapshotSecond));
         assert.strictEqual(yield* Ref.get(checkCalls), 2);
       }),
     ),
@@ -220,8 +232,8 @@ describe("makeManagedServerProvider", () => {
         const updates = Array.from(yield* Fiber.join(updatesFiber));
         const latest = yield* provider.getSnapshot;
 
-        assert.deepStrictEqual(updates, [refreshedSnapshot, enrichedSnapshot]);
-        assert.deepStrictEqual(latest, enrichedSnapshot);
+        assert.deepStrictEqual(updates, [settled(refreshedSnapshot), settled(enrichedSnapshot)]);
+        assert.deepStrictEqual(latest, settled(enrichedSnapshot));
       }),
     ),
   );
@@ -278,11 +290,11 @@ describe("makeManagedServerProvider", () => {
         const latest = yield* provider.getSnapshot;
 
         assert.deepStrictEqual(updates, [
-          refreshedSnapshot,
-          refreshedSnapshotSecond,
-          enrichedSnapshotSecond,
+          settled(refreshedSnapshot),
+          settled(refreshedSnapshotSecond),
+          settled(enrichedSnapshotSecond),
         ]);
-        assert.deepStrictEqual(latest, enrichedSnapshotSecond);
+        assert.deepStrictEqual(latest, settled(enrichedSnapshotSecond));
       }),
     ),
   );

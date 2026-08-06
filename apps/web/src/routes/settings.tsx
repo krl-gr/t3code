@@ -10,9 +10,11 @@ import {
 import { useCallback, useEffect, useState } from "react";
 
 import { useSettingsRestore } from "../components/settings/SettingsPanels";
+import { SETTINGS_NAV_ITEMS } from "../components/settings/SettingsSidebarNav";
 import { Button } from "../components/ui/button";
 import { SidebarInset } from "../components/ui/sidebar";
 import { isElectron } from "../env";
+import { listExperimentalWebSettings, useWebProductComposition } from "../product/WebComposition";
 import { cn } from "~/lib/utils";
 import { COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS } from "~/workspaceTitlebar";
 
@@ -36,8 +38,14 @@ function SettingsContentLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const canGoBack = useCanGoBack();
+  const composition = useWebProductComposition();
   const [restoreSignal, setRestoreSignal] = useState(0);
   const showRestoreDefaults = location.pathname === "/settings/general";
+  const activeSettingsTitle =
+    SETTINGS_NAV_ITEMS.find((item) => item.to === location.pathname)?.label ??
+    listExperimentalWebSettings(composition).find(({ page }) => page.path === location.pathname)
+      ?.page.label ??
+    (location.pathname === "/settings/diagnostics" ? "Diagnostics" : "Settings");
   const handleRestored = () => setRestoreSignal((value) => value + 1);
   const navigateBackWithinApp = useCallback(() => {
     if (canGoBack) {
@@ -73,7 +81,7 @@ function SettingsContentLayout() {
             )}
           >
             <div className="flex min-h-7 items-center gap-2 sm:min-h-6">
-              <span className="text-sm font-medium text-foreground">Settings</span>
+              <h1 className="text-sm font-medium text-foreground">{activeSettingsTitle}</h1>
               {showRestoreDefaults ? (
                 <div className="ms-auto flex items-center gap-2">
                   <RestoreDefaultsButton onRestored={handleRestored} />
@@ -90,9 +98,9 @@ function SettingsContentLayout() {
               COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS,
             )}
           >
-            <span className="text-xs font-medium tracking-wide text-muted-foreground/70">
-              Settings
-            </span>
+            <h1 className="text-xs font-medium tracking-wide text-muted-foreground/70">
+              {activeSettingsTitle}
+            </h1>
             {showRestoreDefaults ? (
               <div className="ms-auto flex items-center gap-2">
                 <RestoreDefaultsButton onRestored={handleRestored} />

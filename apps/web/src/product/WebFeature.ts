@@ -81,6 +81,8 @@ export interface ExperimentalWebProviderDriverDetailsProps {
   readonly instance: ProviderInstanceConfig;
   readonly liveProvider: ServerProvider | undefined;
   readonly refreshProviderStatus: () => void;
+  readonly onConnectionStateChange?: (ready: boolean) => void;
+  readonly onboardingFixtureOutcome?: "success" | "fail" | "cancel" | "loading";
 }
 
 export interface ExperimentalWebProviderDriverContribution {
@@ -92,6 +94,18 @@ export interface ExperimentalWebProviderDriverContribution {
     readonly fields: Readonly<Record<string, Schema.Top>>;
   };
   readonly badgeLabel?: string;
+  readonly onboardingDescription?: string;
+  readonly onboardingOrder?: number;
+  /** Lower values are shown first in the Providers settings list. */
+  readonly settingsOrder?: number;
+  /** Opens this provider's setup card by default whenever the Providers page mounts. */
+  readonly defaultSettingsExpanded?: boolean;
+  /** Primary login/key controls rendered before the provider's advanced settings. */
+  readonly connectionDetails?: ComponentType<ExperimentalWebProviderDriverDetailsProps>;
+  /** Simplified connection picker used during first-run onboarding. */
+  readonly onboardingDetails?: ComponentType<ExperimentalWebProviderDriverDetailsProps>;
+  /** Provider-specific controls rendered inside the nested Advanced settings section. */
+  readonly advancedDetails?: ComponentType<ExperimentalWebProviderDriverDetailsProps>;
   readonly details?: ComponentType<ExperimentalWebProviderDriverDetailsProps>;
 }
 

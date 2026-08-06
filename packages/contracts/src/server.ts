@@ -171,6 +171,8 @@ export const ServerProvider = Schema.Struct({
   installed: Schema.Boolean,
   version: Schema.NullOr(TrimmedNonEmptyString),
   status: ServerProviderState,
+  /** Lifecycle of the initial provider probe. Absent means settled for older servers. */
+  probeStatus: Schema.optional(Schema.Literals(["checking", "settled"])),
   auth: ServerProviderAuth,
   checkedAt: IsoDateTime,
   message: Schema.optional(TrimmedNonEmptyString),

@@ -30,7 +30,7 @@ import { normalizeProviderAccentColor } from "../../providerInstances";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
-import { Collapsible, CollapsibleContent } from "../ui/collapsible";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../ui/collapsible";
 import { DraftInput } from "../ui/draft-input";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
 import { ScrollArea } from "../ui/scroll-area";
@@ -457,6 +457,10 @@ export function ProviderInstanceCard({
     customModels,
   });
   const ProviderDetails = driverOption?.details;
+  const ConnectionDetails = driverOption?.connectionDetails;
+  const AdvancedDetails = driverOption?.advancedDetails;
+  const usesGuidedSetup = ConnectionDetails !== undefined || AdvancedDetails !== undefined;
+  const [advancedSettingsExpanded, setAdvancedSettingsExpanded] = useState(false);
 
   const updateDisplayName = (value: string) => {
     const trimmed = value.trim();
@@ -541,6 +545,11 @@ export function ProviderInstanceCard({
       <h3 className="truncate text-sm font-medium tracking-[-0.005em] text-foreground">
         {displayName}
       </h3>
+      {!enabled ? (
+        <Badge variant="secondary" size="sm" className="shrink-0">
+          Disabled
+        </Badge>
+      ) : null}
       {String(instanceId) !== String(instance.driver) ? (
         <code className="truncate rounded bg-muted/60 px-1 py-0.5 text-[10px] text-muted-foreground">
           {instanceId}
@@ -605,6 +614,72 @@ export function ProviderInstanceCard({
   const versionCodeNode = versionLabel ? (
     <code className="text-xs text-muted-foreground">{versionLabel}</code>
   ) : null;
+
+  const renderEditableSettings = (details: ReactNode) => (
+    <>
+      <div>
+        <label htmlFor={`provider-instance-${instanceId}-display-name`} className="block">
+          <span className="text-xs font-medium text-foreground">Display name</span>
+          <DraftInput
+            id={`provider-instance-${instanceId}-display-name`}
+            className="mt-1.5"
+            value={instance.displayName ?? ""}
+            onCommit={updateDisplayName}
+            placeholder={driverOption?.label ?? "Instance label"}
+            spellCheck={false}
+          />
+          <span className="mt-1 block text-xs text-muted-foreground">
+            Optional label shown in the provider list.
+          </span>
+        </label>
+      </div>
+      <ProviderAccentColorPicker
+        displayName={displayName}
+        value={accentColor}
+        onCommit={updateAccentColor}
+        commitDelayMs={120}
+        description="Used to distinguish this instance in picker rails and model lists."
+      />
+      <ProviderEnvironmentSection
+        environment={instance.environment ?? []}
+        onChange={updateEnvironment}
+      />
+      {details}
+      {driverOption ? (
+        <ProviderSettingsForm
+          definition={driverOption}
+          value={instance.config}
+          idPrefix={`provider-instance-${instanceId}`}
+          variant="card"
+          onChange={updateConfig}
+        />
+      ) : null}
+      {driverOption !== undefined ? (
+        <ProviderModelsSection
+          instanceId={instanceId}
+          driverKind={driverKind}
+          models={modelsForDisplay}
+          customModels={customModels}
+          hiddenModels={hiddenModels}
+          favoriteModels={favoriteModels}
+          modelOrder={modelOrder}
+          onChange={updateCustomModels}
+          onHiddenModelsChange={onHiddenModelsChange}
+          onFavoriteModelsChange={onFavoriteModelsChange}
+          onModelOrderChange={onModelOrderChange}
+        />
+      ) : (
+        <div>
+          <p className="text-xs text-muted-foreground">
+            This instance uses a driver (
+            <code className="text-foreground">{String(instance.driver)}</code>) that is not shipped
+            with the current build. Configuration values are preserved but cannot be edited from
+            this surface.
+          </p>
+        </div>
+      )}
+    </>
+  );
 
   return (
     <div className="rounded-xl transition-colors hover:bg-muted/20">
@@ -725,11 +800,13 @@ export function ProviderInstanceCard({
                 className={cn("size-3.5 transition-transform", isExpanded && "rotate-180")}
               />
             </Button>
-            <Switch
-              checked={enabled}
-              onCheckedChange={(checked) => updateEnabled(Boolean(checked))}
-              aria-label={`Enable ${displayName}`}
-            />
+            {!usesGuidedSetup ? (
+              <Switch
+                checked={enabled}
+                onCheckedChange={(checked) => updateEnabled(Boolean(checked))}
+                aria-label={`Enable ${displayName}`}
+              />
+            ) : null}
           </div>
         </div>
       </div>
@@ -737,42 +814,8 @@ export function ProviderInstanceCard({
       <Collapsible open={isExpanded} onOpenChange={onExpandedChange}>
         <CollapsibleContent>
           <div className="space-y-5 px-3 pb-4 pt-2 sm:px-4">
-            <div>
-              <label htmlFor={`provider-instance-${instanceId}-display-name`} className="block">
-                <span className="text-xs font-medium text-foreground">Display name</span>
-                <DraftInput
-                  id={`provider-instance-${instanceId}-display-name`}
-                  className="mt-1.5"
-                  value={instance.displayName ?? ""}
-                  onCommit={updateDisplayName}
-                  placeholder={driverOption?.label ?? "Instance label"}
-                  spellCheck={false}
-                />
-                <span className="mt-1 block text-xs text-muted-foreground">
-                  Optional label shown in the provider list.
-                </span>
-              </label>
-            </div>
-
-            <div>
-              <ProviderAccentColorPicker
-                displayName={displayName}
-                value={accentColor}
-                onCommit={updateAccentColor}
-                commitDelayMs={120}
-                description="Used to distinguish this instance in picker rails and model lists."
-              />
-            </div>
-
-            <div>
-              <ProviderEnvironmentSection
-                environment={instance.environment ?? []}
-                onChange={updateEnvironment}
-              />
-            </div>
-
-            {ProviderDetails ? (
-              <ProviderDetails
+            {ConnectionDetails ? (
+              <ConnectionDetails
                 environmentId={environmentId}
                 instanceId={instanceId}
                 instance={instance}
@@ -781,39 +824,70 @@ export function ProviderInstanceCard({
               />
             ) : null}
 
-            {driverOption ? (
-              <ProviderSettingsForm
-                definition={driverOption}
-                value={instance.config}
-                idPrefix={`provider-instance-${instanceId}`}
-                variant="card"
-                onChange={updateConfig}
-              />
-            ) : null}
-
-            {driverOption !== undefined ? (
-              <ProviderModelsSection
-                instanceId={instanceId}
-                driverKind={driverKind}
-                models={modelsForDisplay}
-                customModels={customModels}
-                hiddenModels={hiddenModels}
-                favoriteModels={favoriteModels}
-                modelOrder={modelOrder}
-                onChange={updateCustomModels}
-                onHiddenModelsChange={onHiddenModelsChange}
-                onFavoriteModelsChange={onFavoriteModelsChange}
-                onModelOrderChange={onModelOrderChange}
-              />
+            {usesGuidedSetup ? (
+              <Collapsible
+                open={advancedSettingsExpanded}
+                onOpenChange={setAdvancedSettingsExpanded}
+                className="rounded-lg border border-border/60"
+              >
+                <CollapsibleTrigger
+                  render={
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="h-10 w-full justify-between rounded-lg px-3 text-xs font-medium"
+                    />
+                  }
+                >
+                  Advanced settings
+                  <ChevronDownIcon
+                    className={cn(
+                      "size-3.5 text-muted-foreground transition-transform",
+                      advancedSettingsExpanded && "rotate-180",
+                    )}
+                  />
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="space-y-5 border-t border-border/60 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-medium text-foreground">Enabled</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Make this provider available in model pickers.
+                        </p>
+                      </div>
+                      <Switch
+                        checked={enabled}
+                        onCheckedChange={(checked) => updateEnabled(Boolean(checked))}
+                        aria-label={`Enable ${displayName}`}
+                      />
+                    </div>
+                    {renderEditableSettings(
+                      AdvancedDetails ? (
+                        <AdvancedDetails
+                          environmentId={environmentId}
+                          instanceId={instanceId}
+                          instance={instance}
+                          liveProvider={liveProvider}
+                          refreshProviderStatus={refreshProviderStatus}
+                        />
+                      ) : null,
+                    )}
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
             ) : (
-              <div>
-                <p className="text-xs text-muted-foreground">
-                  This instance uses a driver (
-                  <code className="text-foreground">{String(instance.driver)}</code>) that is not
-                  shipped with the current build. Configuration values are preserved but cannot be
-                  edited from this surface.
-                </p>
-              </div>
+              renderEditableSettings(
+                ProviderDetails ? (
+                  <ProviderDetails
+                    environmentId={environmentId}
+                    instanceId={instanceId}
+                    instance={instance}
+                    liveProvider={liveProvider}
+                    refreshProviderStatus={refreshProviderStatus}
+                  />
+                ) : null,
+              )
             )}
           </div>
         </CollapsibleContent>

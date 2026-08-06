@@ -1231,6 +1231,7 @@ export function KeybindingsSettingsPanel() {
     <SettingsPageContainer className="max-w-5xl">
       <SettingsSection
         title="Keybindings"
+        hideTitle
         headerAction={
           <div className="flex items-center gap-1.5">
             <ExpandableHeaderSearch

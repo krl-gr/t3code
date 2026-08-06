@@ -9,6 +9,7 @@ import {
   useNavigate,
 } from "@tanstack/react-router";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
+import * as Schema from "effect/Schema";
 
 import { APP_BASE_NAME, APP_DISPLAY_NAME, APP_STAGE_LABEL } from "../branding";
 import { resolveServerBackedAppDisplayName } from "../branding.logic";
@@ -18,6 +19,9 @@ import { ConnectOnboardingDialog } from "../components/cloud/ConnectOnboardingDi
 import { RelayClientInstallDialog } from "../components/cloud/RelayClientInstallDialog";
 import { SshPasswordPromptDialog } from "../components/desktop/SshPasswordPromptDialog";
 import { ProviderUpdateLaunchNotification } from "../components/ProviderUpdateLaunchNotification";
+import { ProviderOnboarding } from "../components/onboarding/ProviderOnboarding";
+import { shouldShowInitialProviderOnboarding } from "../components/onboarding/providerOnboarding.logic";
+import { readDevOnboardingScenario } from "../components/onboarding/providerOnboardingFixture";
 import { SlowRpcRequestToastCoordinator } from "../components/SlowRpcRequestToastCoordinator";
 import { Button } from "../components/ui/button";
 import {
@@ -28,6 +32,7 @@ import {
 } from "../components/ui/toast";
 import { resolveAndPersistPreferredEditor } from "../editorPreferences";
 import { useClientSettings } from "../hooks/useSettings";
+import { useLocalStorage } from "../hooks/useLocalStorage";
 import {
   deriveLogicalProjectKeyFromSettings,
   derivePhysicalProjectKeyFromPath,
@@ -45,6 +50,7 @@ import { useEnvironments, usePrimaryEnvironment } from "../state/environments";
 import {
   primaryServerConfigAtom,
   primaryServerConfigEventAtom,
+  primaryServerProvidersAtom,
   primaryServerWelcomeAtom,
 } from "../state/server";
 import { readProject, setActiveEnvironmentId, useActiveEnvironmentId } from "../state/entities";
@@ -135,11 +141,77 @@ function RootRouteView() {
         <SlowRpcRequestToastCoordinator />
         <HostedStaticEnvironmentBootstrap />
         {primaryEnvironmentAuthenticated ? <EventRouter /> : null}
+        {primaryEnvironmentAuthenticated ? <InitialProviderSetupOnboarding /> : null}
         {primaryEnvironmentAuthenticated ? <ProviderUpdateLaunchNotification /> : null}
         {appShell}
       </AnchoredToastProvider>
     </ToastProvider>
   );
+}
+
+const PROVIDER_ONBOARDING_DISMISSED_KEY = "upcomputer:provider-onboarding:v1:dismissed";
+const PROVIDER_ONBOARDING_PROBE_WAIT_MS = 12_000;
+
+function InitialProviderSetupOnboarding() {
+  const config = useAtomValue(primaryServerConfigAtom);
+  const providers = useAtomValue(primaryServerProvidersAtom);
+  const checkedInitialState = useRef(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [sessionClosed, setSessionClosed] = useState(false);
+  const [probeWaitExpired, setProbeWaitExpired] = useState(false);
+  const [dismissed, setDismissed] = useLocalStorage(
+    PROVIDER_ONBOARDING_DISMISSED_KEY,
+    false,
+    Schema.Boolean,
+  );
+
+  useEffect(() => {
+    if (config === null || checkedInitialState.current) return;
+    const timer = window.setTimeout(
+      () => setProbeWaitExpired(true),
+      PROVIDER_ONBOARDING_PROBE_WAIT_MS,
+    );
+    return () => window.clearTimeout(timer);
+  }, [config]);
+
+  useEffect(() => {
+    if (config === null) return;
+
+    const devScenario = readDevOnboardingScenario();
+    if (devScenario !== null) {
+      if (checkedInitialState.current) return;
+      checkedInitialState.current = true;
+      setShowOnboarding(devScenario !== "already-ready");
+      return;
+    }
+
+    const decision = shouldShowInitialProviderOnboarding({
+      providers,
+      dismissed: dismissed || sessionClosed,
+      probeWaitExpired,
+    });
+    // Deliberately one-way: an agent becoming usable while the screen is open
+    // must not unmount it under the user (they can be mid-login on that very
+    // row). The row turns green, the counter moves, and the user leaves through
+    // the primary button.
+    if (checkedInitialState.current || decision === null) return;
+    checkedInitialState.current = true;
+    setShowOnboarding(decision);
+  }, [config, dismissed, probeWaitExpired, providers, sessionClosed]);
+
+  return showOnboarding ? (
+    <ProviderOnboarding
+      onFinished={() => setShowOnboarding(false)}
+      onClose={() => {
+        setSessionClosed(true);
+        setShowOnboarding(false);
+      }}
+      onSkip={() => {
+        setDismissed(true);
+        setShowOnboarding(false);
+      }}
+    />
+  ) : null;
 }
 
 function GlassAppearanceSync() {

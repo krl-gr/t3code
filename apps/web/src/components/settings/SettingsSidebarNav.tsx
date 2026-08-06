@@ -9,7 +9,7 @@ import {
   Link2Icon,
   Settings2Icon,
 } from "lucide-react";
-import { useCanGoBack, useNavigate } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 
 import {
   SidebarContent,
@@ -49,7 +49,6 @@ export const SETTINGS_NAV_ITEMS: ReadonlyArray<{
 
 export function SettingsSidebarNav({ pathname }: { pathname: string }) {
   const navigate = useNavigate();
-  const canGoBack = useCanGoBack();
   const { isMobile, setOpenMobile } = useSidebar();
   const handleSectionClick = useCallback(
     (to: SettingsSectionPath) => {
@@ -64,12 +63,8 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
     if (isMobile) {
       setOpenMobile(false);
     }
-    if (canGoBack) {
-      window.history.back();
-      return;
-    }
-    void navigate({ to: "/" });
-  }, [canGoBack, isMobile, navigate, setOpenMobile]);
+    void navigate({ to: "/", replace: true });
+  }, [isMobile, navigate, setOpenMobile]);
 
   return (
     <>

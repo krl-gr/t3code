@@ -40,7 +40,8 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
     PubSub.shutdown,
   );
   const initialSettings = yield* input.getSettings;
-  const initialSnapshot = yield* input.initialSnapshot(initialSettings);
+  const rawInitialSnapshot = yield* input.initialSnapshot(initialSettings);
+  const initialSnapshot: ServerProvider = { ...rawInitialSnapshot, probeStatus: "checking" };
   const snapshotStateRef = yield* Ref.make<ProviderSnapshotState>({
     snapshot: initialSnapshot,
     enrichmentGeneration: 0,
@@ -54,14 +55,21 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
     nextSnapshot: ServerProvider,
   ) {
     const snapshotToPublish = yield* Ref.modify(snapshotStateRef, (state) => {
-      if (state.enrichmentGeneration !== generation || Equal.equals(state.snapshot, nextSnapshot)) {
+      const enrichedSnapshot: ServerProvider = {
+        ...nextSnapshot,
+        probeStatus: state.snapshot.probeStatus,
+      };
+      if (
+        state.enrichmentGeneration !== generation ||
+        Equal.equals(state.snapshot, enrichedSnapshot)
+      ) {
         return [null, state] as const;
       }
       return [
-        nextSnapshot,
+        enrichedSnapshot,
         {
           ...state,
-          snapshot: nextSnapshot,
+          snapshot: enrichedSnapshot,
         },
       ] as const;
     });
@@ -108,7 +116,8 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
       return yield* Ref.get(snapshotStateRef).pipe(Effect.map((state) => state.snapshot));
     }
 
-    const nextSnapshot = yield* input.checkProvider;
+    const checkedSnapshot = yield* input.checkProvider;
+    const nextSnapshot: ServerProvider = { ...checkedSnapshot, probeStatus: "settled" };
     const nextGeneration = yield* Ref.modify(snapshotStateRef, (state) => {
       const generation = input.enrichSnapshot
         ? state.enrichmentGeneration + 1

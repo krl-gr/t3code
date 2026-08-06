@@ -551,7 +551,7 @@ export function GeneralSettingsPanel() {
 
   return (
     <SettingsPageContainer>
-      <SettingsSection title="General">
+      <SettingsSection title="General" hideTitle>
         <SettingsRow
           title="Theme"
           description="Choose how Up.computer looks across the app."
@@ -1100,7 +1100,15 @@ export function ProviderSettingsPanel() {
   const primaryEnvironment = usePrimaryEnvironment();
   const webComposition = useWebProductComposition();
   const driverOptions = getProviderClientDefinitions(webComposition);
-  const providerSettings = driverOptions.map((definition) => ({ provider: definition.value }));
+  const providerSettings = driverOptions
+    .map((definition, index) => {
+      const defaultOrder = 1_000 + index;
+      return {
+        provider: definition.value,
+        order: definition.settingsOrder ?? defaultOrder,
+      };
+    })
+    .toSorted((left, right) => left.order - right.order);
   const refreshServerProviders = useAtomCommand(serverEnvironment.refreshProviders, {
     reportFailure: false,
   });
@@ -1392,6 +1400,7 @@ export function ProviderSettingsPanel() {
     <SettingsPageContainer>
       <SettingsSection
         title="Providers"
+        hideTitle
         headerAction={
           <div className="flex items-center gap-1.5">
             <ProviderLastChecked lastCheckedAt={lastCheckedAt} />
@@ -1480,7 +1489,11 @@ export function ProviderSettingsPanel() {
               instance={row.instance}
               driverOption={driverOption}
               liveProvider={liveProvider}
-              isExpanded={openInstanceDetails[row.instanceId] ?? false}
+              isExpanded={
+                openInstanceDetails[row.instanceId] ??
+                driverOption?.defaultSettingsExpanded ??
+                false
+              }
               onExpandedChange={(open) =>
                 setOpenInstanceDetails((existing) => ({
                   ...existing,

@@ -20,7 +20,7 @@ function SettingsNavigationItem({
   const Icon = page.icon;
   const handleClick = useCallback(() => {
     if (isMobile) setOpenMobile(false);
-    void navigate({ to: page.path as never });
+    void navigate({ to: page.path as never, replace: true });
   }, [isMobile, navigate, page.path, setOpenMobile]);
 
   return (

@@ -19,6 +19,7 @@ export function SettingsSection({
   title,
   icon,
   headerAction,
+  hideTitle = false,
   children,
   className,
   ...sectionProps
@@ -26,17 +27,29 @@ export function SettingsSection({
   title: string;
   icon?: ReactNode;
   headerAction?: ReactNode;
+  hideTitle?: boolean;
   children: ReactNode;
 }) {
+  const showHeader = !hideTitle || (headerAction !== undefined && headerAction !== null);
+
   return (
-    <section {...sectionProps} className={cn("space-y-3", className)}>
-      <div className="flex min-h-8 items-center justify-between gap-4 px-3 sm:px-4">
-        <h2 className="flex items-center gap-2 text-lg font-semibold tracking-[-0.025em] text-foreground">
-          {icon}
-          {title}
-        </h2>
-        <div className="flex min-h-7 min-w-7 items-center justify-end">{headerAction}</div>
-      </div>
+    <section {...sectionProps} className={cn(showHeader && "space-y-3", className)}>
+      {showHeader ? (
+        <div className="flex min-h-8 items-center justify-between gap-4 px-3 sm:px-4">
+          <h2
+            className={cn(
+              "flex items-center gap-2 text-lg font-semibold tracking-[-0.025em] text-foreground",
+              hideTitle && "sr-only",
+            )}
+          >
+            {icon}
+            {title}
+          </h2>
+          <div className="ms-auto flex min-h-7 min-w-7 items-center justify-end">
+            {headerAction}
+          </div>
+        </div>
+      ) : null}
       <div className="relative space-y-1 overflow-visible text-foreground">{children}</div>
     </section>
   );
