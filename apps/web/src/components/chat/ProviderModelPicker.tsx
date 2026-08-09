@@ -3,7 +3,7 @@ import {
   type ProviderDriverKind,
   type ResolvedKeybindingsConfig,
 } from "@t3tools/contracts";
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState, type CSSProperties } from "react";
 import type { VariantProps } from "class-variance-authority";
 import { ChevronDownIcon } from "lucide-react";
 import { Button, buttonVariants } from "../ui/button";
@@ -43,6 +43,8 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
   open?: boolean;
   triggerVariant?: VariantProps<typeof buttonVariants>["variant"];
   triggerClassName?: string;
+  triggerStyle?: CSSProperties;
+  triggerModelLabel?: string;
   showProviderIcon?: boolean;
   showProviderLabel?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -172,6 +174,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
               props.triggerClassName,
             )}
             disabled={props.disabled}
+            style={props.triggerStyle}
           />
         }
       >
@@ -195,7 +198,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
           <Tooltip>
             <TooltipTrigger render={<span className="min-w-0 flex-1 overflow-hidden truncate" />}>
               {props.showProviderLabel && activeEntry ? `${activeEntry.displayName} · ` : null}
-              {triggerTitle}
+              {props.triggerModelLabel ?? triggerTitle}
             </TooltipTrigger>
             <TooltipPopup side="top">
               {props.showProviderLabel && activeEntry
