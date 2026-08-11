@@ -1,6 +1,6 @@
 import { useAtomValue } from "@effect/atom-react";
-import { useNavigate } from "@tanstack/react-router";
-import { EllipsisIcon, PlusIcon, XIcon } from "lucide-react";
+import { useCanGoBack, useNavigate } from "@tanstack/react-router";
+import { ArrowLeftIcon, EllipsisIcon, PlusIcon, XIcon } from "lucide-react";
 import {
   DockviewReact,
   type DockviewApi,
@@ -209,6 +209,8 @@ function isTopRightDockviewHeader(actionsElement: HTMLElement | null): boolean {
 
 function DockviewPrefixHeaderActions(props: IDockviewHeaderActionsProps) {
   const sidebar = useSidebar();
+  const canGoBack = useCanGoBack();
+  const navigate = useNavigate();
   const isPrimaryGroup = props.containerApi.groups[0]?.id === props.group.id;
   if (!isPrimaryGroup) return null;
 
@@ -228,6 +230,19 @@ function DockviewPrefixHeaderActions(props: IDockviewHeaderActionsProps) {
         className={DOCKVIEW_HEADER_ICON_BUTTON_CLASS}
         onPointerDown={(event) => event.stopPropagation()}
       />
+      <DockviewHeaderIconButton
+        aria-label="Back to previous view"
+        onClick={() => {
+          if (canGoBack) {
+            window.history.back();
+            return;
+          }
+          void navigate({ to: "/" });
+        }}
+        title="Back"
+      >
+        <ArrowLeftIcon className="size-4" />
+      </DockviewHeaderIconButton>
     </div>
   );
 }
